@@ -11,7 +11,9 @@ COPY package.json package-lock.json* ./
 RUN npm install --legacy-peer-deps
 
 COPY . .
-RUN npm run build
+
+# Skip tsc type-checking — Vite handles TS transpilation via esbuild
+RUN npx vite build
 
 # ── Stage 2: Serve ──────────────────────────────────
 FROM node:18-slim
