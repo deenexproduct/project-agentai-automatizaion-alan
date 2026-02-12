@@ -77,56 +77,59 @@
     }
 
     // ── Set text in contenteditable (triggers WhatsApp React state) ─
-    function setInputText(input, newText) {
+    async function setInputText(input, newText) {
         input.focus();
 
         try {
-            // 1. FORCEFULLY clear the input content
-            // WhatsApp uses <span> elements inside the contenteditable
-            // We need to remove everything first
-            while (input.firstChild) {
-                input.removeChild(input.firstChild);
+            // Save whatever is in the clipboard so we can restore it later
+            let savedClipboard = '';
+            try {
+                savedClipboard = await navigator.clipboard.readText();
+            } catch (_) {
+                // readText may fail due to permissions — that's ok
             }
 
-            // 2. Dispatch paste event with new text — WhatsApp listens for this
-            const dataTransfer = new DataTransfer();
-            dataTransfer.setData('text/plain', newText);
+            // 1. Write optimized text to the REAL clipboard
+            await navigator.clipboard.writeText(newText);
 
-            const pasteEvent = new ClipboardEvent('paste', {
-                bubbles: true,
-                cancelable: true,
-                clipboardData: dataTransfer,
-            });
+            // 2. Select all text (Ctrl+A / Cmd+A)
+            input.focus();
+            document.execCommand('selectAll', false, null);
 
-            input.dispatchEvent(pasteEvent);
+            // 3. Small delay to ensure selection is active
+            await new Promise(resolve => setTimeout(resolve, 50));
 
-            // 3. Check if paste was handled — if not, insert manually
-            setTimeout(() => {
-                const currentText = getInputText(input);
-                if (!currentText || currentText.length === 0) {
-                    // Paste was blocked, insert directly as WhatsApp's span structure
-                    input.innerHTML = '';
-                    const p = document.createElement('p');
-                    const span = document.createElement('span');
-                    span.setAttribute('data-lexical-text', 'true');
-                    span.textContent = newText;
-                    p.appendChild(span);
-                    input.appendChild(p);
+            // 4. Paste from clipboard (Ctrl+V / Cmd+V) — the REAL paste
+            document.execCommand('paste');
 
-                    // Dispatch input event for React
-                    input.dispatchEvent(new InputEvent('input', {
-                        bubbles: true,
-                        cancelable: true,
-                        inputType: 'insertText',
-                        data: newText,
-                    }));
-                }
-            }, 100);
+            // 5. Restore original clipboard after a short delay
+            setTimeout(async () => {
+                try {
+                    if (savedClipboard) {
+                        await navigator.clipboard.writeText(savedClipboard);
+                    }
+                } catch (_) { }
+            }, 500);
 
         } catch (err) {
-            console.error('[Optimizer] setInputText error:', err);
-            input.textContent = newText;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
+            console.error('[Optimizer] setInputText clipboard error:', err);
+
+            // Fallback: use keyboard event simulation
+            try {
+                input.focus();
+                document.execCommand('selectAll', false, null);
+
+                // Create and dispatch a real keyboard paste via DataTransfer
+                const dt = new DataTransfer();
+                dt.setData('text/plain', newText);
+                input.dispatchEvent(new ClipboardEvent('paste', {
+                    bubbles: true,
+                    cancelable: true,
+                    clipboardData: dt,
+                }));
+            } catch (err2) {
+                console.error('[Optimizer] fallback error:', err2);
+            }
         }
     }
 
@@ -191,7 +194,7 @@
             const data = await response.json();
 
             if (data.optimized && data.optimized !== text) {
-                setInputText(input, data.optimized);
+                await setInputText(input, data.optimized);
                 showUndoButton();
                 showToast('✨ Mensaje optimizado');
             } else {
@@ -210,7 +213,7 @@
     }
 
     // ── Handle undo ───────────────────────────────────────────
-    function handleUndo(e) {
+    async function handleUndo(e) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -219,7 +222,7 @@
         const input = findMessageInput();
         if (!input) return;
 
-        setInputText(input, originalText);
+        await setInputText(input, originalText);
         originalText = null;
         hideUndoButton();
         showToast('↩️ Texto original restaurado');
