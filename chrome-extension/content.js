@@ -101,8 +101,15 @@
         btn.className = 'msg-optimizer-btn';
         btn.title = 'Optimizar mensaje ✨';
         btn.innerHTML = '✨';
+        btn.setAttribute('tabindex', '-1'); // Prevent focus stealing
 
-        btn.addEventListener('click', handleOptimize);
+        // CRITICAL: Use 'mousedown' + preventDefault to keep focus on the input
+        // 'click' fires AFTER focus moves to the button, breaking execCommand
+        btn.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Prevents focus from leaving the input
+            e.stopPropagation();
+            handleOptimize(e);
+        });
 
         return btn;
     }
@@ -113,8 +120,13 @@
         btn.className = 'msg-optimizer-undo-btn';
         btn.title = 'Deshacer optimización';
         btn.innerHTML = '↩️';
+        btn.setAttribute('tabindex', '-1'); // Prevent focus stealing
 
-        btn.addEventListener('click', handleUndo);
+        btn.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Prevents focus from leaving the input
+            e.stopPropagation();
+            handleUndo(e);
+        });
 
         return btn;
     }
