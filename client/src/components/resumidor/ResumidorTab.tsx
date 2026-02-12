@@ -51,8 +51,9 @@ const CONFIG_LABELS: Record<keyof ReportConfig, { label: string; emoji: string }
 export default function ResumidorTab() {
     // Connection state
     const [waConnected, setWaConnected] = useState(false)
-    const [ollamaOk, setOllamaOk] = useState(false)
-    const [ollamaError, setOllamaError] = useState('')
+    const [llmOk, setLlmOk] = useState(false)
+    const [llmError, setLlmError] = useState('')
+    const [llmProvider, setLlmProvider] = useState<string>('groq')
     const [checkingHealth, setCheckingHealth] = useState(true)
 
     // Groups
@@ -72,7 +73,7 @@ export default function ResumidorTab() {
 
     // Model
     const [models, setModels] = useState<string[]>([])
-    const [selectedModel, setSelectedModel] = useState('mistral')
+    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile')
 
     // Processing
     const [isProcessing, setIsProcessing] = useState(false)
@@ -99,11 +100,12 @@ export default function ResumidorTab() {
             const res = await fetch(`${API_URL}/health`)
             const data = await res.json()
             setWaConnected(data.whatsapp)
-            setOllamaOk(data.ollama)
-            setOllamaError(data.ollamaError || '')
+            setLlmOk(data.llm)
+            setLlmError(data.llmError || '')
+            setLlmProvider(data.provider || 'groq')
         } catch {
             setWaConnected(false)
-            setOllamaOk(false)
+            setLlmOk(false)
         } finally {
             setCheckingHealth(false)
         }
@@ -137,13 +139,18 @@ export default function ResumidorTab() {
     // ── Load Models ───────────────────────────────────────────
 
     useEffect(() => {
-        if (ollamaOk) {
+        if (llmOk) {
             fetch(`${API_URL}/models`)
                 .then(r => r.json())
-                .then(setModels)
+                .then((m: string[]) => {
+                    setModels(m)
+                    if (m.length > 0 && !m.includes(selectedModel)) {
+                        setSelectedModel(m[0])
+                    }
+                })
                 .catch(() => setModels([]))
         }
-    }, [ollamaOk])
+    }, [llmOk])
 
     // ── Auto-scroll logs ──────────────────────────────────────
 
@@ -295,7 +302,9 @@ export default function ResumidorTab() {
     }
 
     // Health issues
-    if (!waConnected || !ollamaOk) {
+    const providerLabel = llmProvider === 'groq' ? 'Groq API' : 'Ollama'
+
+    if (!waConnected || !llmOk) {
         return (
             <div className="space-y-4">
                 <div className="p-6 bg-white rounded-2xl shadow-sm border border-slate-200">
@@ -309,20 +318,20 @@ export default function ResumidorTab() {
                             </span>
                         </div>
 
-                        <div className={`flex items-center gap-3 p-3 rounded-xl ${ollamaOk ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                            <div className={`w-3 h-3 rounded-full ${ollamaOk ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className={`flex items-center gap-3 p-3 rounded-xl ${llmOk ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                            <div className={`w-3 h-3 rounded-full ${llmOk ? 'bg-green-500' : 'bg-red-500'}`}></div>
                             <div>
-                                <span className={`font-medium ${ollamaOk ? 'text-green-700' : 'text-red-700'}`}>
-                                    {ollamaOk ? '✅ Ollama funcionando' : '❌ Ollama no disponible'}
+                                <span className={`font-medium ${llmOk ? 'text-green-700' : 'text-red-700'}`}>
+                                    {llmOk ? `✅ ${providerLabel} funcionando` : `❌ ${providerLabel} no disponible`}
                                 </span>
-                                {ollamaError && (
-                                    <p className="text-sm text-red-600 mt-1">{ollamaError}</p>
+                                {llmError && (
+                                    <p className="text-sm text-red-600 mt-1">{llmError}</p>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    {!ollamaOk && (
+                    {!llmOk && llmProvider === 'ollama' && (
                         <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
                             <p className="text-sm font-medium text-amber-800 mb-2">Para instalar Ollama:</p>
                             <code className="block text-sm bg-slate-800 text-green-400 p-3 rounded-lg">
@@ -330,6 +339,12 @@ export default function ResumidorTab() {
                                 brew services start ollama<br />
                                 ollama pull mistral
                             </code>
+                        </div>
+                    )}
+
+                    {!llmOk && llmProvider === 'groq' && (
+                        <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                            <p className="text-sm font-medium text-amber-800 mb-2">Verificá que GROQ_API_KEY esté configurada en las variables de entorno.</p>
                         </div>
                     )}
 
@@ -350,7 +365,7 @@ export default function ResumidorTab() {
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm text-green-600 font-medium">Ollama + WhatsApp conectados</span>
+                    <span className="text-sm text-green-600 font-medium">{providerLabel} + WhatsApp conectados</span>
                 </div>
                 <button
                     onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadHistory() }}
