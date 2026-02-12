@@ -1,15 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import AudioRecorder from './AudioRecorder'
+import ChatPicker, { ChatItem } from '../shared/ChatPicker'
 
 import { API_BASE } from '../../config';
 
 const API_URL = `${API_BASE}/api/whatsapp`;
 
-interface Chat {
-    id: string
-    name: string
-    isGroup: boolean
-}
+
 
 const RECURRENCE_OPTIONS = [
     { label: 'Sin repetición', value: '' },
@@ -24,11 +21,7 @@ const RECURRENCE_OPTIONS = [
 ]
 
 export default function ScheduleForm() {
-    const [chats, setChats] = useState<Chat[]>([])
-    const [loadingChats, setLoadingChats] = useState(true)
-    const [searchChat, setSearchChat] = useState('')
-    const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
-    const [showChatDropdown, setShowChatDropdown] = useState(false)
+    const [selectedChat, setSelectedChat] = useState<ChatItem | null>(null)
     const [messageType, setMessageType] = useState<'text' | 'audio' | 'file'>('text')
     const [audioMode, setAudioMode] = useState<'record' | 'upload'>('record')
     const [textContent, setTextContent] = useState('')
@@ -58,39 +51,8 @@ export default function ScheduleForm() {
     const [success, setSuccess] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement | null>(null)
-    const dropdownRef = useRef<HTMLDivElement | null>(null)
 
-    useEffect(() => {
-        loadChats()
-    }, [])
 
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handle = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-                setShowChatDropdown(false)
-            }
-        }
-        document.addEventListener('mousedown', handle)
-        return () => document.removeEventListener('mousedown', handle)
-    }, [])
-
-    const loadChats = async (forceRefresh = false) => {
-        try {
-            const url = forceRefresh ? `${API_URL}/chats?refresh=true` : `${API_URL}/chats`;
-            const res = await fetch(url)
-            const data = await res.json()
-            setChats(data)
-        } catch {
-            setError('Error al cargar contactos')
-        } finally {
-            setLoadingChats(false)
-        }
-    }
-
-    const filteredChats = chats.filter(c =>
-        c.name.toLowerCase().includes(searchChat.toLowerCase())
-    )
 
     const handleSubmit = async () => {
         if (!selectedChat) {
@@ -162,7 +124,6 @@ export default function ScheduleForm() {
             setScheduledTime(getFutureTime())
             setRecurrence('')
             setSelectedChat(null)
-            setSearchChat('')
 
             setTimeout(() => setSuccess(false), 3000)
         } catch (err: any) {
@@ -191,68 +152,14 @@ export default function ScheduleForm() {
                 </div>
             )}
 
-            {/* Contact/Group Selector */}
-            <div ref={dropdownRef}>
-                <div className="flex justify-between items-center mb-1.5">
-                    <label className="block text-sm font-medium text-slate-700">Contacto o Grupo</label>
-                    <button
-                        onClick={() => { setLoadingChats(true); loadChats(true); }}
-                        className="text-xs text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1"
-                        title="Recargar contactos"
-                    >
-                        🔄 Actualizar
-                    </button>
-                </div>
-                <div className="relative">
-                    <input
-                        type="text"
-                        placeholder={loadingChats ? 'Cargando contactos...' : '🔍 Buscar contacto o grupo...'}
-                        value={selectedChat ? selectedChat.name : searchChat}
-                        onChange={(e) => {
-                            setSearchChat(e.target.value)
-                            setSelectedChat(null)
-                            setShowChatDropdown(true)
-                        }}
-                        onFocus={() => setShowChatDropdown(true)}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none"
-                        disabled={loadingChats}
-                    />
-                    {selectedChat && (
-                        <button
-                            onClick={() => { setSelectedChat(null); setSearchChat(''); }}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                        >✕</button>
-                    )}
-
-                    {showChatDropdown && !selectedChat && (
-                        <div className="absolute z-10 w-full mt-1 bg-white rounded-xl shadow-lg border border-slate-200 max-h-60 overflow-y-auto">
-                            {filteredChats.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-400">
-                                    {searchChat ? 'No se encontraron resultados' : 'No hay chats disponibles'}
-                                </div>
-                            ) : (
-                                filteredChats.map(chat => (
-                                    <button
-                                        key={chat.id}
-                                        onClick={() => {
-                                            setSelectedChat(chat)
-                                            setSearchChat('')
-                                            setShowChatDropdown(false)
-                                        }}
-                                        className="w-full px-4 py-2.5 text-left hover:bg-violet-50 flex items-center gap-2 transition-colors"
-                                    >
-                                        <span className="text-lg">{chat.isGroup ? '👥' : '👤'}</span>
-                                        <span className="text-slate-700">{chat.name}</span>
-                                        {chat.isGroup && (
-                                            <span className="ml-auto text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Grupo</span>
-                                        )}
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
+            {/* Contact/Group Selector — shared ChatPicker */}
+            <ChatPicker
+                selected={selectedChat}
+                onSelect={setSelectedChat}
+                filter="all"
+                label="Contacto o Grupo"
+                disabled={submitting}
+            />
 
             {/* Message Type */}
             <div>

@@ -1,15 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import ChatPicker, { ChatItem } from '../shared/ChatPicker'
 
 import { API_BASE } from '../../config';
 
 const API_URL = `${API_BASE}/api/resumidor`;
-const WA_API_URL = `${API_BASE}/api/whatsapp`;
 
-interface Group {
-    id: string
-    name: string
-    isGroup: boolean
-}
+
 
 interface ReportConfig {
     includeExecutiveSummary: boolean
@@ -56,10 +52,8 @@ export default function ResumidorTab() {
     const [llmProvider, setLlmProvider] = useState<string>('groq')
     const [checkingHealth, setCheckingHealth] = useState(true)
 
-    // Groups
-    const [groups, setGroups] = useState<Group[]>([])
-    const [selectedGroup, setSelectedGroup] = useState('')
-    const [loadingGroups, setLoadingGroups] = useState(false)
+    // Chat selection (groups + contacts)
+    const [selectedChat, setSelectedChat] = useState<ChatItem | null>(null)
 
     // Range
     const [rangeMode, setRangeMode] = useState<'hours' | 'range'>('hours')
@@ -115,26 +109,7 @@ export default function ResumidorTab() {
         checkHealth()
     }, [checkHealth])
 
-    // ── Load Groups ───────────────────────────────────────────
 
-    const loadGroups = useCallback(async () => {
-        setLoadingGroups(true)
-        try {
-            const res = await fetch(`${API_URL}/groups`)
-            const data = await res.json()
-            setGroups(data)
-        } catch {
-            setGroups([])
-        } finally {
-            setLoadingGroups(false)
-        }
-    }, [])
-
-    useEffect(() => {
-        if (waConnected) {
-            loadGroups()
-        }
-    }, [waConnected, loadGroups])
 
     // ── Load Models ───────────────────────────────────────────
 
@@ -161,7 +136,7 @@ export default function ResumidorTab() {
     // ── Generate Summary ──────────────────────────────────────
 
     const handleSummarize = async () => {
-        if (!selectedGroup) return
+        if (!selectedChat) return
 
         setIsProcessing(true)
         setLogs([])
@@ -176,7 +151,7 @@ export default function ResumidorTab() {
 
         try {
             const body = {
-                chatId: selectedGroup,
+                chatId: selectedChat.id,
                 rangeMode,
                 hours: rangeMode === 'hours' ? hours : undefined,
                 rangeFrom: rangeMode === 'range' ? rangeFrom : undefined,
@@ -409,20 +384,15 @@ export default function ResumidorTab() {
             ) : (
                 /* ── Main Form ────────────────────────────── */
                 <>
-                    {/* Group Selector */}
+                    {/* Chat Selector (Groups + Contacts) */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">👥 Grupo de WhatsApp</label>
-                        <select
-                            value={selectedGroup}
-                            onChange={(e) => setSelectedGroup(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none bg-white"
-                            disabled={loadingGroups}
-                        >
-                            <option value="">Seleccionar grupo...</option>
-                            {groups.map(g => (
-                                <option key={g.id} value={g.id}>{g.name}</option>
-                            ))}
-                        </select>
+                        <ChatPicker
+                            selected={selectedChat}
+                            onSelect={setSelectedChat}
+                            filter="all"
+                            label="💬 Chat de WhatsApp"
+                            disabled={isProcessing}
+                        />
                     </div>
 
                     {/* Time Range */}
@@ -535,8 +505,8 @@ export default function ResumidorTab() {
                     {/* Generate Button */}
                     <button
                         onClick={handleSummarize}
-                        disabled={isProcessing || !selectedGroup}
-                        className={`w-full py-4 rounded-2xl font-semibold text-lg transition-all ${isProcessing || !selectedGroup
+                        disabled={isProcessing || !selectedChat}
+                        className={`w-full py-4 rounded-2xl font-semibold text-lg transition-all ${isProcessing || !selectedChat
                             ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             : 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-violet-600/30 hover:shadow-xl hover:shadow-violet-600/40 hover:scale-[1.01] active:scale-[0.99]'
                             }`}

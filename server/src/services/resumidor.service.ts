@@ -155,11 +155,7 @@ class ResumidorService {
 
         const t1 = Date.now();
         const chat = await client.getChatById(chatId);
-        console.log(`📊 [RESUMIDOR]   getChatById: ${Date.now() - t1}ms`);
-
-        if (!chat.isGroup) {
-            throw new Error('El chat seleccionado no es un grupo');
-        }
+        console.log(`📊 [RESUMIDOR]   getChatById: ${Date.now() - t1}ms (isGroup=${chat.isGroup})`);
 
         onProgress?.('fetch', `🔍 Obteniendo mensajes de "${chat.name}"...`, 5);
 
