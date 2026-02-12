@@ -80,20 +80,15 @@
     function setInputText(input, newText) {
         input.focus();
 
-        // Method: Use DataTransfer paste event (most reliable for React apps)
-        // This simulates a real paste, which WhatsApp Web handles natively
         try {
-            // 1. Select all existing content
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(input);
-            selection.removeAllRanges();
-            selection.addRange(range);
+            // 1. FORCEFULLY clear the input content
+            // WhatsApp uses <span> elements inside the contenteditable
+            // We need to remove everything first
+            while (input.firstChild) {
+                input.removeChild(input.firstChild);
+            }
 
-            // 2. Delete current selection
-            document.execCommand('delete', false);
-
-            // 3. Create a paste event with DataTransfer containing our text
+            // 2. Dispatch paste event with new text — WhatsApp listens for this
             const dataTransfer = new DataTransfer();
             dataTransfer.setData('text/plain', newText);
 
@@ -105,41 +100,31 @@
 
             input.dispatchEvent(pasteEvent);
 
-            // 4. If paste event was prevented or didn't work, try direct insertion
-            if (getInputText(input) !== newText) {
-                // Clear and set innerHTML directly
-                input.innerHTML = '';
-                const span = document.createElement('span');
-                span.className = 'selectable-text copyable-text';
-                span.textContent = newText;
-                input.appendChild(span);
-
-                // Dispatch input event for React
-                input.dispatchEvent(new InputEvent('input', {
-                    bubbles: true,
-                    cancelable: true,
-                    inputType: 'insertText',
-                    data: newText,
-                }));
-            }
-
-            // 5. Verify — if still not updated, try execCommand approach
+            // 3. Check if paste was handled — if not, insert manually
             setTimeout(() => {
                 const currentText = getInputText(input);
-                if (currentText !== newText && currentText !== '') {
-                    input.focus();
-                    const sel = window.getSelection();
-                    const r = document.createRange();
-                    r.selectNodeContents(input);
-                    sel.removeAllRanges();
-                    sel.addRange(r);
-                    document.execCommand('insertText', false, newText);
+                if (!currentText || currentText.length === 0) {
+                    // Paste was blocked, insert directly as WhatsApp's span structure
+                    input.innerHTML = '';
+                    const p = document.createElement('p');
+                    const span = document.createElement('span');
+                    span.setAttribute('data-lexical-text', 'true');
+                    span.textContent = newText;
+                    p.appendChild(span);
+                    input.appendChild(p);
+
+                    // Dispatch input event for React
+                    input.dispatchEvent(new InputEvent('input', {
+                        bubbles: true,
+                        cancelable: true,
+                        inputType: 'insertText',
+                        data: newText,
+                    }));
                 }
-            }, 50);
+            }, 100);
 
         } catch (err) {
             console.error('[Optimizer] setInputText error:', err);
-            // Last resort: direct innerHTML manipulation
             input.textContent = newText;
             input.dispatchEvent(new Event('input', { bubbles: true }));
         }
