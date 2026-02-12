@@ -84,10 +84,15 @@ class ResumidorService {
 
         if (provider === 'groq') {
             try {
+                // Verify API key works with a simple test call
                 const groq = getGroqClient();
-                const models = await groq.models.list();
-                const modelNames = models.data?.map((m: any) => m.id).filter((id: string) => id.includes('llama') || id.includes('mixtral') || id.includes('gemma')) || [];
-                return { ok: true, provider, models: modelNames.slice(0, 5) };
+                await groq.chat.completions.create({
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [{ role: 'user', content: 'ping' }],
+                    max_tokens: 1,
+                });
+                const modelNames = ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+                return { ok: true, provider, models: modelNames };
             } catch (err: any) {
                 return { ok: false, provider, error: `Groq API error: ${err.message}` };
             }
@@ -95,7 +100,7 @@ class ResumidorService {
             try {
                 const res = await fetch(`${OLLAMA_URL}/api/tags`);
                 if (!res.ok) return { ok: false, provider, error: 'Ollama no responde' };
-                const data = await res.json();
+                const data: any = await res.json();
                 const models = (data.models || []).map((m: any) => m.name);
                 if (models.length === 0) {
                     return { ok: false, provider, error: 'No hay modelos instalados. Ejecutá: ollama pull mistral' };
@@ -110,19 +115,16 @@ class ResumidorService {
     async getAvailableModels(): Promise<string[]> {
         const provider = getProvider();
         if (provider === 'groq') {
-            try {
-                const groq = getGroqClient();
-                const models = await groq.models.list();
-                return models.data?.map((m: any) => m.id).filter((id: string) =>
-                    id.includes('llama') || id.includes('mixtral') || id.includes('gemma') || id.includes('whisper')
-                ) || [];
-            } catch {
-                return ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'];
-            }
+            return [
+                'llama-3.3-70b-versatile',
+                'mixtral-8x7b-32768',
+                'gemma2-9b-it',
+                'whisper-large-v3-turbo',
+            ];
         } else {
             try {
                 const res = await fetch(`${OLLAMA_URL}/api/tags`);
-                const data = await res.json();
+                const data: any = await res.json();
                 return (data.models || []).map((m: any) => m.name);
             } catch {
                 return [];
