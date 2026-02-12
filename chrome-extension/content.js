@@ -76,27 +76,73 @@
         return input.innerText.trim();
     }
 
-    // ── Set text in contenteditable (triggers WhatsApp events) ─
+    // ── Set text in contenteditable (triggers WhatsApp React state) ─
     function setInputText(input, newText) {
         input.focus();
 
-        // Select all content
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(input);
-        selection.removeAllRanges();
-        selection.addRange(range);
+        // Method: Use DataTransfer paste event (most reliable for React apps)
+        // This simulates a real paste, which WhatsApp Web handles natively
+        try {
+            // 1. Select all existing content
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(input);
+            selection.removeAllRanges();
+            selection.addRange(range);
 
-        // Use execCommand to trigger native input events
-        document.execCommand('insertText', false, newText);
+            // 2. Delete current selection
+            document.execCommand('delete', false);
 
-        // Dispatch input event as fallback
-        input.dispatchEvent(new InputEvent('input', {
-            bubbles: true,
-            cancelable: true,
-            inputType: 'insertText',
-            data: newText,
-        }));
+            // 3. Create a paste event with DataTransfer containing our text
+            const dataTransfer = new DataTransfer();
+            dataTransfer.setData('text/plain', newText);
+
+            const pasteEvent = new ClipboardEvent('paste', {
+                bubbles: true,
+                cancelable: true,
+                clipboardData: dataTransfer,
+            });
+
+            input.dispatchEvent(pasteEvent);
+
+            // 4. If paste event was prevented or didn't work, try direct insertion
+            if (getInputText(input) !== newText) {
+                // Clear and set innerHTML directly
+                input.innerHTML = '';
+                const span = document.createElement('span');
+                span.className = 'selectable-text copyable-text';
+                span.textContent = newText;
+                input.appendChild(span);
+
+                // Dispatch input event for React
+                input.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    cancelable: true,
+                    inputType: 'insertText',
+                    data: newText,
+                }));
+            }
+
+            // 5. Verify — if still not updated, try execCommand approach
+            setTimeout(() => {
+                const currentText = getInputText(input);
+                if (currentText !== newText && currentText !== '') {
+                    input.focus();
+                    const sel = window.getSelection();
+                    const r = document.createRange();
+                    r.selectNodeContents(input);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                    document.execCommand('insertText', false, newText);
+                }
+            }, 50);
+
+        } catch (err) {
+            console.error('[Optimizer] setInputText error:', err);
+            // Last resort: direct innerHTML manipulation
+            input.textContent = newText;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
     }
 
     // ── Create the ✨ button ───────────────────────────────────
