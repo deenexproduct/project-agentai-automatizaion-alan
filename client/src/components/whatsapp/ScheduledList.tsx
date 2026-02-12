@@ -170,13 +170,26 @@ export default function ScheduledList() {
                                 </div>
 
                                 {!isFailed && (
-                                    <button
-                                        onClick={() => cancelMessage(msg._id)}
-                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg"
-                                        title="Cancelar"
-                                    >
-                                        ✕
-                                    </button>
+                                    <div className="flex items-center gap-1.5">
+                                        <button
+                                            onClick={() => retryMessage(msg._id)}
+                                            disabled={isRetrying}
+                                            className={`text-xs py-1.5 px-3 rounded-lg font-semibold transition-all ${isRetrying
+                                                ? 'bg-green-300 text-white cursor-not-allowed'
+                                                : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
+                                                }`}
+                                            title="Enviar ahora"
+                                        >
+                                            {isRetrying ? '⏳ Enviando...' : '▶️ Enviar'}
+                                        </button>
+                                        <button
+                                            onClick={() => cancelMessage(msg._id)}
+                                            className="text-xs py-1.5 px-3 rounded-lg font-medium border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                                            title="Cancelar envío"
+                                        >
+                                            🗑️ Cancelar
+                                        </button>
+                                    </div>
                                 )}
                             </div>
 
