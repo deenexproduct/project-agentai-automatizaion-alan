@@ -21,6 +21,16 @@
                 "content.css"
             ],
             "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://web.whatsapp.com/*"
+            ],
+            "js": [
+                "page-script.js"
+            ],
+            "world": "MAIN",
+            "run_at": "document_start"
         }
     ],
     "action": {

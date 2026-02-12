@@ -1,13 +1,23 @@
 /**
- * Message Optimizer ✨ — Content Script for WhatsApp Web
+ * Message Optimizer ✨ — Content Script for WhatsApp Web (ISOLATED World)
  * 
  * ARCHITECTURE:
- * Content scripts run in an ISOLATED world — execCommand from here
- * cannot interact with WhatsApp/Lexical's event handlers.
+ * ┌──────────────────────────────────────────────────────────────────┐
+ * │ Chrome Extension                                                 │
+ * │                                                                  │
+ * │  content.js (ISOLATED World)          page-script.js (MAIN World)│
+ * │  ├── Chrome APIs (storage, etc.)      ├── execCommand access     │
+ * │  ├── UI injection (✨ button)          ├── Lexical interaction    │
+ * │  ├── API calls to backend             └── Text replacement       │
+ * │  └── Communication via CustomEvent ◄──────────────────────────►  │
+ * └──────────────────────────────────────────────────────────────────┘
  * 
- * Solution: Inject a <script> into the PAGE's main world where
- * execCommand works natively with Lexical's editor.
- * Communication: content script <-> page script via CustomEvents.
+ * WHY TWO SCRIPTS?
+ * - Content scripts run in an ISOLATED world: execCommand can't trigger
+ *   Lexical's event handlers from here.
+ * - WhatsApp's CSP blocks inline <script> injection.
+ * - Manifest V3 "world": "MAIN" injects page-script.js at browser level,
+ *   bypassing CSP entirely.
  */
 
 (function () {
@@ -38,85 +48,6 @@
     let originalText = null;
     let currentBtn = null;
 
-    // ══════════════════════════════════════════════════════════
-    // STEP 1: Inject a script into the PAGE context (main world)
-    // This script can interact with Lexical's editor natively.
-    // ══════════════════════════════════════════════════════════
-    function injectPageScript() {
-        const script = document.createElement('script');
-        script.textContent = `
-            (function() {
-                // Listen for setText requests from content script
-                window.addEventListener('__optimizer_setText', function(e) {
-                    var newText = e.detail.text;
-                    var selectors = ${JSON.stringify(INPUT_SELECTORS)};
-                    
-                    // Find the input
-                    var input = null;
-                    for (var i = 0; i < selectors.length; i++) {
-                        input = document.querySelector(selectors[i]);
-                        if (input) break;
-                    }
-                    
-                    if (!input) {
-                        window.dispatchEvent(new CustomEvent('__optimizer_result', { 
-                            detail: { success: false, error: 'Input not found' } 
-                        }));
-                        return;
-                    }
-                    
-                    // Focus the input
-                    input.focus();
-                    
-                    // Select all text in the input
-                    var sel = window.getSelection();
-                    var range = document.createRange();
-                    range.selectNodeContents(input);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                    
-                    // Replace with new text using execCommand
-                    // This runs in the PAGE context so it properly triggers
-                    // Lexical's beforeinput/input event handlers
-                    var result = document.execCommand('insertText', false, newText);
-                    
-                    // Dispatch result back to content script
-                    window.dispatchEvent(new CustomEvent('__optimizer_result', { 
-                        detail: { success: result, method: 'execCommand' } 
-                    }));
-                });
-                
-                console.log('[Message Optimizer ✨] Page script injected');
-            })();
-        `;
-        (document.head || document.documentElement).appendChild(script);
-        script.remove(); // Clean up the tag (code still runs)
-    }
-
-    // ── Set text via page context ────────────────────────────
-    function setInputText(input, newText) {
-        return new Promise((resolve) => {
-            // Listen for result from page script
-            const handler = (e) => {
-                window.removeEventListener('__optimizer_result', handler);
-                console.log('[Optimizer] setText result:', e.detail);
-                resolve(e.detail.success);
-            };
-            window.addEventListener('__optimizer_result', handler);
-
-            // Send request to page script
-            window.dispatchEvent(new CustomEvent('__optimizer_setText', {
-                detail: { text: newText }
-            }));
-
-            // Timeout fallback
-            setTimeout(() => {
-                window.removeEventListener('__optimizer_result', handler);
-                resolve(false);
-            }, 2000);
-        });
-    }
-
     // ── Find the message input ───────────────────────────────
     function findMessageInput() {
         for (const selector of INPUT_SELECTORS) {
@@ -131,6 +62,34 @@
         return input.innerText.trim();
     }
 
+    // ══════════════════════════════════════════════════════════
+    // TEXT REPLACEMENT — Communicates with page-script.js (MAIN world)
+    // via CustomEvent bridge
+    // ══════════════════════════════════════════════════════════
+    function setInputText(input, newText) {
+        return new Promise((resolve) => {
+            // Listen for result from page-script.js
+            const handler = (e) => {
+                window.removeEventListener('__optimizer_result', handler);
+                console.log('[Optimizer/CONTENT] setText result:', e.detail);
+                resolve(e.detail && e.detail.success);
+            };
+            window.addEventListener('__optimizer_result', handler);
+
+            // Dispatch command to page-script.js (MAIN world)
+            window.dispatchEvent(new CustomEvent('__optimizer_setText', {
+                detail: { text: newText }
+            }));
+
+            // Timeout fallback (2 seconds)
+            setTimeout(() => {
+                window.removeEventListener('__optimizer_result', handler);
+                console.warn('[Optimizer/CONTENT] setText timeout — page script may not be loaded');
+                resolve(false);
+            }, 2000);
+        });
+    }
+
     // ── Create the ✨ button ─────────────────────────────────
     function createOptimizeButton() {
         const btn = document.createElement('button');
@@ -139,6 +98,7 @@
         btn.innerHTML = '✨';
         btn.setAttribute('tabindex', '-1');
 
+        // mousedown + preventDefault keeps focus on the input
         btn.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -178,20 +138,29 @@
         if (isOptimizing) return;
 
         const input = findMessageInput();
-        if (!input) return;
+        if (!input) {
+            showToast('⚠️ No se encontró el campo de texto', true);
+            return;
+        }
 
         const text = getInputText(input);
-        if (!text) return;
+        if (!text) {
+            showToast('⚠️ Escribí un mensaje primero', true);
+            return;
+        }
 
+        // Save original for undo
         originalText = text;
         isOptimizing = true;
 
+        // Update button to loading state
         if (currentBtn) {
             currentBtn.innerHTML = '<span class="msg-optimizer-spinner"></span>';
             currentBtn.classList.add('loading');
         }
 
         try {
+            // Call backend API
             const response = await fetch(`${API_URL}/api/optimizer/optimize`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -205,12 +174,20 @@
             const data = await response.json();
 
             if (data.optimized && data.optimized !== text) {
+                // Replace text via page-script.js (MAIN world)
                 const success = await setInputText(input, data.optimized);
+
                 if (success) {
                     showUndoButton();
                     showToast('✨ Mensaje optimizado');
                 } else {
-                    showToast('⚠️ No se pudo reemplazar el texto', true);
+                    // Fallback: copy to clipboard and notify user
+                    try {
+                        await navigator.clipboard.writeText(data.optimized);
+                        showToast('📋 Texto optimizado copiado. Pegalo con Ctrl+V', true);
+                    } catch (_) {
+                        showToast('⚠️ No se pudo reemplazar. Texto: ' + data.optimized, true);
+                    }
                 }
             } else {
                 showToast('✅ El mensaje ya estaba bien escrito');
@@ -273,7 +250,7 @@
         setTimeout(() => {
             toast.classList.remove('visible');
             setTimeout(() => toast.remove(), 300);
-        }, 2500);
+        }, 3000);
     }
 
     // ── Inject button into WhatsApp UI ──────────────────────
@@ -330,8 +307,7 @@
 
     // ── Initialize ──────────────────────────────────────────
     function init() {
-        console.log('[Message Optimizer ✨] Content script loaded');
-        injectPageScript(); // Inject into page's main world
+        console.log('[Message Optimizer ✨] Content script loaded (ISOLATED world)');
         startObserver();
         setTimeout(injectButton, 2000);
         setTimeout(injectButton, 5000);
