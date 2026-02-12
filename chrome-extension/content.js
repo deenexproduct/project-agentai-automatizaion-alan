@@ -1,23 +1,18 @@
 /**
- * Message Optimizer ✨ — Content Script for WhatsApp Web (ISOLATED World)
+ * Message Optimizer ✨ — Content Script (ISOLATED World)
  * 
  * ARCHITECTURE:
  * ┌──────────────────────────────────────────────────────────────────┐
- * │ Chrome Extension                                                 │
- * │                                                                  │
- * │  content.js (ISOLATED World)          page-script.js (MAIN World)│
- * │  ├── Chrome APIs (storage, etc.)      ├── execCommand access     │
- * │  ├── UI injection (✨ button)          ├── Lexical interaction    │
- * │  ├── API calls to backend             └── Text replacement       │
- * │  └── Communication via CustomEvent ◄──────────────────────────►  │
+ * │  content.js (ISOLATED)              page-script.js (MAIN World) │
+ * │  ├── Chrome APIs (storage)          ├── execCommand access      │
+ * │  ├── UI injection (✨ button)        ├── Lexical interaction     │
+ * │  ├── Backend API calls              └── Text replacement        │
+ * │  └── Communication via postMessage ◄─────────────────────────►  │
  * └──────────────────────────────────────────────────────────────────┘
  * 
- * WHY TWO SCRIPTS?
- * - Content scripts run in an ISOLATED world: execCommand can't trigger
- *   Lexical's event handlers from here.
- * - WhatsApp's CSP blocks inline <script> injection.
- * - Manifest V3 "world": "MAIN" injects page-script.js at browser level,
- *   bypassing CSP entirely.
+ * COMMUNICATION: Uses window.postMessage (not CustomEvent)
+ * because CustomEvent.detail is opaque across ISOLATED/MAIN worlds.
+ * postMessage uses Structured Clone Algorithm — serializes correctly.
  */
 
 (function () {
@@ -63,30 +58,41 @@
     }
 
     // ══════════════════════════════════════════════════════════
-    // TEXT REPLACEMENT — Communicates with page-script.js (MAIN world)
-    // via CustomEvent bridge
+    // TEXT REPLACEMENT — Communicates with page-script.js via postMessage
     // ══════════════════════════════════════════════════════════
     function setInputText(input, newText) {
         return new Promise((resolve) => {
-            // Listen for result from page-script.js
+            let timeoutId;
+
+            // Listen for result from page-script.js via postMessage
             const handler = (e) => {
-                window.removeEventListener('__optimizer_result', handler);
-                console.log('[Optimizer/CONTENT] setText result:', e.detail);
-                resolve(e.detail && e.detail.success);
+                // Only accept messages from this window
+                if (e.source !== window) return;
+                if (!e.data || e.data.type !== '__optimizer_result') return;
+
+                // Clean up
+                window.removeEventListener('message', handler);
+                clearTimeout(timeoutId);
+
+                console.log('[Optimizer/CONTENT] Result received:', e.data);
+                resolve(e.data.success === true);
             };
-            window.addEventListener('__optimizer_result', handler);
 
-            // Dispatch command to page-script.js (MAIN world)
-            window.dispatchEvent(new CustomEvent('__optimizer_setText', {
-                detail: { text: newText }
-            }));
+            window.addEventListener('message', handler);
 
-            // Timeout fallback (2 seconds)
-            setTimeout(() => {
-                window.removeEventListener('__optimizer_result', handler);
-                console.warn('[Optimizer/CONTENT] setText timeout — page script may not be loaded');
+            // Send command to page-script.js via postMessage
+            console.log('[Optimizer/CONTENT] Sending setText via postMessage, length:', newText.length);
+            window.postMessage({
+                type: '__optimizer_setText',
+                text: newText
+            }, '*');
+
+            // Timeout fallback (3 seconds — generous to account for async delays)
+            timeoutId = setTimeout(() => {
+                window.removeEventListener('message', handler);
+                console.warn('[Optimizer/CONTENT] setText timeout — no response received');
                 resolve(false);
-            }, 2000);
+            }, 3000);
         });
     }
 
@@ -98,7 +104,7 @@
         btn.innerHTML = '✨';
         btn.setAttribute('tabindex', '-1');
 
-        // mousedown + preventDefault keeps focus on the input
+        // mousedown + preventDefault keeps focus on the WhatsApp input
         btn.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -149,18 +155,17 @@
             return;
         }
 
-        // Save original for undo
         originalText = text;
         isOptimizing = true;
 
-        // Update button to loading state
         if (currentBtn) {
             currentBtn.innerHTML = '<span class="msg-optimizer-spinner"></span>';
             currentBtn.classList.add('loading');
         }
 
         try {
-            // Call backend API
+            console.log('[Optimizer/CONTENT] Calling API with text:', text);
+
             const response = await fetch(`${API_URL}/api/optimizer/optimize`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -172,6 +177,7 @@
             }
 
             const data = await response.json();
+            console.log('[Optimizer/CONTENT] API response:', data);
 
             if (data.optimized && data.optimized !== text) {
                 // Replace text via page-script.js (MAIN world)
@@ -181,19 +187,19 @@
                     showUndoButton();
                     showToast('✨ Mensaje optimizado');
                 } else {
-                    // Fallback: copy to clipboard and notify user
+                    // Fallback: copy to clipboard
                     try {
                         await navigator.clipboard.writeText(data.optimized);
-                        showToast('📋 Texto optimizado copiado. Pegalo con Ctrl+V', true);
+                        showToast('📋 Texto copiado al portapapeles. Pegalo con Ctrl+V', true);
                     } catch (_) {
-                        showToast('⚠️ No se pudo reemplazar. Texto: ' + data.optimized, true);
+                        showToast('⚠️ No se pudo reemplazar: ' + data.optimized, true);
                     }
                 }
             } else {
                 showToast('✅ El mensaje ya estaba bien escrito');
             }
         } catch (error) {
-            console.error('[Optimizer] Error:', error);
+            console.error('[Optimizer/CONTENT] Error:', error);
             showToast('❌ Error al optimizar. ¿Está el servidor corriendo?', true);
         } finally {
             isOptimizing = false;
@@ -211,10 +217,12 @@
         const input = findMessageInput();
         if (!input) return;
 
-        await setInputText(input, originalText);
-        originalText = null;
-        hideUndoButton();
-        showToast('↩️ Texto original restaurado');
+        const success = await setInputText(input, originalText);
+        if (success) {
+            originalText = null;
+            hideUndoButton();
+            showToast('↩️ Texto original restaurado');
+        }
     }
 
     // ── Show/hide undo button ───────────────────────────────
@@ -297,7 +305,7 @@
         });
     }
 
-    // ── Keyboard shortcut ───────────────────────────────────
+    // ── Keyboard shortcut (Ctrl/Cmd + Shift + O) ────────────
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'O') {
             e.preventDefault();
