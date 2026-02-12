@@ -77,59 +77,22 @@
     }
 
     // ── Set text in contenteditable (WhatsApp Lexical editor) ──
+    // CRITICAL: Do NOT manipulate DOM directly (innerHTML, removeChild, etc.)
+    // React/Lexical reconciliation will restore old text, causing duplication.
+    // Only execCommand works because it goes through the browser's native
+    // editing pipeline that Lexical hooks into.
     function setInputText(input, newText) {
+        // Ensure the contenteditable has focus
         input.focus();
 
-        // WhatsApp uses Lexical editor with structure:
-        // <div contenteditable> → <p> → <span data-lexical-text="true">text</span> </p>
+        // Select all text — this creates a real browser selection
+        // that execCommand('insertText') will then replace
+        document.execCommand('selectAll', false, null);
 
-        // Step 1: Find or create the inner text structure
-        let paragraph = input.querySelector('p');
-        let textSpan = input.querySelector('span[data-lexical-text="true"]');
-
-        if (!textSpan) {
-            // Try general span inside p
-            textSpan = paragraph ? paragraph.querySelector('span') : null;
-        }
-
-        // Step 2: Clear ALL children from the input
-        input.innerHTML = '';
-
-        // Step 3: Rebuild the Lexical structure with new text
-        const newP = document.createElement('p');
-        newP.className = paragraph ? paragraph.className : '';
-
-        const newSpan = document.createElement('span');
-        newSpan.setAttribute('data-lexical-text', 'true');
-        newSpan.dir = 'ltr';
-        newSpan.textContent = newText;
-
-        newP.appendChild(newSpan);
-        input.appendChild(newP);
-
-        // Step 4: Place cursor at end
-        const range = document.createRange();
-        range.selectNodeContents(newSpan);
-        range.collapse(false);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-
-        // Step 5: Dispatch events that Lexical listens for
-        // beforeinput → input cycle is what Lexical uses
-        input.dispatchEvent(new InputEvent('beforeinput', {
-            bubbles: true,
-            cancelable: true,
-            inputType: 'insertReplacementText',
-            data: newText,
-        }));
-
-        input.dispatchEvent(new InputEvent('input', {
-            bubbles: true,
-            cancelable: false,
-            inputType: 'insertReplacementText',
-            data: newText,
-        }));
+        // Replace the selected text with the optimized version
+        // Chrome allows 'insertText' (unlike 'paste') and it
+        // replaces the current selection natively
+        document.execCommand('insertText', false, newText);
     }
 
     // ── Create the ✨ button ───────────────────────────────────
