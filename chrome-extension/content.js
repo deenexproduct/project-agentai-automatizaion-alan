@@ -1,6 +1,13 @@
 /**
  * Message Optimizer ✨ — Content Script for WhatsApp Web
- * Injects an optimize button into the WhatsApp Web message input.
+ * 
+ * ARCHITECTURE:
+ * Content scripts run in an ISOLATED world — execCommand from here
+ * cannot interact with WhatsApp/Lexical's event handlers.
+ * 
+ * Solution: Inject a <script> into the PAGE's main world where
+ * execCommand works natively with Lexical's editor.
+ * Communication: content script <-> page script via CustomEvents.
  */
 
 (function () {
@@ -10,17 +17,15 @@
     const DEFAULT_API_URL = 'http://localhost:3001';
     let API_URL = DEFAULT_API_URL;
 
-    // Load saved API URL from storage
     chrome.storage.sync.get(['apiUrl'], (result) => {
         if (result.apiUrl) API_URL = result.apiUrl;
     });
 
-    // Listen for config updates from popup
     chrome.storage.onChanged.addListener((changes) => {
         if (changes.apiUrl) API_URL = changes.apiUrl.newValue;
     });
 
-    // ── Selectors (with fallbacks for WhatsApp DOM changes) ────
+    // ── Selectors ────────────────────────────────────────────
     const INPUT_SELECTORS = [
         'div[contenteditable="true"][data-tab="10"]',
         'footer div[contenteditable="true"]',
@@ -28,19 +33,91 @@
         'div[contenteditable="true"][title="Type a message"]',
     ];
 
-    const SEND_BUTTON_SELECTORS = [
-        'button[data-tab="11"]',
-        'footer button[aria-label="Enviar"]',
-        'footer button[aria-label="Send"]',
-        'footer span[data-icon="send"]',
-    ];
-
-    // ── State ──────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────
     let isOptimizing = false;
     let originalText = null;
     let currentBtn = null;
 
-    // ── Find the message input ─────────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // STEP 1: Inject a script into the PAGE context (main world)
+    // This script can interact with Lexical's editor natively.
+    // ══════════════════════════════════════════════════════════
+    function injectPageScript() {
+        const script = document.createElement('script');
+        script.textContent = `
+            (function() {
+                // Listen for setText requests from content script
+                window.addEventListener('__optimizer_setText', function(e) {
+                    var newText = e.detail.text;
+                    var selectors = ${JSON.stringify(INPUT_SELECTORS)};
+                    
+                    // Find the input
+                    var input = null;
+                    for (var i = 0; i < selectors.length; i++) {
+                        input = document.querySelector(selectors[i]);
+                        if (input) break;
+                    }
+                    
+                    if (!input) {
+                        window.dispatchEvent(new CustomEvent('__optimizer_result', { 
+                            detail: { success: false, error: 'Input not found' } 
+                        }));
+                        return;
+                    }
+                    
+                    // Focus the input
+                    input.focus();
+                    
+                    // Select all text in the input
+                    var sel = window.getSelection();
+                    var range = document.createRange();
+                    range.selectNodeContents(input);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    
+                    // Replace with new text using execCommand
+                    // This runs in the PAGE context so it properly triggers
+                    // Lexical's beforeinput/input event handlers
+                    var result = document.execCommand('insertText', false, newText);
+                    
+                    // Dispatch result back to content script
+                    window.dispatchEvent(new CustomEvent('__optimizer_result', { 
+                        detail: { success: result, method: 'execCommand' } 
+                    }));
+                });
+                
+                console.log('[Message Optimizer ✨] Page script injected');
+            })();
+        `;
+        (document.head || document.documentElement).appendChild(script);
+        script.remove(); // Clean up the tag (code still runs)
+    }
+
+    // ── Set text via page context ────────────────────────────
+    function setInputText(input, newText) {
+        return new Promise((resolve) => {
+            // Listen for result from page script
+            const handler = (e) => {
+                window.removeEventListener('__optimizer_result', handler);
+                console.log('[Optimizer] setText result:', e.detail);
+                resolve(e.detail.success);
+            };
+            window.addEventListener('__optimizer_result', handler);
+
+            // Send request to page script
+            window.dispatchEvent(new CustomEvent('__optimizer_setText', {
+                detail: { text: newText }
+            }));
+
+            // Timeout fallback
+            setTimeout(() => {
+                window.removeEventListener('__optimizer_result', handler);
+                resolve(false);
+            }, 2000);
+        });
+    }
+
+    // ── Find the message input ───────────────────────────────
     function findMessageInput() {
         for (const selector of INPUT_SELECTORS) {
             const el = document.querySelector(selector);
@@ -49,64 +126,25 @@
         return null;
     }
 
-    // ── Find the send button area (to inject next to it) ───────
-    function findSendButtonArea() {
-        // Find the container that holds the send/voice button
-        const footer = document.querySelector('footer');
-        if (!footer) return null;
-
-        // Look for the button row in the footer
-        const sendContainer = footer.querySelector('div[class] > div > span:last-child');
-        if (sendContainer) return sendContainer;
-
-        // Fallback: find send button's parent
-        for (const selector of SEND_BUTTON_SELECTORS) {
-            const btn = document.querySelector(selector);
-            if (btn) {
-                // Walk up to find a good injection point
-                return btn.closest('div') || btn.parentElement;
-            }
-        }
-
-        return null;
-    }
-
-    // ── Get text from contenteditable ──────────────────────────
+    // ── Get text from contenteditable ────────────────────────
     function getInputText(input) {
         return input.innerText.trim();
     }
 
-    // ── Set text in contenteditable (WhatsApp Lexical editor) ──
-    // CRITICAL: Do NOT manipulate DOM directly (innerHTML, removeChild, etc.)
-    // React/Lexical reconciliation will restore old text, causing duplication.
-    // Only execCommand works because it goes through the browser's native
-    // editing pipeline that Lexical hooks into.
-    function setInputText(input, newText) {
-        // Ensure the contenteditable has focus
-        input.focus();
-
-        // Select all text — this creates a real browser selection
-        // that execCommand('insertText') will then replace
-        document.execCommand('selectAll', false, null);
-
-        // Replace the selected text with the optimized version
-        // Chrome allows 'insertText' (unlike 'paste') and it
-        // replaces the current selection natively
-        document.execCommand('insertText', false, newText);
-    }
-
-    // ── Create the ✨ button ───────────────────────────────────
+    // ── Create the ✨ button ─────────────────────────────────
     function createOptimizeButton() {
         const btn = document.createElement('button');
         btn.className = 'msg-optimizer-btn';
         btn.title = 'Optimizar mensaje ✨';
         btn.innerHTML = '✨';
-        btn.setAttribute('tabindex', '-1'); // Prevent focus stealing
+        btn.setAttribute('tabindex', '-1');
 
-        // CRITICAL: Use 'mousedown' + preventDefault to keep focus on the input
-        // 'click' fires AFTER focus moves to the button, breaking execCommand
         btn.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // Prevents focus from leaving the input
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             handleOptimize(e);
         });
@@ -114,16 +152,20 @@
         return btn;
     }
 
-    // ── Create undo button ────────────────────────────────────
+    // ── Create undo button ──────────────────────────────────
     function createUndoButton() {
         const btn = document.createElement('button');
         btn.className = 'msg-optimizer-undo-btn';
         btn.title = 'Deshacer optimización';
         btn.innerHTML = '↩️';
-        btn.setAttribute('tabindex', '-1'); // Prevent focus stealing
+        btn.setAttribute('tabindex', '-1');
 
         btn.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // Prevents focus from leaving the input
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             handleUndo(e);
         });
@@ -131,11 +173,8 @@
         return btn;
     }
 
-    // ── Handle optimize click ─────────────────────────────────
+    // ── Handle optimize click ───────────────────────────────
     async function handleOptimize(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
         if (isOptimizing) return;
 
         const input = findMessageInput();
@@ -144,11 +183,9 @@
         const text = getInputText(input);
         if (!text) return;
 
-        // Save original for undo
         originalText = text;
         isOptimizing = true;
 
-        // Update button to loading
         if (currentBtn) {
             currentBtn.innerHTML = '<span class="msg-optimizer-spinner"></span>';
             currentBtn.classList.add('loading');
@@ -168,9 +205,13 @@
             const data = await response.json();
 
             if (data.optimized && data.optimized !== text) {
-                setInputText(input, data.optimized);
-                showUndoButton();
-                showToast('✨ Mensaje optimizado');
+                const success = await setInputText(input, data.optimized);
+                if (success) {
+                    showUndoButton();
+                    showToast('✨ Mensaje optimizado');
+                } else {
+                    showToast('⚠️ No se pudo reemplazar el texto', true);
+                }
             } else {
                 showToast('✅ El mensaje ya estaba bien escrito');
             }
@@ -186,23 +227,20 @@
         }
     }
 
-    // ── Handle undo ───────────────────────────────────────────
-    function handleUndo(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
+    // ── Handle undo ─────────────────────────────────────────
+    async function handleUndo(e) {
         if (!originalText) return;
 
         const input = findMessageInput();
         if (!input) return;
 
-        setInputText(input, originalText);
+        await setInputText(input, originalText);
         originalText = null;
         hideUndoButton();
         showToast('↩️ Texto original restaurado');
     }
 
-    // ── Show/hide undo button ─────────────────────────────────
+    // ── Show/hide undo button ───────────────────────────────
     function showUndoButton() {
         let undoBtn = document.querySelector('.msg-optimizer-undo-btn');
         if (!undoBtn) {
@@ -220,9 +258,8 @@
         if (undoBtn) undoBtn.style.display = 'none';
     }
 
-    // ── Toast notification ────────────────────────────────────
+    // ── Toast notification ──────────────────────────────────
     function showToast(message, isError = false) {
-        // Remove existing toast
         const existing = document.querySelector('.msg-optimizer-toast');
         if (existing) existing.remove();
 
@@ -231,33 +268,24 @@
         toast.textContent = message;
         document.body.appendChild(toast);
 
-        // Animate in
         requestAnimationFrame(() => toast.classList.add('visible'));
 
-        // Auto remove
         setTimeout(() => {
             toast.classList.remove('visible');
             setTimeout(() => toast.remove(), 300);
         }, 2500);
     }
 
-    // ── Inject button into WhatsApp UI ────────────────────────
+    // ── Inject button into WhatsApp UI ──────────────────────
     function injectButton() {
-        // Don't inject if already there
         if (document.querySelector('.msg-optimizer-btn')) return;
 
         const input = findMessageInput();
         if (!input) return;
 
-        // Find the footer row where the send button lives
         const footer = input.closest('footer') || input.closest('[class*="footer"]');
         if (!footer) return;
 
-        // Find the row containing the input — we'll inject our button into this row
-        const inputRow = input.closest('div[class]');
-        if (!inputRow) return;
-
-        // Create a wrapper for our buttons
         const wrapper = document.createElement('div');
         wrapper.className = 'msg-optimizer-wrapper';
 
@@ -265,24 +293,21 @@
         currentBtn = btn;
         wrapper.appendChild(btn);
 
-        // Insert after the input's parent container
         const inputContainer = input.parentElement;
         if (inputContainer && inputContainer.parentElement) {
             inputContainer.parentElement.insertBefore(wrapper, inputContainer.nextSibling);
         }
     }
 
-    // ── Watch for DOM changes (chat switches, etc.) ───────────
+    // ── Watch for DOM changes ───────────────────────────────
     function startObserver() {
         const observer = new MutationObserver(() => {
             const input = findMessageInput();
             const btnExists = document.querySelector('.msg-optimizer-btn');
 
             if (input && !btnExists) {
-                // New chat opened or page loaded — inject button
                 setTimeout(injectButton, 300);
             } else if (!input && btnExists) {
-                // Chat closed — clean up
                 const wrapper = document.querySelector('.msg-optimizer-wrapper');
                 if (wrapper) wrapper.remove();
                 currentBtn = null;
@@ -295,25 +320,23 @@
         });
     }
 
-    // ── Keyboard shortcut ─────────────────────────────────────
+    // ── Keyboard shortcut ───────────────────────────────────
     document.addEventListener('keydown', (e) => {
-        // Ctrl+Shift+O or Cmd+Shift+O to optimize
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'O') {
             e.preventDefault();
             handleOptimize(e);
         }
     });
 
-    // ── Initialize ────────────────────────────────────────────
+    // ── Initialize ──────────────────────────────────────────
     function init() {
-        console.log('[Message Optimizer ✨] Loaded on WhatsApp Web');
+        console.log('[Message Optimizer ✨] Content script loaded');
+        injectPageScript(); // Inject into page's main world
         startObserver();
-        // Try initial injection after a delay (page might still be loading)
         setTimeout(injectButton, 2000);
         setTimeout(injectButton, 5000);
     }
 
-    // Wait for page to be ready
     if (document.readyState === 'complete') {
         init();
     } else {
