@@ -3,8 +3,12 @@ FROM node:18-slim AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+# Pass backend URL at build time
+ARG VITE_API_URL=https://endearing-enthusiasm-production.up.railway.app
+ENV VITE_API_URL=$VITE_API_URL
+
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps
 
 COPY . .
 RUN npm run build
@@ -17,8 +21,6 @@ RUN npm install -g serve
 WORKDIR /app
 
 COPY --from=builder /app/dist ./dist
-
-ENV PORT=3001
 
 EXPOSE 3001
 
