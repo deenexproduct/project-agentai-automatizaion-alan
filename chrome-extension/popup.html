@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Message Optimizer ✨</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <div class="header">
+      <div class="logo">✨</div>
+      <h1>Message Optimizer</h1>
+    </div>
+
+    <div class="section">
+      <label for="apiUrl">Server URL</label>
+      <input type="text" id="apiUrl" placeholder="https://tu-server.railway.app">
+      <p class="hint">URL de tu backend Express</p>
+    </div>
+
+    <div class="section">
+      <button id="saveBtn" class="save-btn">Guardar</button>
+    </div>
+
+    <div class="section status-section">
+      <div id="status" class="status">
+        <span class="dot"></span>
+        <span id="statusText">Verificando...</span>
+      </div>
+    </div>
+
+    <div class="section shortcut">
+      <p>⌨️ Atajo: <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd></p>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

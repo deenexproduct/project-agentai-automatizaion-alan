@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import { connectDB } from './db';
 import whatsappRoutes from './routes/whatsapp.routes';
 import resumidorRoutes from './routes/resumidor.routes';
+import optimizerRoutes from './routes/optimizer.routes';
 import { whatsappService } from './services/whatsapp.service';
 
 const execAsync = promisify(exec);
@@ -186,6 +187,9 @@ app.use('/api/whatsapp', whatsappRoutes);
 
 // Mount Resumidor routes
 app.use('/api/resumidor', resumidorRoutes);
+
+// Optimizer routes
+app.use('/api/optimizer', optimizerRoutes);
 
 // Start server
 async function startServer() {

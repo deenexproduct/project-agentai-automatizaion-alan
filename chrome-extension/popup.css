@@ -1,0 +1,161 @@
+/* Message Optimizer ✨ — Popup Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    width: 320px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f14;
+    color: #e2e8f0;
+}
+
+.popup {
+    padding: 20px;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #1e1e2e;
+}
+
+.logo {
+    font-size: 28px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    border-radius: 12px;
+}
+
+h1 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.section {
+    margin-bottom: 16px;
+}
+
+label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #1e1e2e;
+    border: 1px solid #2d2d44;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input[type="text"]:focus {
+    border-color: #7c3aed;
+}
+
+input[type="text"]::placeholder {
+    color: #475569;
+}
+
+.hint {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.save-btn {
+    width: 100%;
+    padding: 10px;
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.save-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.save-btn:active {
+    transform: translateY(0);
+}
+
+.save-btn.saved {
+    background: #059669;
+}
+
+.status-section {
+    padding: 10px 12px;
+    background: #1e1e2e;
+    border-radius: 8px;
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f59e0b;
+    flex-shrink: 0;
+}
+
+.dot.connected {
+    background: #10b981;
+}
+
+.dot.error {
+    background: #ef4444;
+}
+
+.shortcut {
+    text-align: center;
+    padding-top: 8px;
+    border-top: 1px solid #1e1e2e;
+}
+
+.shortcut p {
+    font-size: 12px;
+    color: #64748b;
+}
+
+kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #1e1e2e;
+    border: 1px solid #2d2d44;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #cbd5e1;
+}

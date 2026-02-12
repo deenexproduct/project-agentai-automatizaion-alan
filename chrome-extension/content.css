@@ -1,0 +1,108 @@
+/* Message Optimizer ✨ — Styles for WhatsApp Web injection */
+
+/* ── Button wrapper ──────────────────────────────────────── */
+.msg-optimizer-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Optimize button ✨ ──────────────────────────────────── */
+.msg-optimizer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+  z-index: 100;
+  position: relative;
+}
+
+.msg-optimizer-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.5);
+}
+
+.msg-optimizer-btn:active {
+  transform: scale(0.95);
+}
+
+.msg-optimizer-btn.loading {
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.msg-optimizer-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: optimizer-spin 0.6s linear infinite;
+}
+
+@keyframes optimizer-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Undo button ─────────────────────────────────────────── */
+.msg-optimizer-undo-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.msg-optimizer-undo-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  transform: scale(1.1);
+}
+
+/* ── Toast notification ──────────────────────────────────── */
+.msg-optimizer-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #1e293b;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  z-index: 99999;
+  opacity: 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+.msg-optimizer-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.msg-optimizer-toast.error {
+  background: #991b1b;
+}
