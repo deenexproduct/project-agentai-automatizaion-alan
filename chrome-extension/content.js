@@ -76,21 +76,60 @@
         return input.innerText.trim();
     }
 
-    // ── Set text in contenteditable (triggers WhatsApp React state) ─
-    async function setInputText(input, newText) {
+    // ── Set text in contenteditable (WhatsApp Lexical editor) ──
+    function setInputText(input, newText) {
         input.focus();
 
-        // Step 1: Select ALL existing text
-        // (confirmed working — we saw the selection highlight in WhatsApp)
-        document.execCommand('selectAll', false, null);
+        // WhatsApp uses Lexical editor with structure:
+        // <div contenteditable> → <p> → <span data-lexical-text="true">text</span> </p>
 
-        // Step 2: Small delay to let selection settle
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Step 1: Find or create the inner text structure
+        let paragraph = input.querySelector('p');
+        let textSpan = input.querySelector('span[data-lexical-text="true"]');
 
-        // Step 3: Replace selected text with optimized version
-        // execCommand('insertText') replaces the current selection
-        // Unlike 'paste', Chrome ALLOWS 'insertText' 
-        document.execCommand('insertText', false, newText);
+        if (!textSpan) {
+            // Try general span inside p
+            textSpan = paragraph ? paragraph.querySelector('span') : null;
+        }
+
+        // Step 2: Clear ALL children from the input
+        input.innerHTML = '';
+
+        // Step 3: Rebuild the Lexical structure with new text
+        const newP = document.createElement('p');
+        newP.className = paragraph ? paragraph.className : '';
+
+        const newSpan = document.createElement('span');
+        newSpan.setAttribute('data-lexical-text', 'true');
+        newSpan.dir = 'ltr';
+        newSpan.textContent = newText;
+
+        newP.appendChild(newSpan);
+        input.appendChild(newP);
+
+        // Step 4: Place cursor at end
+        const range = document.createRange();
+        range.selectNodeContents(newSpan);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        // Step 5: Dispatch events that Lexical listens for
+        // beforeinput → input cycle is what Lexical uses
+        input.dispatchEvent(new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertReplacementText',
+            data: newText,
+        }));
+
+        input.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            cancelable: false,
+            inputType: 'insertReplacementText',
+            data: newText,
+        }));
     }
 
     // ── Create the ✨ button ───────────────────────────────────
@@ -154,7 +193,7 @@
             const data = await response.json();
 
             if (data.optimized && data.optimized !== text) {
-                await setInputText(input, data.optimized);
+                setInputText(input, data.optimized);
                 showUndoButton();
                 showToast('✨ Mensaje optimizado');
             } else {
@@ -173,7 +212,7 @@
     }
 
     // ── Handle undo ───────────────────────────────────────────
-    async function handleUndo(e) {
+    function handleUndo(e) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -182,7 +221,7 @@
         const input = findMessageInput();
         if (!input) return;
 
-        await setInputText(input, originalText);
+        setInputText(input, originalText);
         originalText = null;
         hideUndoButton();
         showToast('↩️ Texto original restaurado');
