@@ -75,9 +75,10 @@ export default function ScheduleForm() {
         return () => document.removeEventListener('mousedown', handle)
     }, [])
 
-    const loadChats = async () => {
+    const loadChats = async (forceRefresh = false) => {
         try {
-            const res = await fetch(`${API_URL}/chats`)
+            const url = forceRefresh ? `${API_URL}/chats?refresh=true` : `${API_URL}/chats`;
+            const res = await fetch(url)
             const data = await res.json()
             setChats(data)
         } catch {
@@ -195,7 +196,7 @@ export default function ScheduleForm() {
                 <div className="flex justify-between items-center mb-1.5">
                     <label className="block text-sm font-medium text-slate-700">Contacto o Grupo</label>
                     <button
-                        onClick={() => { setLoadingChats(true); loadChats(); }}
+                        onClick={() => { setLoadingChats(true); loadChats(true); }}
                         className="text-xs text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1"
                         title="Recargar contactos"
                     >

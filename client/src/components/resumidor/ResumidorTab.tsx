@@ -183,6 +183,7 @@ export default function ResumidorTab() {
                 rangeTo: rangeMode === 'range' ? rangeTo : undefined,
                 model: selectedModel,
                 config,
+                timezoneOffset: new Date().getTimezoneOffset(), // Send client tz offset (e.g. 180 for UTC-3)
             }
 
             addLog({ step: 'start', detail: '🚀 Iniciando proceso de resumen...', time: new Date().toLocaleTimeString() })

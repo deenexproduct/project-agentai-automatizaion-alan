@@ -37,6 +37,7 @@ export interface SummarizeOptions {
     rangeTo?: string;
     model?: string;
     config?: ReportConfig;
+    timezoneOffset?: number; // Client's timezone offset in minutes (e.g. -180 for UTC-3)
 }
 
 export interface ReportConfig {
@@ -91,6 +92,7 @@ class ResumidorService {
                     messages: [{ role: 'user', content: 'ping' }],
                     max_tokens: 1,
                 });
+                // Only include chat completion models — exclude whisper/transcription models
                 const modelNames = ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
                 return { ok: true, provider, models: modelNames };
             } catch (err: any) {
@@ -136,7 +138,7 @@ class ResumidorService {
 
     async getGroupMessages(
         chatId: string,
-        options: { rangeMode: 'hours' | 'range'; hours?: number; rangeFrom?: string; rangeTo?: string },
+        options: { rangeMode: 'hours' | 'range'; hours?: number; rangeFrom?: string; rangeTo?: string; timezoneOffset?: number },
         onProgress?: ProgressCallback
     ): Promise<{ messages: ParsedMessage[]; chatName: string }> {
 
@@ -161,23 +163,44 @@ class ResumidorService {
         onProgress?.('fetch', `🔍 Obteniendo mensajes de "${chat.name}"...`, 5);
 
         // Determine time range
+        // timezoneOffset = minutes offset from UTC (e.g. -180 for Argentina UTC-3)
+        // If not provided, use the server's local timezone
+        const tzOffset = options.timezoneOffset ?? new Date().getTimezoneOffset();
         let cutoffStart: Date;
         let cutoffEnd: Date = new Date();
 
         if (options.rangeMode === 'hours' && options.hours) {
             cutoffStart = new Date(Date.now() - options.hours * 60 * 60 * 1000);
         } else if (options.rangeMode === 'range' && options.rangeFrom && options.rangeTo) {
-            const today = new Date();
+            // Build dates in the CLIENT'S timezone using UTC math
+            // "today" in the client's timezone
+            const nowMs = Date.now();
+            const clientNowMs = nowMs - (tzOffset * 60 * 1000); // Shift to client local
+            const clientToday = new Date(clientNowMs);
+            const year = clientToday.getUTCFullYear();
+            const month = clientToday.getUTCMonth();
+            const day = clientToday.getUTCDate();
+
             const [fromH, fromM] = options.rangeFrom.split(':').map(Number);
             const [toH, toM] = options.rangeTo.split(':').map(Number);
-            cutoffStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), fromH, fromM);
-            cutoffEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), toH, toM);
+
+            // Create dates in UTC that represent the client's local time
+            cutoffStart = new Date(Date.UTC(year, month, day, fromH, fromM));
+            cutoffEnd = new Date(Date.UTC(year, month, day, toH, toM));
+
+            // Shift back to real UTC by adding the offset
+            cutoffStart = new Date(cutoffStart.getTime() + (tzOffset * 60 * 1000));
+            cutoffEnd = new Date(cutoffEnd.getTime() + (tzOffset * 60 * 1000));
+
             if (cutoffStart > cutoffEnd) {
                 cutoffStart.setDate(cutoffStart.getDate() - 1);
             }
         } else {
             throw new Error('Configuración de rango inválida');
         }
+
+        console.log(`📊 [RESUMIDOR]   Client tzOffset: ${tzOffset} min, server TZ: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
+        console.log(`📊 [RESUMIDOR]   Rango UTC: ${cutoffStart.toISOString()} → ${cutoffEnd.toISOString()}`);
 
         console.log(`📊 [RESUMIDOR]   Rango: ${cutoffStart.toLocaleTimeString()} → ${cutoffEnd.toLocaleTimeString()}`);
 
@@ -677,6 +700,7 @@ class ResumidorService {
                 hours: options.hours,
                 rangeFrom: options.rangeFrom,
                 rangeTo: options.rangeTo,
+                timezoneOffset: options.timezoneOffset,
             },
             onProgress
         );

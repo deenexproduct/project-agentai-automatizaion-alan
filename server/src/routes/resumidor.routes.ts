@@ -54,7 +54,7 @@ router.post('/summarize', async (req: Request, res: Response) => {
     };
 
     try {
-        const { chatId, rangeMode, hours, rangeFrom, rangeTo, model, config } = req.body;
+        const { chatId, rangeMode, hours, rangeFrom, rangeTo, model, config, timezoneOffset } = req.body;
 
         if (!chatId || !rangeMode) {
             sendEvent('error', { message: 'Faltan campos: chatId, rangeMode' });
@@ -82,7 +82,7 @@ router.post('/summarize', async (req: Request, res: Response) => {
         };
 
         const result = await resumidorService.summarize(
-            { chatId, rangeMode, hours, rangeFrom, rangeTo, model, config: reportConfig },
+            { chatId, rangeMode, hours, rangeFrom, rangeTo, model, config: reportConfig, timezoneOffset },
             onProgress
         );
 

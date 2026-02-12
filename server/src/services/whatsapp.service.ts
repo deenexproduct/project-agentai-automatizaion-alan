@@ -152,9 +152,9 @@ class WhatsAppService {
             this.refreshChats(); // Background fetch
         }
 
-        // Wait a bit for initial fetch (max 2s)
+        // Wait for initial fetch (max 10s on Railway where Chrome is slower)
         let retries = 0;
-        while (this.isFetchingChats && retries < 4) {
+        while (this.isFetchingChats && retries < 20) {
             await this.delay(500);
             if (this.chatsCache) return this.chatsCache;
             retries++;

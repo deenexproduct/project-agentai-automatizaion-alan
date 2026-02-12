@@ -44,6 +44,11 @@ router.get('/qr', (req: Request, res: Response) => {
 
 router.get('/chats', async (req: Request, res: Response) => {
     try {
+        // Force refresh if ?refresh=true or cache is empty
+        const forceRefresh = req.query.refresh === 'true';
+        if (forceRefresh) {
+            await whatsappService.refreshChats();
+        }
         const chats = await whatsappService.getChats();
         res.json(chats);
     } catch (error: any) {
