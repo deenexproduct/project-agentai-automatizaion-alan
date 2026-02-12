@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Speech Recognition</title>
+</head>
+
+<body>
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        // Web Speech API
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            ipcRenderer.send('speech-error', 'Speech recognition not supported');
+        }
+
+        let recognition = null;
+        let finalTranscript = '';
+
+        function createRecognition() {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'es-AR'; // Spanish Argentina
+            recognition.maxAlternatives = 1;
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                // Send interim results for real-time display
+                const currentText = (finalTranscript + interimTranscript).trim();
+                ipcRenderer.send('speech-interim', currentText);
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech error:', event.error);
+                if (event.error !== 'aborted') {
+                    ipcRenderer.send('speech-error', event.error);
+                }
+            };
+
+            recognition.onend = () => {
+                // Send final result
+                if (finalTranscript.trim()) {
+                    ipcRenderer.send('speech-result', finalTranscript.trim());
+                }
+                finalTranscript = '';
+            };
+        }
+
+        ipcRenderer.on('start-recognition', () => {
+            finalTranscript = '';
+            createRecognition();
+
+            try {
+                recognition.start();
+                console.log('Speech recognition started');
+            } catch (e) {
+                console.error('Error starting recognition:', e);
+            }
+        });
+
+        ipcRenderer.on('stop-recognition', () => {
+            if (recognition) {
+                try {
+                    recognition.stop();
+                    console.log('Speech recognition stopped');
+                } catch (e) {
+                    console.error('Error stopping recognition:', e);
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

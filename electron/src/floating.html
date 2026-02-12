@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceCommand</title>
+    <link rel="stylesheet" href="floating.css">
+</head>
+
+<body>
+    <div id="container" class="container">
+        <!-- Icon Circle -->
+        <div class="icon-circle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+        </div>
+
+        <!-- States Container -->
+        <div class="state-container">
+            <!-- Listening State - Audio Waves -->
+            <div id="listening" class="state listening">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+
+            <!-- Processing State - Dots -->
+            <div id="processing" class="state processing hidden">
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+            </div>
+
+            <!-- Success State -->
+            <div id="success" class="state success hidden">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                </svg>
+            </div>
+
+            <!-- Error State -->
+            <div id="error" class="state error hidden">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        const container = document.getElementById('container');
+        const states = {
+            listening: document.getElementById('listening'),
+            processing: document.getElementById('processing'),
+            success: document.getElementById('success'),
+            error: document.getElementById('error')
+        };
+
+        function showState(stateName) {
+            // Update state visibility
+            Object.keys(states).forEach(key => {
+                states[key].classList.toggle('hidden', key !== stateName);
+            });
+
+            // Update container class for styling
+            container.className = 'container state-' + stateName;
+        }
+
+        ipcRenderer.on('set-state', (event, state) => {
+            showState(state);
+        });
+
+        showState('listening');
+    </script>
+</body>
+
+</html>
