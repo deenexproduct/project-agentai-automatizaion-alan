@@ -80,57 +80,17 @@
     async function setInputText(input, newText) {
         input.focus();
 
-        try {
-            // Save whatever is in the clipboard so we can restore it later
-            let savedClipboard = '';
-            try {
-                savedClipboard = await navigator.clipboard.readText();
-            } catch (_) {
-                // readText may fail due to permissions — that's ok
-            }
+        // Step 1: Select ALL existing text
+        // (confirmed working — we saw the selection highlight in WhatsApp)
+        document.execCommand('selectAll', false, null);
 
-            // 1. Write optimized text to the REAL clipboard
-            await navigator.clipboard.writeText(newText);
+        // Step 2: Small delay to let selection settle
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-            // 2. Select all text (Ctrl+A / Cmd+A)
-            input.focus();
-            document.execCommand('selectAll', false, null);
-
-            // 3. Small delay to ensure selection is active
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            // 4. Paste from clipboard (Ctrl+V / Cmd+V) — the REAL paste
-            document.execCommand('paste');
-
-            // 5. Restore original clipboard after a short delay
-            setTimeout(async () => {
-                try {
-                    if (savedClipboard) {
-                        await navigator.clipboard.writeText(savedClipboard);
-                    }
-                } catch (_) { }
-            }, 500);
-
-        } catch (err) {
-            console.error('[Optimizer] setInputText clipboard error:', err);
-
-            // Fallback: use keyboard event simulation
-            try {
-                input.focus();
-                document.execCommand('selectAll', false, null);
-
-                // Create and dispatch a real keyboard paste via DataTransfer
-                const dt = new DataTransfer();
-                dt.setData('text/plain', newText);
-                input.dispatchEvent(new ClipboardEvent('paste', {
-                    bubbles: true,
-                    cancelable: true,
-                    clipboardData: dt,
-                }));
-            } catch (err2) {
-                console.error('[Optimizer] fallback error:', err2);
-            }
-        }
+        // Step 3: Replace selected text with optimized version
+        // execCommand('insertText') replaces the current selection
+        // Unlike 'paste', Chrome ALLOWS 'insertText' 
+        document.execCommand('insertText', false, newText);
     }
 
     // ── Create the ✨ button ───────────────────────────────────
