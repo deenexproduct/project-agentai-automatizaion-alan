@@ -1,0 +1,25 @@
+# ── Stage 1: Build ──────────────────────────────────
+FROM node:18-slim AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# ── Stage 2: Serve ──────────────────────────────────
+FROM node:18-slim
+
+RUN npm install -g serve
+
+WORKDIR /app
+
+COPY --from=builder /app/dist ./dist
+
+ENV PORT=3001
+
+EXPOSE 3001
+
+CMD ["serve", "-s", "dist", "-l", "3001"]

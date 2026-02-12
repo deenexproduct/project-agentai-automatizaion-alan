@@ -8,14 +8,16 @@ const router = Router();
 // ── Health Check ────────────────────────────────────────────
 
 router.get('/health', async (req: Request, res: Response) => {
-    const ollama = await resumidorService.checkOllamaHealth();
+    const llm = await resumidorService.checkLLMHealth();
     const waConnected = whatsappService.isConnected();
 
     res.json({
-        ollama: ollama.ok,
-        ollamaError: ollama.error,
+        provider: llm.provider,
+        llm: llm.ok,
+        llmModels: llm.models,
+        llmError: llm.error,
         whatsapp: waConnected,
-        ready: ollama.ok && waConnected,
+        ready: llm.ok && waConnected,
     });
 });
 
@@ -97,7 +99,7 @@ router.post('/summarize', async (req: Request, res: Response) => {
                 totalAudios: result.totalAudios,
                 summary: result.summary,
                 config: reportConfig,
-                llmModel: model || 'mistral',
+                llmModel: model || resumidorService.getProvider() === 'groq' ? 'llama-3.3-70b-versatile' : 'mistral',
                 processingTimeSeconds: result.processingTimeSeconds,
             });
             await summaryDoc.save();

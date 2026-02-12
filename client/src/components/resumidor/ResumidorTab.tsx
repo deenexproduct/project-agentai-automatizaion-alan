@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const API_URL = 'http://localhost:3000/api/resumidor'
-const WA_API_URL = 'http://localhost:3000/api/whatsapp'
+import { API_BASE } from '../../config';
+
+const API_URL = `${API_BASE}/api/resumidor`;
+const WA_API_URL = `${API_BASE}/api/whatsapp`;
 
 interface Group {
     id: string

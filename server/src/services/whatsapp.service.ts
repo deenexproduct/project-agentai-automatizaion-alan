@@ -31,11 +31,14 @@ class WhatsAppService {
             puppeteer: {
                 headless: true,
                 protocolTimeout: 120000, // 120s — prevents 'Error: t' on large media
+                executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
+                    '--disable-extensions',
+                    '--disable-background-timer-throttling',
                 ],
             },
         });

@@ -3,14 +3,31 @@ import path from 'path';
 import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import Groq from 'groq-sdk';
 
 const execAsync = promisify(exec);
 
 // ============================================================
 // Resumidor Service — Fetch, Transcribe, Summarize
+// Multi-provider: Groq (cloud) or Ollama (local)
 // ============================================================
 
-const OLLAMA_URL = 'http://localhost:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+
+// Auto-detect provider: Groq if API key exists, else Ollama
+type Provider = 'groq' | 'ollama';
+function getProvider(): Provider {
+    return GROQ_API_KEY ? 'groq' : 'ollama';
+}
+
+let groqClient: Groq | null = null;
+function getGroqClient(): Groq {
+    if (!groqClient) {
+        groqClient = new Groq({ apiKey: GROQ_API_KEY });
+    }
+    return groqClient;
+}
 
 export interface SummarizeOptions {
     chatId: string;
@@ -57,31 +74,59 @@ class ResumidorService {
 
     // ── Health Checks ───────────────────────────────────────────
 
-    async checkOllamaHealth(): Promise<{ ok: boolean; error?: string; models?: string[] }> {
-        try {
-            const res = await fetch(`${OLLAMA_URL}/api/tags`);
-            if (!res.ok) return { ok: false, error: 'Ollama no responde' };
+    getProvider(): Provider {
+        return getProvider();
+    }
 
-            const data = await res.json();
-            const models = (data.models || []).map((m: any) => m.name);
+    async checkLLMHealth(): Promise<{ ok: boolean; provider: Provider; error?: string; models?: string[] }> {
+        const provider = getProvider();
+        console.log(`📊 [RESUMIDOR] Health check — provider: ${provider}`);
 
-            if (models.length === 0) {
-                return { ok: false, error: 'No hay modelos instalados. Ejecutá: ollama pull mistral' };
+        if (provider === 'groq') {
+            try {
+                const groq = getGroqClient();
+                const models = await groq.models.list();
+                const modelNames = models.data?.map((m: any) => m.id).filter((id: string) => id.includes('llama') || id.includes('mixtral') || id.includes('gemma')) || [];
+                return { ok: true, provider, models: modelNames.slice(0, 5) };
+            } catch (err: any) {
+                return { ok: false, provider, error: `Groq API error: ${err.message}` };
             }
-
-            return { ok: true, models };
-        } catch {
-            return { ok: false, error: 'Ollama no está corriendo. Ejecutá: brew services start ollama' };
+        } else {
+            try {
+                const res = await fetch(`${OLLAMA_URL}/api/tags`);
+                if (!res.ok) return { ok: false, provider, error: 'Ollama no responde' };
+                const data = await res.json();
+                const models = (data.models || []).map((m: any) => m.name);
+                if (models.length === 0) {
+                    return { ok: false, provider, error: 'No hay modelos instalados. Ejecutá: ollama pull mistral' };
+                }
+                return { ok: true, provider, models };
+            } catch {
+                return { ok: false, provider, error: 'Ollama no está corriendo. Ejecutá: brew services start ollama' };
+            }
         }
     }
 
     async getAvailableModels(): Promise<string[]> {
-        try {
-            const res = await fetch(`${OLLAMA_URL}/api/tags`);
-            const data = await res.json();
-            return (data.models || []).map((m: any) => m.name);
-        } catch {
-            return [];
+        const provider = getProvider();
+        if (provider === 'groq') {
+            try {
+                const groq = getGroqClient();
+                const models = await groq.models.list();
+                return models.data?.map((m: any) => m.id).filter((id: string) =>
+                    id.includes('llama') || id.includes('mixtral') || id.includes('gemma') || id.includes('whisper')
+                ) || [];
+            } catch {
+                return ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'];
+            }
+        } else {
+            try {
+                const res = await fetch(`${OLLAMA_URL}/api/tags`);
+                const data = await res.json();
+                return (data.models || []).map((m: any) => m.name);
+            } catch {
+                return [];
+            }
         }
     }
 
@@ -256,7 +301,7 @@ class ResumidorService {
                 const buffer = Buffer.from(audio.mediaData!.data, 'base64');
                 fs.writeFileSync(tempFile, buffer);
 
-                const transcription = await this.transcribeWithWhisper(tempFile);
+                const transcription = await this.transcribeAudio(tempFile);
                 audio.body = `[🎤 AUDIO TRANSCRITO] ${transcription}`;
                 console.log(`📊 [RESUMIDOR]   Audio ${i + 1}/${audios.length}: ${Date.now() - tAudio}ms → "${transcription.substring(0, 50)}..."`);
 
@@ -280,7 +325,48 @@ class ResumidorService {
         return messages;
     }
 
-    private async transcribeWithWhisper(audioPath: string): Promise<string> {
+    // ── Auto-detect transcription method ─────────────────────
+
+    private async transcribeAudio(audioPath: string): Promise<string> {
+        const provider = getProvider();
+        if (provider === 'groq') {
+            return this.transcribeWithGroq(audioPath);
+        } else {
+            return this.transcribeWithWhisperLocal(audioPath);
+        }
+    }
+
+    private async transcribeWithGroq(audioPath: string): Promise<string> {
+        try {
+            const groq = getGroqClient();
+
+            // Convert to wav for best compatibility
+            const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
+            try {
+                await execAsync(`ffmpeg -y -i "${audioPath}" -ar 16000 -ac 1 "${wavPath}" 2>/dev/null`);
+            } catch { }
+
+            const fileToSend = fs.existsSync(wavPath) ? wavPath : audioPath;
+            const audioFile = fs.createReadStream(fileToSend);
+
+            const transcription = await groq.audio.transcriptions.create({
+                file: audioFile,
+                model: 'whisper-large-v3-turbo',
+                language: 'es',
+                response_format: 'text',
+            });
+
+            try { fs.unlinkSync(wavPath); } catch { }
+
+            const text = typeof transcription === 'string' ? transcription : (transcription as any).text || '';
+            return text.trim() || 'No se detectó texto';
+        } catch (error: any) {
+            console.error('Groq Whisper error:', error.message);
+            return `Error de transcripción: ${error.message}`;
+        }
+    }
+
+    private async transcribeWithWhisperLocal(audioPath: string): Promise<string> {
         try {
             const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
             try {
@@ -304,7 +390,7 @@ class ResumidorService {
             }
             return 'No se pudo obtener la transcripción';
         } catch (error: any) {
-            console.error('Whisper error:', error.message);
+            console.error('Whisper local error:', error.message);
             return `Error de transcripción: ${error.message}`;
         }
     }
@@ -479,6 +565,85 @@ class ResumidorService {
         }
     }
 
+    // ── Summarize with Groq (CLOUD) ─────────────────────────────
+
+    async summarizeWithGroq(
+        document: string,
+        chatName: string,
+        hoursLabel: string,
+        config: ReportConfig,
+        model: string = 'llama-3.3-70b-versatile',
+        onProgress?: ProgressCallback
+    ): Promise<string> {
+
+        console.log(`📊 [RESUMIDOR] ═══ PASO 4: Groq (${model}) ═══`);
+        const tGroq = Date.now();
+
+        onProgress?.('summarize', '🤖 Preparando prompt para Groq...', 65);
+
+        const prompt = this.buildPrompt(document, chatName, hoursLabel, config);
+        const promptChars = prompt.length;
+        const tokenEstimate = Math.round(promptChars / 4);
+
+        console.log(`📊 [RESUMIDOR]   Prompt: ${promptChars} chars (~${tokenEstimate} tokens)`);
+        onProgress?.('summarize', `🤖 Enviando a Groq ${model} (~${tokenEstimate} tokens)...`, 70);
+
+        try {
+            const groq = getGroqClient();
+
+            // Use streaming for real-time progress
+            const stream = await groq.chat.completions.create({
+                model,
+                messages: [
+                    { role: 'system', content: 'Eres un analista experto que genera informes de conversaciones de WhatsApp en español. Sé directo, preciso, y no omitas información importante.' },
+                    { role: 'user', content: prompt },
+                ],
+                temperature: 0.3,
+                max_tokens: 4096,
+                stream: true,
+            });
+
+            let fullResponse = '';
+            let tokenCount = 0;
+            let lastProgressUpdate = Date.now();
+
+            for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content || '';
+                if (content) {
+                    fullResponse += content;
+                    tokenCount++;
+                }
+
+                // Update progress every 500ms
+                if (Date.now() - lastProgressUpdate > 500) {
+                    const elapsedSec = Math.round((Date.now() - tGroq) / 1000);
+                    const tokPerSec = tokenCount > 0 ? (tokenCount / ((Date.now() - tGroq) / 1000)).toFixed(0) : '...';
+                    const progressPct = Math.min(70 + (tokenCount / 500) * 25, 95);
+
+                    onProgress?.('summarize',
+                        `⚡ Groq: ${tokenCount} tokens (${tokPerSec} tok/s, ${elapsedSec}s)`,
+                        progressPct
+                    );
+                    lastProgressUpdate = Date.now();
+                }
+            }
+
+            const totalTime = Date.now() - tGroq;
+            const finalTokPerSec = (tokenCount / (totalTime / 1000)).toFixed(0);
+            console.log(`📊 [RESUMIDOR]   Groq COMPLETO: ${tokenCount} tokens en ${Math.round(totalTime / 1000)}s (${finalTokPerSec} tok/s)`);
+
+            if (!fullResponse.trim()) {
+                throw new Error('Groq no generó respuesta');
+            }
+
+            onProgress?.('summarize', `✅ Informe generado: ${tokenCount} tokens en ${Math.round(totalTime / 1000)}s`, 100);
+            return fullResponse;
+        } catch (error: any) {
+            console.error(`📊 [RESUMIDOR]   ❌ Groq error (${Date.now() - tGroq}ms): ${error.message}`);
+            throw error;
+        }
+    }
+
     // ── Full Summarize Flow ─────────────────────────────────────
 
     async summarize(
@@ -493,10 +658,13 @@ class ResumidorService {
     }> {
         const startTime = Date.now();
         const config = options.config || DEFAULT_CONFIG;
-        const model = options.model || 'mistral';
+        const provider = getProvider();
+
+        // Set default model based on provider
+        let model = options.model || (provider === 'groq' ? 'llama-3.3-70b-versatile' : 'mistral');
 
         console.log(`\n📊 ══════════════════════════════════════════════════`);
-        console.log(`📊 [RESUMIDOR] INICIO — chat=${options.chatId}, mode=${options.rangeMode}, model=${model}`);
+        console.log(`📊 [RESUMIDOR] INICIO — provider=${provider}, chat=${options.chatId}, model=${model}`);
         console.log(`📊 ══════════════════════════════════════════════════\n`);
 
         // Step 1: Get messages
@@ -530,12 +698,14 @@ class ResumidorService {
 
         onProgress?.('build', `📝 Documento listo: ${document.length} caracteres`, 64);
 
-        // Step 4: Summarize
+        // Step 4: Summarize (auto-detect provider)
         const hoursLabel = options.rangeMode === 'hours'
             ? `últimas ${options.hours} horas`
             : `de ${options.rangeFrom} a ${options.rangeTo}`;
 
-        const summary = await this.summarizeWithOllama(document, chatName, hoursLabel, config, model, onProgress);
+        const summary = provider === 'groq'
+            ? await this.summarizeWithGroq(document, chatName, hoursLabel, config, model, onProgress)
+            : await this.summarizeWithOllama(document, chatName, hoursLabel, config, model, onProgress);
 
         const processingTimeSeconds = Math.round((Date.now() - startTime) / 1000);
         const totalAudios = messages.filter(m => m.isAudio).length;

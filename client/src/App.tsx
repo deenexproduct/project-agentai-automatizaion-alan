@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import WhatsAppTab from './components/whatsapp/WhatsAppTab'
 import ResumidorTab from './components/resumidor/ResumidorTab'
 
-// API base URL
-const API_URL = 'http://localhost:3000/api'
+import { API_BASE } from './config';
+
+const API_URL = `${API_BASE}/api`;
 
 interface Transcription {
     id: number

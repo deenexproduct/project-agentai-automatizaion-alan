@@ -4,7 +4,9 @@ import ScheduleForm from './ScheduleForm'
 import ScheduledList from './ScheduledList'
 import SentHistory from './SentHistory'
 
-const API_URL = 'http://localhost:3000/api/whatsapp'
+import { API_BASE } from '../../config';
+
+const API_URL = `${API_BASE}/api/whatsapp`;
 
 type SubTab = 'schedule' | 'pending' | 'history'
 
@@ -81,8 +83,8 @@ export default function WhatsAppTab() {
                         key={id}
                         onClick={() => setActiveSubTab(id)}
                         className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${activeSubTab === id
-                                ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
-                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                             }`}
                     >
                         {icon} {label}

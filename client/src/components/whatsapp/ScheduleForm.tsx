@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import AudioRecorder from './AudioRecorder'
 
-const API_URL = 'http://localhost:3000/api/whatsapp'
+import { API_BASE } from '../../config';
+
+const API_URL = `${API_BASE}/api/whatsapp`;
 
 interface Chat {
     id: string

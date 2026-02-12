@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 
-const API_URL = 'http://localhost:3000/api/whatsapp'
+import { API_BASE } from '../../config';
+
+const API_URL = `${API_BASE}/api/whatsapp`;
 
 interface ScheduledMsg {
     _id: string
@@ -140,8 +142,8 @@ export default function ScheduledList() {
                     <div
                         key={msg._id}
                         className={`group bg-white rounded-xl shadow-sm border overflow-hidden transition-all hover:shadow-md ${isFailed
-                                ? 'border-red-200 bg-red-50/30'
-                                : 'border-slate-200'
+                            ? 'border-red-200 bg-red-50/30'
+                            : 'border-slate-200'
                             }`}
                     >
                         <div className="p-4">
@@ -211,8 +213,8 @@ export default function ScheduledList() {
                                             onClick={() => retryMessage(msg._id)}
                                             disabled={isRetrying}
                                             className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all ${isRetrying
-                                                    ? 'bg-violet-300 text-white cursor-not-allowed'
-                                                    : 'bg-violet-600 text-white hover:bg-violet-700 shadow-md shadow-violet-600/20'
+                                                ? 'bg-violet-300 text-white cursor-not-allowed'
+                                                : 'bg-violet-600 text-white hover:bg-violet-700 shadow-md shadow-violet-600/20'
                                                 }`}
                                         >
                                             {isRetrying ? '⏳ Reintentando...' : '🔄 Reintentar Ahora'}
