@@ -1,4 +1,5 @@
 import { whatsappService } from './whatsapp.service';
+import { contextExtractor, ContextChunk, ConversationContext } from './context-extractor.service';
 import path from 'path';
 import fs from 'fs';
 import { exec } from 'child_process';
@@ -221,29 +222,68 @@ class ResumidorService {
 
         onProgress?.('filter', `📊 ${filtered.length} mensajes en rango. Procesando contactos...`, 15);
 
-        // Parse messages — with detailed timing
+        // Parse ALL messages — no message type is skipped
         const parsed: ParsedMessage[] = [];
         const t3 = Date.now();
         for (let idx = 0; idx < filtered.length; idx++) {
             const msg = filtered[idx];
-            // Skip system messages, stickers, images, videos, documents
-            if (msg.isStatus || msg.type === 'sticker' || msg.type === 'image' ||
-                msg.type === 'video' || msg.type === 'document' || msg.type === 'vcard' ||
-                msg.type === 'location' || msg.type === 'revoked') {
-                continue;
-            }
+
+            // Skip only system status messages (e.g. "Messages to this chat are secured")
+            if (msg.isStatus) continue;
 
             const contactT = Date.now();
-            const contact = await msg.getContact();
-            const contactMs = Date.now() - contactT;
-            if (contactMs > 500) {
-                console.log(`📊 [RESUMIDOR]   ⚠️ getContact() lento: ${contactMs}ms para msg ${idx}`);
+            let authorName = 'Desconocido';
+            try {
+                const contact = await msg.getContact();
+                const contactMs = Date.now() - contactT;
+                if (contactMs > 500) {
+                    console.log(`📊 [RESUMIDOR]   ⚠️ getContact() lento: ${contactMs}ms para msg ${idx}`);
+                }
+                authorName = contact.pushname || contact.name || contact.number || 'Desconocido';
+            } catch {
+                authorName = msg.author || msg.from || 'Desconocido';
             }
-            const authorName = contact.pushname || contact.name || contact.number || 'Desconocido';
 
             const isAudio = msg.type === 'ptt' || msg.type === 'audio';
 
+            // Determine message type and body for ALL message kinds
+            let body = msg.body || '';
+            let hasMedia = msg.hasMedia;
             let mediaData;
+
+            // For non-text/audio media types, create descriptive body text
+            switch (msg.type) {
+                case 'image':
+                    body = msg.body ? `[📷 Imagen] ${msg.body}` : '[📷 Imagen enviada]';
+                    break;
+                case 'video':
+                    body = msg.body ? `[🎬 Video] ${msg.body}` : '[🎬 Video enviado]';
+                    break;
+                case 'document':
+                    body = `[📄 Documento: ${msg.filename || 'archivo'}]${msg.body ? ' ' + msg.body : ''}`;
+                    break;
+                case 'sticker':
+                    body = '[😄 Sticker]';
+                    break;
+                case 'location':
+                    body = '[📍 Ubicación compartida]';
+                    break;
+                case 'vcard':
+                    body = `[👤 Contacto compartido${msg.body ? ': ' + msg.body : ''}]`;
+                    break;
+                case 'revoked':
+                    body = '[🗑️ Mensaje eliminado]';
+                    break;
+                case 'ptt':
+                case 'audio':
+                    // Audio — will be transcribed later
+                    break;
+                default:
+                    // text, chat, or unknown — use body as-is
+                    break;
+            }
+
+            // Download audio media for transcription
             if (isAudio && msg.hasMedia) {
                 const dlT = Date.now();
                 try {
@@ -264,25 +304,25 @@ class ResumidorService {
             parsed.push({
                 timestamp: new Date(msg.timestamp * 1000),
                 author: authorName,
-                body: msg.body || '',
-                hasMedia: msg.hasMedia,
+                body,
+                hasMedia,
                 isAudio,
                 mediaData,
             });
 
             // Progress update every 10 messages
             if (idx % 10 === 0 && filtered.length > 10) {
-                onProgress?.('parse', `📊 Procesando mensaje ${idx + 1}/${filtered.length}...`, 15 + (idx / filtered.length) * 5);
+                onProgress?.('parse', `📊 Procesando mensaje ${idx + 1}/${filtered.length} ...`, 15 + (idx / filtered.length) * 5);
             }
         }
         console.log(`📊 [RESUMIDOR]   Parsing total: ${Date.now() - t3}ms para ${parsed.length} mensajes`);
 
         const audioCount = parsed.filter(m => m.isAudio).length;
-        const textCount = parsed.filter(m => !m.isAudio).length;
-        const ignoredCount = filtered.length - parsed.length;
+        const textCount = parsed.filter(m => !m.isAudio && !m.body.startsWith('[')).length;
+        const mediaCount = parsed.filter(m => m.body.startsWith('[📷') || m.body.startsWith('[🎬') || m.body.startsWith('[📄') || m.body.startsWith('[😄') || m.body.startsWith('[📍') || m.body.startsWith('[👤') || m.body.startsWith('[🗑️')).length;
 
         onProgress?.('filter',
-            `📊 ${parsed.length} mensajes válidos: ${textCount} textos, ${audioCount} audios, ${ignoredCount} media ignorados`,
+            `📊 ${parsed.length} mensajes procesados: ${textCount} textos, ${audioCount} audios, ${mediaCount} multimedia/otros`,
             20
         );
 
@@ -474,7 +514,7 @@ class ResumidorService {
     // ── Summarize with Ollama (STREAMING) ───────────────────────
 
     async summarizeWithOllama(
-        document: string,
+        prompt: string,
         chatName: string,
         hoursLabel: string,
         config: ReportConfig,
@@ -487,12 +527,10 @@ class ResumidorService {
 
         onProgress?.('summarize', '🤖 Preparando prompt para el LLM...', 65);
 
-        const prompt = this.buildPrompt(document, chatName, hoursLabel, config);
         const promptChars = prompt.length;
         const tokenEstimate = Math.round(promptChars / 4);
 
         console.log(`📊 [RESUMIDOR]   Prompt: ${promptChars} chars (~${tokenEstimate} tokens)`);
-        console.log(`📊 [RESUMIDOR]   Documento conversación: ${document.length} chars`);
 
         onProgress?.('summarize', `🤖 Enviando a ${model} (${tokenEstimate.toLocaleString()} tokens, ${promptChars.toLocaleString()} chars)...`, 68);
 
@@ -593,7 +631,7 @@ class ResumidorService {
     // ── Summarize with Groq (CLOUD) ─────────────────────────────
 
     async summarizeWithGroq(
-        document: string,
+        prompt: string,
         chatName: string,
         hoursLabel: string,
         config: ReportConfig,
@@ -606,7 +644,6 @@ class ResumidorService {
 
         onProgress?.('summarize', '🤖 Preparando prompt para Groq...', 65);
 
-        const prompt = this.buildPrompt(document, chatName, hoursLabel, config);
         const promptChars = prompt.length;
         const tokenEstimate = Math.round(promptChars / 4);
 
@@ -712,26 +749,106 @@ class ResumidorService {
         // Step 2: Transcribe audios
         await this.transcribeAudios(messages, onProgress);
 
-        // Step 3: Build document
-        console.log(`📊 [RESUMIDOR] ═══ PASO 3: Construyendo documento ═══`);
-        onProgress?.('build', '📝 Construyendo documento cronológico...', 62);
-        const document = this.buildConversationDocument(messages);
-        console.log(`📊 [RESUMIDOR]   Documento: ${document.length} chars, ${messages.length} mensajes`);
+        // Step 3: Convert to ContextChunks and build structured document
+        console.log(`📊 [RESUMIDOR] ═══ PASO 3: Construyendo documento estructurado ═══`);
+        onProgress?.('build', '📝 Construyendo documento cronológico con contexto completo...', 62);
 
-        // Log a preview of the document
-        const preview = document.substring(0, 300);
-        console.log(`📊 [RESUMIDOR]   Preview:\n${preview}\n...`);
+        // Convert ParsedMessages to ContextChunks
+        const chunks: ContextChunk[] = messages.map((msg, idx) => {
+            let type: ContextChunk['type'] = 'text';
+            if (msg.isAudio) {
+                type = 'audio_transcript';
+            } else if (msg.body.startsWith('[📷')) {
+                type = 'image';
+            } else if (msg.body.startsWith('[🎬')) {
+                type = 'video';
+            } else if (msg.body.startsWith('[📄')) {
+                type = 'document';
+            } else if (msg.body.startsWith('[😄')) {
+                type = 'sticker';
+            } else if (msg.body.startsWith('[📍')) {
+                type = 'location';
+            } else if (msg.body.startsWith('[👤')) {
+                type = 'contact';
+            } else if (msg.body.startsWith('[🗑️')) {
+                type = 'deleted';
+            }
 
-        onProgress?.('build', `📝 Documento listo: ${document.length} caracteres`, 64);
+            // For audio transcripts, strip the prefix if present
+            let content = msg.body;
+            if (type === 'audio_transcript' && content.startsWith('[🎤 AUDIO TRANSCRITO] ')) {
+                content = content.substring('[🎤 AUDIO TRANSCRITO] '.length);
+            }
 
-        // Step 4: Summarize (auto-detect provider)
+            return {
+                index: idx,
+                author: msg.author,
+                timestamp: msg.timestamp,
+                type,
+                content,
+                metadata: msg.mediaData ? { filename: msg.mediaData.filename } : undefined,
+            };
+        });
+
         const hoursLabel = options.rangeMode === 'hours'
             ? `últimas ${options.hours} horas`
             : `de ${options.rangeFrom} a ${options.rangeTo}`;
 
-        const summary = provider === 'groq'
-            ? await this.summarizeWithGroq(document, chatName, hoursLabel, config, model, onProgress)
-            : await this.summarizeWithOllama(document, chatName, hoursLabel, config, model, onProgress);
+        const conversationContext = contextExtractor.buildContext(chunks, chatName, hoursLabel);
+        const document = contextExtractor.formatDocument(conversationContext);
+
+        console.log(`📊 [RESUMIDOR]   Documento estructurado: ${document.length} chars, ${messages.length} mensajes`);
+        console.log(`📊 [RESUMIDOR]   Participantes: ${conversationContext.participants.map(p => `${p.name}(${p.messageCount})`).join(', ')}`);
+
+        // Log a preview of the document
+        const preview = document.substring(0, 500);
+        console.log(`📊 [RESUMIDOR]   Preview:\n${preview}\n...`);
+
+        onProgress?.('build', `📝 Documento listo: ${document.length} caracteres, ${conversationContext.participants.length} participantes`, 64);
+
+        // Step 4: Summarize — with multi-pass for large conversations
+        let summary: string;
+
+        if (contextExtractor.needsChunking(document)) {
+            // MULTI-PASS: Split large conversations into chunks and merge
+            console.log(`📊 [RESUMIDOR] ═══ PASO 4: Multi-pass (documento demasiado grande: ${document.length} chars) ═══`);
+            onProgress?.('summarize', `📖 Conversación grande (${document.length} chars), procesando en partes...`, 65);
+
+            const docChunks = contextExtractor.chunkDocument(document);
+            console.log(`📊 [RESUMIDOR]   Dividido en ${docChunks.length} partes`);
+
+            const partialSummaries: string[] = [];
+            for (let i = 0; i < docChunks.length; i++) {
+                onProgress?.('summarize', `🤖 Analizando parte ${i + 1}/${docChunks.length}...`, 65 + ((i + 1) / (docChunks.length + 1)) * 25);
+
+                const partialPrompt = contextExtractor.buildAnalysisPrompt(docChunks[i], conversationContext, config);
+
+                const partialSummary = provider === 'groq'
+                    ? await this.summarizeWithGroq(partialPrompt, chatName, hoursLabel, config, model)
+                    : await this.summarizeWithOllama(partialPrompt, chatName, hoursLabel, config, model);
+
+                partialSummaries.push(partialSummary);
+                console.log(`📊 [RESUMIDOR]   Parte ${i + 1}/${docChunks.length}: ${partialSummary.length} chars`);
+            }
+
+            // Merge pass
+            onProgress?.('summarize', `🔗 Unificando ${docChunks.length} resúmenes parciales...`, 92);
+            const mergePrompt = contextExtractor.buildMergePrompt(partialSummaries, conversationContext);
+
+            summary = provider === 'groq'
+                ? await this.summarizeWithGroq(mergePrompt, chatName, hoursLabel, config, model)
+                : await this.summarizeWithOllama(mergePrompt, chatName, hoursLabel, config, model);
+
+        } else {
+            // SINGLE-PASS: Document fits in one LLM call
+            const prompt = contextExtractor.buildAnalysisPrompt(document, conversationContext, config);
+
+            console.log(`📊 [RESUMIDOR]   Prompt total: ${prompt.length} chars (~${Math.round(prompt.length / 4)} tokens)`);
+
+            summary = provider === 'groq'
+                ? await this.summarizeWithGroq(prompt, chatName, hoursLabel, config, model, onProgress)
+                : await this.summarizeWithOllama(prompt, chatName, hoursLabel, config, model, onProgress);
+        }
 
         const processingTimeSeconds = Math.round((Date.now() - startTime) / 1000);
         const totalAudios = messages.filter(m => m.isAudio).length;
