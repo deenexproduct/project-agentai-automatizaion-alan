@@ -26,6 +26,8 @@ class WhatsAppService {
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private connectedSince: Date | null = null;
     private totalReconnects = 0;
+    private preventiveRestartJob: cron.ScheduledTask | null = null;
+    private lastPreventiveRestart: Date | null = null;
 
     // ── Initialization ──────────────────────────────────────────
 
@@ -36,6 +38,13 @@ class WhatsAppService {
             authStrategy: new LocalAuth({
                 dataPath: path.join(__dirname, '../../wa-session'),
             }),
+            // ── Memory optimization ──────────────────────────────────
+            // Disable WhatsApp Web cache to reduce Chromium memory usage.
+            // Without this, Chromium accumulates message/media cache over
+            // hours, causing memory leaks that eventually crash the process.
+            webVersionCache: {
+                type: 'none',
+            },
             puppeteer: {
                 headless: true,
                 protocolTimeout: 120000, // 120s — prevents 'Error: t' on large media
@@ -56,6 +65,10 @@ class WhatsAppService {
                     '--no-zygote',
                     '--disable-ipc-flooding-protection',
                     '--disable-component-update',
+                    // ── Memory management ───────────────────────────
+                    '--js-flags=--max-old-space-size=256',       // Limit Chromium JS heap to 256MB
+                    '--renderer-process-limit=1',                 // Only 1 renderer process
+                    '--disable-accelerated-2d-canvas',           // Reduce GPU memory usage
                 ],
             },
         });
@@ -80,6 +93,7 @@ class WhatsAppService {
             this.isReconnecting = false;
             this.connectedSince = new Date();
             this.startKeepAlive();
+            this.startPreventiveRestart();
             this.startScheduler();
             this.refreshChats();
         });
@@ -631,6 +645,100 @@ class WhatsAppService {
         }
     }
 
+    // ── Preventive Restart (every 24h at 4 AM) ──────────────────
+    //
+    // Chromium accumulates memory leaks over 24+ hours of operation.
+    // This scheduled restart destroys the client and re-initializes it
+    // cleanly, preserving the session via LocalAuth.
+    //
+    // Runs at 4:00 AM (low traffic window) to minimize disruption.
+    // The scheduler checks for pending messages before restarting.
+
+    private startPreventiveRestart(): void {
+        this.stopPreventiveRestart(); // Prevent duplicates
+
+        console.log('🔄 Preventive restart scheduled (daily at 4:00 AM server time)');
+
+        // Run at 4:00 AM every day
+        this.preventiveRestartJob = cron.schedule('0 4 * * *', async () => {
+            console.log('🔄 [Preventive Restart] Starting daily maintenance restart...');
+
+            // Check if there are messages pending in the next 5 minutes
+            try {
+                const soonMessages = await ScheduledMessage.countDocuments({
+                    status: 'pending',
+                    scheduledAt: {
+                        $lte: new Date(Date.now() + 5 * 60 * 1000),
+                    },
+                });
+
+                if (soonMessages > 0) {
+                    console.log(`🔄 [Preventive Restart] ${soonMessages} message(s) pending soon — delaying restart by 10 minutes`);
+                    // Retry in 10 minutes
+                    setTimeout(() => this.doPreventiveRestart(), 10 * 60 * 1000);
+                    return;
+                }
+            } catch (err) {
+                console.warn('⚠️ [Preventive Restart] Error checking pending messages:', err);
+            }
+
+            await this.doPreventiveRestart();
+        });
+    }
+
+    private async doPreventiveRestart(): Promise<void> {
+        const memBefore = process.memoryUsage();
+        console.log(`🔄 [Preventive Restart] Memory before: RSS=${Math.round(memBefore.rss / 1024 / 1024)}MB, Heap=${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`);
+
+        this.stopKeepAlive();
+        this.stopScheduler();
+
+        // Destroy current client
+        if (this.client) {
+            try {
+                await this.client.destroy();
+                console.log('🔄 [Preventive Restart] Old client destroyed');
+            } catch (err) {
+                console.warn('⚠️ [Preventive Restart] Error destroying client:', err);
+            }
+            this.client = null;
+        }
+
+        this.status = 'disconnected';
+        this.connectedSince = null;
+        this.lastPreventiveRestart = new Date();
+
+        // Force garbage collection if available (run node with --expose-gc)
+        if (global.gc) {
+            global.gc();
+            console.log('🔄 [Preventive Restart] Forced garbage collection');
+        }
+
+        // Wait 5 seconds to let resources release
+        await this.delay(5000);
+
+        const memAfter = process.memoryUsage();
+        console.log(`🔄 [Preventive Restart] Memory after GC: RSS=${Math.round(memAfter.rss / 1024 / 1024)}MB, Heap=${Math.round(memAfter.heapUsed / 1024 / 1024)}MB`);
+
+        // Re-initialize
+        console.log('🔄 [Preventive Restart] Re-initializing client...');
+        try {
+            await this.initialize();
+            console.log('✅ [Preventive Restart] Complete — fresh client running');
+        } catch (err: any) {
+            console.error('❌ [Preventive Restart] Re-initialization failed:', err.message);
+            // attemptReconnect will handle it from here
+            this.attemptReconnect('preventive_restart_failed');
+        }
+    }
+
+    private stopPreventiveRestart(): void {
+        if (this.preventiveRestartJob) {
+            this.preventiveRestartJob.stop();
+            this.preventiveRestartJob = null;
+        }
+    }
+
     // ── Health Info (for /api/whatsapp/health endpoint) ──────────
 
     getHealthInfo(): {
@@ -642,8 +750,11 @@ class WhatsAppService {
         isReconnecting: boolean;
         keepAliveActive: boolean;
         schedulerActive: boolean;
+        lastPreventiveRestart: string | null;
+        memory: { rss: string; heapUsed: string; heapTotal: string };
     } {
         const now = new Date();
+        const mem = process.memoryUsage();
         return {
             status: this.status,
             connectedSince: this.connectedSince?.toISOString() || null,
@@ -655,6 +766,12 @@ class WhatsAppService {
             isReconnecting: this.isReconnecting,
             keepAliveActive: this.keepAliveInterval !== null,
             schedulerActive: this.schedulerJob !== null,
+            lastPreventiveRestart: this.lastPreventiveRestart?.toISOString() || null,
+            memory: {
+                rss: `${Math.round(mem.rss / 1024 / 1024)}MB`,
+                heapUsed: `${Math.round(mem.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(mem.heapTotal / 1024 / 1024)}MB`,
+            },
         };
     }
 
@@ -662,6 +779,7 @@ class WhatsAppService {
 
     async destroy(): Promise<void> {
         console.log('🛑 Destroying WhatsApp service...');
+        this.stopPreventiveRestart();
         this.stopKeepAlive();
         this.stopScheduler();
         if (this.client) {
