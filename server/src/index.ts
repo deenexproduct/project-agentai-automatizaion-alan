@@ -43,6 +43,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// WhatsApp health — detailed session diagnostics
+app.get('/api/whatsapp/health', (req, res) => {
+  res.json(whatsappService.getHealthInfo());
+});
+
 // Get transcription history
 app.get('/api/history', (req, res) => {
   res.json(transcriptionHistory);
@@ -224,6 +229,23 @@ async function startServer() {
       console.error('WhatsApp initialization error:', err);
     });
   });
+
+  // ── Graceful Shutdown ─────────────────────────────────────────
+  // Cleanly destroy the WhatsApp client on SIGTERM/SIGINT
+  // This prevents session file corruption during Railway redeploys
+  const shutdown = async (signal: string) => {
+    console.log(`\n🛑 Received ${signal} — shutting down gracefully...`);
+    try {
+      await whatsappService.destroy();
+      console.log('✅ WhatsApp service destroyed cleanly');
+    } catch (err) {
+      console.error('⚠️ Error during shutdown:', err);
+    }
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer();

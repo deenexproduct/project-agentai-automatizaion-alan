@@ -19,6 +19,14 @@ class WhatsAppService {
     private status: 'disconnected' | 'qr' | 'connecting' | 'connected' = 'disconnected';
     private schedulerJob: cron.ScheduledTask | null = null;
 
+    // ── Session Persistence State ────────────────────────────────
+    private reconnectAttempts = 0;
+    private readonly MAX_RECONNECT_ATTEMPTS = 10;
+    private isReconnecting = false;
+    private keepAliveInterval: NodeJS.Timeout | null = null;
+    private connectedSince: Date | null = null;
+    private totalReconnects = 0;
+
     // ── Initialization ──────────────────────────────────────────
 
     async initialize(): Promise<void> {
@@ -39,6 +47,15 @@ class WhatsAppService {
                     '--disable-gpu',
                     '--disable-extensions',
                     '--disable-background-timer-throttling',
+                    // ── Session persistence flags ──────────────────
+                    '--disable-backgrounding-occluded-windows',  // Prevent page from going inactive
+                    '--disable-renderer-backgrounding',          // Keep renderer active in background
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-site-isolation-trials',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--disable-ipc-flooding-protection',
+                    '--disable-component-update',
                 ],
             },
         });
@@ -59,6 +76,10 @@ class WhatsAppService {
             console.log('✅ WhatsApp client ready!');
             this.status = 'connected';
             this.qrCode = null;
+            this.reconnectAttempts = 0;
+            this.isReconnecting = false;
+            this.connectedSince = new Date();
+            this.startKeepAlive();
             this.startScheduler();
             this.refreshChats();
         });
@@ -76,12 +97,26 @@ class WhatsAppService {
             this.status = 'disconnected';
         });
 
-        // Disconnected
+        // Disconnected — trigger auto-reconnect
         this.client.on('disconnected', (reason: string) => {
-            console.log('📱 WhatsApp disconnected:', reason);
+            console.warn('⚠️ WhatsApp disconnected:', reason);
             this.status = 'disconnected';
             this.qrCode = null;
+            this.connectedSince = null;
+            this.stopKeepAlive();
             this.stopScheduler();
+            this.attemptReconnect(reason);
+        });
+
+        // State change — detect silent disconnections
+        this.client.on('change_state', (state: string) => {
+            console.log('📱 WhatsApp state changed:', state);
+            if (state === 'CONFLICT' || state === 'UNLAUNCHED' || state === 'UNPAIRED') {
+                console.warn(`⚠️ Problematic state detected: ${state} — triggering reconnect`);
+                this.stopKeepAlive();
+                this.stopScheduler();
+                this.attemptReconnect(state);
+            }
         });
 
         try {
@@ -490,17 +525,156 @@ class WhatsAppService {
         }
     }
 
+    // ── Auto-Reconnect with Exponential Backoff ─────────────────
+
+    private async attemptReconnect(reason: string): Promise<void> {
+        if (this.isReconnecting) {
+            console.log('🔄 Reconnect already in progress, skipping');
+            return;
+        }
+
+        if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+            console.error(`🔴 Max reconnect attempts (${this.MAX_RECONNECT_ATTEMPTS}) reached. Manual restart required.`);
+            return;
+        }
+
+        this.isReconnecting = true;
+        this.reconnectAttempts++;
+        this.totalReconnects++;
+
+        // Exponential backoff: 5s, 10s, 20s, 40s, 80s... max 5min
+        const backoffDelay = Math.min(5000 * Math.pow(2, this.reconnectAttempts - 1), 300000);
+        console.log(`🔄 Reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${backoffDelay / 1000}s (reason: ${reason})`);
+
+        // Wait the backoff delay
+        await this.delay(backoffDelay);
+
+        // Destroy old client cleanly
+        if (this.client) {
+            try {
+                await this.client.destroy();
+            } catch (err) {
+                console.warn('⚠️ Error destroying old client during reconnect:', err);
+            }
+            this.client = null;
+        }
+
+        console.log('🔄 Re-initializing WhatsApp client...');
+        this.isReconnecting = false;
+
+        try {
+            await this.initialize();
+        } catch (err: any) {
+            console.error('❌ Reconnect initialization failed:', err.message);
+            // Will retry via the disconnected event or next state check
+        }
+    }
+
+    // ── Keep-Alive Heartbeat ─────────────────────────────────────
+
+    private startKeepAlive(): void {
+        this.stopKeepAlive(); // Prevent duplicate intervals
+
+        console.log('💓 Keep-alive heartbeat started (30s interval)');
+
+        this.keepAliveInterval = setInterval(async () => {
+            if (!this.client || this.status !== 'connected') return;
+
+            try {
+                // Check client state
+                const state = await this.client.getState();
+
+                if (state !== 'CONNECTED') {
+                    console.warn(`⚠️ Heartbeat detected unhealthy state: ${state}`);
+                    this.stopKeepAlive();
+                    this.status = 'disconnected';
+                    this.connectedSince = null;
+                    this.stopScheduler();
+                    this.attemptReconnect(`heartbeat_state_${state}`);
+                    return;
+                }
+
+                // Simulate page activity to prevent WhatsApp from marking as inactive
+                // This reads the page title — a minimal operation that keeps the page "alive"
+                const page = (this.client as any).pupPage;
+                if (page) {
+                    await page.evaluate(() => {
+                        // Minimal activity: read title + touch scroll position
+                        document.title;
+                        window.scrollY;
+                    });
+                }
+            } catch (err: any) {
+                console.warn('⚠️ Keep-alive check failed:', err.message);
+
+                // If the page/client is dead, trigger reconnect
+                if (err.message?.includes('Protocol error') ||
+                    err.message?.includes('Session closed') ||
+                    err.message?.includes('Target closed') ||
+                    err.message?.includes('Execution context was destroyed')) {
+                    console.error('🔴 Client appears dead — triggering reconnect');
+                    this.stopKeepAlive();
+                    this.status = 'disconnected';
+                    this.connectedSince = null;
+                    this.stopScheduler();
+                    this.attemptReconnect('heartbeat_error');
+                }
+            }
+        }, 30000); // Every 30 seconds
+    }
+
+    private stopKeepAlive(): void {
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+            this.keepAliveInterval = null;
+            console.log('💓 Keep-alive heartbeat stopped');
+        }
+    }
+
+    // ── Health Info (for /api/whatsapp/health endpoint) ──────────
+
+    getHealthInfo(): {
+        status: string;
+        connectedSince: string | null;
+        uptimeSeconds: number | null;
+        reconnectAttempts: number;
+        totalReconnects: number;
+        isReconnecting: boolean;
+        keepAliveActive: boolean;
+        schedulerActive: boolean;
+    } {
+        const now = new Date();
+        return {
+            status: this.status,
+            connectedSince: this.connectedSince?.toISOString() || null,
+            uptimeSeconds: this.connectedSince
+                ? Math.floor((now.getTime() - this.connectedSince.getTime()) / 1000)
+                : null,
+            reconnectAttempts: this.reconnectAttempts,
+            totalReconnects: this.totalReconnects,
+            isReconnecting: this.isReconnecting,
+            keepAliveActive: this.keepAliveInterval !== null,
+            schedulerActive: this.schedulerJob !== null,
+        };
+    }
+
     // ── Cleanup ─────────────────────────────────────────────────
 
     async destroy(): Promise<void> {
+        console.log('🛑 Destroying WhatsApp service...');
+        this.stopKeepAlive();
         this.stopScheduler();
         if (this.client) {
             try {
                 await this.client.destroy();
-            } catch { }
+                console.log('🛑 WhatsApp client destroyed cleanly');
+            } catch (err) {
+                console.warn('⚠️ Error during client destroy:', err);
+            }
             this.client = null;
         }
         this.status = 'disconnected';
+        this.connectedSince = null;
     }
 }
 
