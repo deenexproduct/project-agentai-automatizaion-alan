@@ -9,6 +9,8 @@ import { connectDB } from './db';
 import whatsappRoutes from './routes/whatsapp.routes';
 import resumidorRoutes from './routes/resumidor.routes';
 import optimizerRoutes from './routes/optimizer.routes';
+import linkedinRoutes from './routes/linkedin.routes';
+import linkedinCrmRoutes from './routes/linkedin-crm.routes';
 import { whatsappService } from './services/whatsapp.service';
 
 const execAsync = promisify(exec);
@@ -196,6 +198,13 @@ app.use('/api/resumidor', resumidorRoutes);
 // Optimizer routes
 app.use('/api/optimizer', optimizerRoutes);
 
+// LinkedIn routes
+app.use('/api/linkedin', linkedinRoutes);
+
+// LinkedIn CRM routes
+app.use('/api/linkedin/crm', linkedinCrmRoutes);
+console.log('📊 LinkedIn CRM routes mounted at /api/linkedin/crm');
+
 // Start server
 async function startServer() {
   // Connect to MongoDB
@@ -223,6 +232,15 @@ async function startServer() {
     console.log(`   POST /api/resumidor/summarize`);
     console.log(`   GET  /api/resumidor/models`);
     console.log(`   GET  /api/resumidor/history`);
+    console.log(`   🔗 LinkedIn:`);
+    console.log(`   GET  /api/linkedin/status`);
+    console.log(`   POST /api/linkedin/launch`);
+    console.log(`   POST /api/linkedin/start-prospecting`);
+    console.log(`   POST /api/linkedin/pause`);
+    console.log(`   POST /api/linkedin/resume`);
+    console.log(`   POST /api/linkedin/stop`);
+    console.log(`   GET  /api/linkedin/progress`);
+    console.log(`   GET  /api/linkedin/progress/stream`);
 
     // Initialize WhatsApp after server is ready
     whatsappService.initialize().catch((err) => {

@@ -1,0 +1,127 @@
+import { Router, Request, Response } from 'express';
+import { linkedinService } from '../services/linkedin.service';
+
+const router = Router();
+
+// ── GET /status — Session & prospecting status ──────────────
+router.get('/status', (_req: Request, res: Response) => {
+    res.json(linkedinService.getStatus());
+});
+
+// ── POST /launch — Open browser, load cookies ──────────────
+router.post('/launch', async (_req: Request, res: Response) => {
+    try {
+        await linkedinService.initialize();
+        res.json({ success: true, status: linkedinService.getStatus() });
+    } catch (err: any) {
+        console.error('LinkedIn launch error:', err);
+        res.status(500).json({ error: err.message || 'Failed to launch browser' });
+    }
+});
+
+// ── POST /start-prospecting — Start automation ─────────────
+router.post('/start-prospecting', async (req: Request, res: Response) => {
+    try {
+        const { urls, sendNote, noteText } = req.body;
+
+        if (!urls || !Array.isArray(urls) || urls.length === 0) {
+            return res.status(400).json({ error: 'urls must be a non-empty array of strings' });
+        }
+
+        const started = await linkedinService.startProspecting({
+            urls,
+            sendNote: !!sendNote,
+            noteText: noteText || undefined,
+        });
+
+        if (started) {
+            res.json({ success: true, message: `Prospecting started for ${urls.length} profiles` });
+        } else {
+            res.status(400).json({ error: 'Cannot start prospecting — check session status' });
+        }
+    } catch (err: any) {
+        console.error('Start prospecting error:', err);
+        res.status(500).json({ error: err.message || 'Failed to start prospecting' });
+    }
+});
+
+// ── POST /pause — Pause prospecting ────────────────────────
+router.post('/pause', async (_req: Request, res: Response) => {
+    await linkedinService.pause();
+    res.json({ success: true, message: 'Prospecting paused' });
+});
+
+// ── POST /resume — Resume prospecting ──────────────────────
+router.post('/resume', async (_req: Request, res: Response) => {
+    await linkedinService.resume();
+    res.json({ success: true, message: 'Prospecting resumed' });
+});
+
+// ── POST /stop — Stop prospecting completely ───────────────
+router.post('/stop', async (_req: Request, res: Response) => {
+    await linkedinService.stop();
+    res.json({ success: true, message: 'Prospecting stopped' });
+});
+
+// ── GET /progress — Current progress (polling) ─────────────
+router.get('/progress', (_req: Request, res: Response) => {
+    res.json(linkedinService.getProgress());
+});
+
+// ── GET /progress/stream — SSE real-time progress ──────────
+router.get('/progress/stream', (req: Request, res: Response) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no', // Prevent nginx buffering
+    });
+
+    // Send initial state
+    const initial = linkedinService.getProgress();
+    res.write(`data: ${JSON.stringify(initial)}\n\n`);
+
+    // Listen for progress events
+    const onProgress = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const onComplete = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const onPaused = (data: any) => {
+        res.write(`data: ${JSON.stringify({ type: 'paused', ...data })}\n\n`);
+    };
+
+    const onResumed = (data: any) => {
+        res.write(`data: ${JSON.stringify({ type: 'resumed', ...data })}\n\n`);
+    };
+
+    const onCaptcha = (data: any) => {
+        res.write(`data: ${JSON.stringify({ type: 'captcha', ...data })}\n\n`);
+    };
+
+    const onSessionExpired = (data: any) => {
+        res.write(`data: ${JSON.stringify({ type: 'session-expired', ...data })}\n\n`);
+    };
+
+    linkedinService.on('progress', onProgress);
+    linkedinService.on('complete', onComplete);
+    linkedinService.on('paused', onPaused);
+    linkedinService.on('resumed', onResumed);
+    linkedinService.on('captcha', onCaptcha);
+    linkedinService.on('session-expired', onSessionExpired);
+
+    // Clean up on client disconnect
+    req.on('close', () => {
+        linkedinService.off('progress', onProgress);
+        linkedinService.off('complete', onComplete);
+        linkedinService.off('paused', onPaused);
+        linkedinService.off('resumed', onResumed);
+        linkedinService.off('captcha', onCaptcha);
+        linkedinService.off('session-expired', onSessionExpired);
+    });
+});
+
+export default router;

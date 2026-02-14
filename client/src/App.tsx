@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import WhatsAppTab from './components/whatsapp/WhatsAppTab'
 import ResumidorTab from './components/resumidor/ResumidorTab'
 
@@ -14,6 +15,7 @@ interface Transcription {
 }
 
 function App() {
+    const navigate = useNavigate()
     const [activeTab, setActiveTab] = useState<'dictate' | 'transcribe' | 'history' | 'whatsapp' | 'resumidor'>('dictate')
     const [isRecording, setIsRecording] = useState(false)
     const [transcript, setTranscript] = useState('')
@@ -307,6 +309,12 @@ function App() {
                             }`}
                     >
                         📊 Resumidor
+                    </button>
+                    <button
+                        onClick={() => navigate('/linkedin')}
+                        className="py-4 px-2 border-b-2 transition-colors border-transparent text-slate-500 hover:text-violet-600 hover:border-violet-300"
+                    >
+                        🔗 LinkedIn
                     </button>
                 </div>
             </div>
