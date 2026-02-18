@@ -1,0 +1,26 @@
+{
+  "batchId": "2026-02-16T22:24:16.759Z",
+  "accountEmail": "unknown",
+  "profiles": [
+    {
+      "url": "https://ar.linkedin.com/in/emiliano-berazategui-2097b411",
+      "status": "pending",
+      "attempts": 0
+    }
+  ],
+  "currentIndex": 0,
+  "startTime": "2026-02-16T22:24:16.806Z",
+  "isPaused": false,
+  "options": {
+    "totalLimit": 1,
+    "dailyLimit": 1
+  },
+  "stats": {
+    "processed": 0,
+    "successful": 0,
+    "failed": 0,
+    "pending": 1
+  },
+  "lastUpdate": "2026-02-16T22:24:16.806Z",
+  "version": 1
+}

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { LinkedInContact, type ContactStatus } from '../models/linkedin-contact.model';
 import { linkedinService } from '../services/linkedin.service';
+import { enrichmentService } from '../services/enrichment.service';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.get('/contacts', async (req: Request, res: Response) => {
         // Build query
         const query: any = {};
 
-        if (status && ['visitando', 'conectando', 'conectado', 'interactuando', 'esperando_aceptacion', 'aceptado', 'listo_para_mensaje', 'mensaje_enviado'].includes(status as string)) {
+        if (status && ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'].includes(status as string)) {
             query.status = status;
         }
 
@@ -50,6 +51,8 @@ router.get('/contacts', async (req: Request, res: Response) => {
             readyForMessageAt: 1,
             messageSentAt: 1,
             headline: 1,
+            enrichmentStatus: 1,
+            enrichedAt: 1,
         };
 
         const [contacts, total] = await Promise.all([
@@ -77,18 +80,17 @@ router.get('/contacts', async (req: Request, res: Response) => {
 
 router.get('/contacts/counts', async (_req: Request, res: Response) => {
     try {
-        const [visitando, conectando, conectado, interactuando, esperando_aceptacion, aceptado, listo_para_mensaje, mensaje_enviado] = await Promise.all([
+        const [visitando, conectando, interactuando, enriqueciendo, esperando_aceptacion, aceptado, mensaje_enviado] = await Promise.all([
             LinkedInContact.countDocuments({ status: 'visitando' }),
             LinkedInContact.countDocuments({ status: 'conectando' }),
-            LinkedInContact.countDocuments({ status: 'conectado' }),
             LinkedInContact.countDocuments({ status: 'interactuando' }),
+            LinkedInContact.countDocuments({ status: 'enriqueciendo' }),
             LinkedInContact.countDocuments({ status: 'esperando_aceptacion' }),
             LinkedInContact.countDocuments({ status: 'aceptado' }),
-            LinkedInContact.countDocuments({ status: 'listo_para_mensaje' }),
             LinkedInContact.countDocuments({ status: 'mensaje_enviado' }),
         ]);
 
-        res.json({ visitando, conectando, conectado, interactuando, esperando_aceptacion, aceptado, listo_para_mensaje, mensaje_enviado });
+        res.json({ visitando, conectando, interactuando, enriqueciendo, esperando_aceptacion, aceptado, mensaje_enviado });
     } catch (err: any) {
         console.error('CRM counts error:', err.message);
         res.status(500).json({ error: 'Failed to fetch counts' });
@@ -115,7 +117,7 @@ router.get('/contacts/:id', async (req: Request, res: Response) => {
 router.patch('/contacts/:id/status', async (req: Request, res: Response) => {
     try {
         const { status } = req.body;
-        const validStatuses: ContactStatus[] = ['visitando', 'conectando', 'conectado', 'interactuando', 'esperando_aceptacion', 'aceptado', 'listo_para_mensaje', 'mensaje_enviado'];
+        const validStatuses: ContactStatus[] = ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'];
 
         if (!status || !validStatuses.includes(status)) {
             return res.status(400).json({ error: 'Invalid status' });
@@ -123,8 +125,9 @@ router.patch('/contacts/:id/status', async (req: Request, res: Response) => {
 
         // Build timestamp update based on new status
         const timestampField: Record<string, string> = {
+            interactuando: 'interactedAt',
+            enriqueciendo: 'enrichedAt',
             aceptado: 'acceptedAt',
-            listo_para_mensaje: 'readyForMessageAt',
             mensaje_enviado: 'messageSentAt',
         };
 
@@ -144,6 +147,14 @@ router.patch('/contacts/:id/status', async (req: Request, res: Response) => {
         }
 
         res.json({ success: true, contact });
+
+        // ── Auto-enrichment trigger (async, non-blocking) ──
+        // Enrichment is triggered when status is 'interactuando'
+        try {
+            enrichmentService.triggerAutoEnrichment(req.params.id, status);
+        } catch (enrichErr: any) {
+            console.error('Auto-enrichment trigger error:', enrichErr.message);
+        }
     } catch (err: any) {
         console.error('CRM status update error:', err.message);
         res.status(500).json({ error: 'Failed to update status' });
@@ -204,6 +215,47 @@ router.get('/check-accepted/status', async (_req: Request, res: Response) => {
         res.json({ lastCheck });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ── POST /contacts/:id/enrich — Trigger enrichment manually ──
+
+router.post('/contacts/:id/enrich', async (req: Request, res: Response) => {
+    try {
+        const contact = await enrichmentService.enrichContact(req.params.id);
+        res.json({ success: true, contact });
+    } catch (err: any) {
+        console.error('CRM enrichment error:', err.message);
+        const status = err.message.includes('no encontrado') ? 404 : 500;
+        res.status(status).json({ error: err.message });
+    }
+});
+
+// ── GET /enrichment/config — Get enrichment configuration ────
+
+router.get('/enrichment/config', async (_req: Request, res: Response) => {
+    try {
+        const config = enrichmentService.getConfig();
+        res.json(config);
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to read config' });
+    }
+});
+
+// ── PATCH /enrichment/config — Update enrichment config ──────
+
+router.patch('/enrichment/config', async (req: Request, res: Response) => {
+    try {
+        const validStatuses: ContactStatus[] = ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'];
+
+        if (req.body.autoEnrichOnStatus && !validStatuses.includes(req.body.autoEnrichOnStatus)) {
+            return res.status(400).json({ error: 'Invalid trigger status' });
+        }
+
+        const updated = enrichmentService.updateConfig(req.body);
+        res.json({ success: true, config: updated });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to update config' });
     }
 });
 

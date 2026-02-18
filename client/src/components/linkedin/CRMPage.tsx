@@ -25,23 +25,21 @@ interface ColumnConfig {
 const COLUMNS: ColumnConfig[] = [
     { id: 'visitando', label: 'Visitando', icon: '👁️', color: '#06b6d4', accentBg: 'rgba(6,182,212,0.08)' },
     { id: 'conectando', label: 'Conectando', icon: '🔗', color: '#eab308', accentBg: 'rgba(234,179,8,0.08)' },
-    { id: 'conectado', label: 'Conectado', icon: '✅', color: '#22c55e', accentBg: 'rgba(34,197,94,0.08)' },
     { id: 'interactuando', label: 'Interactuando', icon: '👋', color: '#f97316', accentBg: 'rgba(249,115,22,0.08)' },
+    { id: 'enriqueciendo', label: 'Enriqueciendo', icon: '🔬', color: '#a855f7', accentBg: 'rgba(168,85,247,0.08)' },
     { id: 'esperando_aceptacion', label: 'Esperando Aceptación', icon: '⏳', color: '#f59e0b', accentBg: 'rgba(245,158,11,0.08)' },
     { id: 'aceptado', label: 'Aceptado', icon: '🤝', color: '#10b981', accentBg: 'rgba(16,185,129,0.08)' },
-    { id: 'listo_para_mensaje', label: 'Listo p/ Mensaje', icon: '💬', color: '#3b82f6', accentBg: 'rgba(59,130,246,0.08)' },
     { id: 'mensaje_enviado', label: 'Mensaje Enviado', icon: '🚀', color: '#8b5cf6', accentBg: 'rgba(139,92,246,0.08)' },
 ];
 
-// Valid drag transitions (only forward + listo→aceptado back)
+// Valid drag transitions (only forward)
 const VALID_TRANSITIONS: Record<ContactStatus, ContactStatus[]> = {
     visitando: ['conectando'],
-    conectando: ['conectado'],
-    conectado: ['interactuando'],
-    interactuando: ['esperando_aceptacion'],
+    conectando: ['interactuando'],
+    interactuando: ['enriqueciendo'],
+    enriqueciendo: ['esperando_aceptacion'],
     esperando_aceptacion: ['aceptado'],
-    aceptado: ['listo_para_mensaje'],
-    listo_para_mensaje: ['aceptado', 'mensaje_enviado'],
+    aceptado: ['mensaje_enviado'],
     mensaje_enviado: [],
 };
 
@@ -49,13 +47,12 @@ const VALID_TRANSITIONS: Record<ContactStatus, ContactStatus[]> = {
 
 export default function CRMPage() {
     const [columns, setColumns] = useState<Record<ContactStatus, ContactCardData[]>>({
-        visitando: [], conectando: [], conectado: [], esperando_aceptacion: [],
-        interactuando: [], aceptado: [],
-        listo_para_mensaje: [], mensaje_enviado: [],
+        visitando: [], conectando: [], interactuando: [], enriqueciendo: [],
+        esperando_aceptacion: [], aceptado: [], mensaje_enviado: [],
     });
-    const [counts, setCounts] = useState<StatusCounts>({ visitando: 0, conectando: 0, conectado: 0, esperando_aceptacion: 0, interactuando: 0, aceptado: 0, listo_para_mensaje: 0, mensaje_enviado: 0 });
-    const [pages, setPages] = useState<Record<ContactStatus, number>>({ visitando: 1, conectando: 1, conectado: 1, esperando_aceptacion: 1, interactuando: 1, aceptado: 1, listo_para_mensaje: 1, mensaje_enviado: 1 });
-    const [hasMore, setHasMore] = useState<Record<ContactStatus, boolean>>({ visitando: true, conectando: true, conectado: true, esperando_aceptacion: true, interactuando: true, aceptado: true, listo_para_mensaje: true, mensaje_enviado: true });
+    const [counts, setCounts] = useState<StatusCounts>({ visitando: 0, conectando: 0, interactuando: 0, enriqueciendo: 0, esperando_aceptacion: 0, aceptado: 0, mensaje_enviado: 0 });
+    const [pages, setPages] = useState<Record<ContactStatus, number>>({ visitando: 1, conectando: 1, interactuando: 1, enriqueciendo: 1, esperando_aceptacion: 1, aceptado: 1, mensaje_enviado: 1 });
+    const [hasMore, setHasMore] = useState<Record<ContactStatus, boolean>>({ visitando: true, conectando: true, interactuando: true, enriqueciendo: true, esperando_aceptacion: true, aceptado: true, mensaje_enviado: true });
     const [search, setSearch] = useState('');
     const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
     const [checking, setChecking] = useState(false);
@@ -81,14 +78,13 @@ export default function CRMPage() {
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
-            const [visData, conxData, conData, espData, intData, acpData, lisData, msgData, countsData] = await Promise.all([
+            const [visData, conxData, intData, enrData, espData, acpData, msgData, countsData] = await Promise.all([
                 getContacts('visitando', search || undefined, 1, 50),
                 getContacts('conectando', search || undefined, 1, 50),
-                getContacts('conectado', search || undefined, 1, 50),
-                getContacts('esperando_aceptacion', search || undefined, 1, 50),
                 getContacts('interactuando', search || undefined, 1, 50),
+                getContacts('enriqueciendo', search || undefined, 1, 50),
+                getContacts('esperando_aceptacion', search || undefined, 1, 50),
                 getContacts('aceptado', search || undefined, 1, 50),
-                getContacts('listo_para_mensaje', search || undefined, 1, 50),
                 getContacts('mensaje_enviado', search || undefined, 1, 50),
                 getCounts(),
             ]);
@@ -96,23 +92,21 @@ export default function CRMPage() {
             setColumns({
                 visitando: visData.contacts,
                 conectando: conxData.contacts,
-                conectado: conData.contacts,
-                esperando_aceptacion: espData.contacts,
                 interactuando: intData.contacts,
+                enriqueciendo: enrData.contacts,
+                esperando_aceptacion: espData.contacts,
                 aceptado: acpData.contacts,
-                listo_para_mensaje: lisData.contacts,
                 mensaje_enviado: msgData.contacts,
             });
             setCounts(countsData);
-            setPages({ visitando: 1, conectando: 1, conectado: 1, esperando_aceptacion: 1, interactuando: 1, aceptado: 1, listo_para_mensaje: 1, mensaje_enviado: 1 });
+            setPages({ visitando: 1, conectando: 1, interactuando: 1, enriqueciendo: 1, esperando_aceptacion: 1, aceptado: 1, mensaje_enviado: 1 });
             setHasMore({
                 visitando: 1 < visData.pages,
                 conectando: 1 < conxData.pages,
-                conectado: 1 < conData.pages,
-                esperando_aceptacion: 1 < espData.pages,
                 interactuando: 1 < intData.pages,
+                enriqueciendo: 1 < enrData.pages,
+                esperando_aceptacion: 1 < espData.pages,
                 aceptado: 1 < acpData.pages,
-                listo_para_mensaje: 1 < lisData.pages,
                 mensaje_enviado: 1 < msgData.pages,
             });
         } catch { /* ignore */ }
@@ -219,7 +213,7 @@ export default function CRMPage() {
 
     // ── Render ────────────────────────────────────────────────
 
-    const totalContacts = counts.conectado + counts.esperando_aceptacion + counts.interactuando + counts.aceptado + counts.listo_para_mensaje + counts.mensaje_enviado;
+    const totalContacts = counts.conectado + counts.esperando_aceptacion + counts.interactuando + counts.aceptado + counts.listo_para_mensaje + counts.mensaje_enviado + counts.enriquecido;
 
     return (
         <div className="flex flex-col h-full">
@@ -363,6 +357,7 @@ export default function CRMPage() {
                                                             contact={contact}
                                                             onClick={() => setDrawerContactId(contact._id)}
                                                             provided={dragProvided}
+                                                            onEnriched={() => loadAll()}
                                                         />
                                                     )}
                                                 </Draggable>

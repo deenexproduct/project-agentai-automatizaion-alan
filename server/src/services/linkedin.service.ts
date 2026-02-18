@@ -7,6 +7,17 @@ import type { Browser, Page } from 'puppeteer';
 import { LinkedInContact, type ILinkedInContact } from '../models/linkedin-contact.model';
 import { LinkedInLogger } from '../utils/linkedin-logger';
 
+// NEW: Import enhanced services
+import { operationManager, OperationType } from './linkedin/operation-manager.service';
+import { statePersistence, ProspectingState, ProfileProgress as PersistedProfileProgress } from './linkedin/state-persistence.service';
+import { RetryService } from './linkedin/retry.service';
+import { connectionVerifier, VerificationResult } from './linkedin/connection-verifier.service';
+import { humanBehavior } from './linkedin/human-behavior.service';
+import { healthMonitor } from './linkedin/health-monitor.service';
+import { captchaHandler } from './linkedin/captcha-handler.service';
+import { rateLimitHandler } from './linkedin/rate-limit-handler.service';
+import { enrichmentService } from './enrichment.service';
+
 // Apply stealth plugin — patches 10+ fingerprints
 puppeteer.use(StealthPlugin());
 
@@ -18,7 +29,6 @@ puppeteer.use(StealthPlugin());
 
 export interface ProfileSteps {
     visit: 'pending' | 'done' | 'error';
-    follow: 'pending' | 'done' | 'skipped' | 'error';
     connect: 'pending' | 'done' | 'skipped' | 'error';
     like: 'pending' | 'done' | 'skipped' | 'error';
 }
@@ -27,7 +37,7 @@ export interface ProfileProgress {
     index: number;
     url: string;
     name?: string;
-    status: 'pending' | 'visiting' | 'followed' | 'connected' | 'liked' | 'done' | 'error' | 'paused';
+    status: 'pending' | 'visiting' | 'connected' | 'liked' | 'done' | 'error' | 'paused';
     steps: ProfileSteps;
     error?: string;
     startedAt?: string;
@@ -94,9 +104,14 @@ class LinkedInService extends EventEmitter {
     private currentIndex = 0;
 
     // CRM state
-    public isBusy = false;
+    public isBusy = false; // Legacy flag - now uses operationManager
     private lastAcceptedCheck: Date | null = null;
     private pauseResolve: (() => void) | null = null;
+    
+    // NEW: Enhanced services
+    private retryService = RetryService.forNavigation();
+    private currentBatchId: string | null = null;
+    private accountEmail: string = ''; // Set during login
 
     // ── Helpers ──────────────────────────────────────────────
 
@@ -117,30 +132,19 @@ class LinkedInService extends EventEmitter {
     // ── Human Emulation ──────────────────────────────────────
 
     private async humanScroll(page: Page): Promise<void> {
-        const scrolls = this.getRandomDelay(2, 5);
-        for (let i = 0; i < scrolls; i++) {
-            const distance = this.getRandomDelay(100, 400);
-            await page.evaluate((d) => {
-                window.scrollBy({ top: d, behavior: 'smooth' });
-            }, distance);
-            await this.delay(this.getRandomDelay(500, 1500));
-        }
+        // NEW: Use enhanced human behavior service
+        await humanBehavior.humanScroll(page, {
+            minScrolls: 2,
+            maxScrolls: 5,
+            minDistance: 100,
+            maxDistance: 400,
+            readPauseChance: 0.15
+        });
     }
 
     private async humanClick(page: Page, element: any): Promise<void> {
-        const box = await element.boundingBox();
-        if (!box) {
-            await element.click();
-            return;
-        }
-
-        // Move to element with slight offset for natural feel
-        const x = box.x + box.width / 2 + this.getRandomDelay(-3, 3);
-        const y = box.y + box.height / 2 + this.getRandomDelay(-3, 3);
-
-        await page.mouse.move(x, y, { steps: this.getRandomDelay(5, 15) });
-        await this.delay(this.getRandomDelay(100, 300));
-        await page.mouse.click(x, y);
+        // NEW: Use enhanced human behavior service
+        await humanBehavior.humanClick(page, element, true);
     }
 
     // ── Session Management ───────────────────────────────────
@@ -160,26 +164,37 @@ class LinkedInService extends EventEmitter {
 
         this.browser = await puppeteer.launch({
             headless: false,
-            protocolTimeout: 120000, // 120s — prevents timeout on heavy LinkedIn pages
+            protocolTimeout: 180000, // 180s — LinkedIn pages are very heavy
             defaultViewport: { width: 1366, height: 768 },
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
+                '--disable-infobars',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-ipc-flooding-protection',
                 '--window-size=1366,768',
             ],
         });
 
         this.page = await this.browser.newPage();
 
-        // Set realistic user-agent
+        // Set user-agent matching the ACTUAL Chrome version (145)
         await this.page.setUserAgent(
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
         );
 
         // Remove webdriver flag
         await this.page.evaluateOnNewDocument(() => {
             Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        });
+
+        // Auto-dismiss any JavaScript dialogs (alerts, confirms, prompts)
+        this.page.on('dialog', async (dialog) => {
+            console.log(`  🔔 Dialog detected: "${dialog.message().substring(0, 80)}" — dismissing`);
+            await dialog.dismiss().catch(() => { });
         });
 
         this.status = 'browser-open';
@@ -332,12 +347,21 @@ class LinkedInService extends EventEmitter {
     // ── Prospecting Core ─────────────────────────────────────
 
     async startProspecting(options: ProspectingOptions): Promise<boolean> {
+        // NEW: Use operation manager for mutual exclusion
+        if (!await operationManager.acquire('prospecting', { urlCount: options.urls.length })) {
+            const current = operationManager.getCurrent();
+            console.error(`❌ Cannot start prospecting — operation '${current}' in progress`);
+            return false;
+        }
+
         if (!this.page || this.status !== 'logged-in') {
+            operationManager.release();
             console.error('❌ Cannot start prospecting — not logged in');
             return false;
         }
 
         if (this.isRunning) {
+            operationManager.release();
             console.error('❌ Prospecting already running');
             return false;
         }
@@ -348,6 +372,7 @@ class LinkedInService extends EventEmitter {
             .filter(u => u.length > 0 && (u.includes('linkedin.com/in/') || u.includes('linkedin.com/pub/')));
 
         if (urls.length === 0) {
+            operationManager.release();
             console.error('❌ No valid LinkedIn URLs provided');
             return false;
         }
@@ -361,7 +386,6 @@ class LinkedInService extends EventEmitter {
             status: 'pending' as const,
             steps: {
                 visit: 'pending' as const,
-                follow: 'pending' as const,
                 connect: 'pending' as const,
                 like: 'pending' as const,
             },
@@ -371,6 +395,7 @@ class LinkedInService extends EventEmitter {
         this.isPaused = false;
         this.shouldStop = false;
         this.currentIndex = 0;
+        this.currentBatchId = new Date().toISOString();
 
         // CRM: Register all URLs as 'visitando' immediately
         const batchId = new Date().toISOString().split('T')[0];
@@ -397,6 +422,9 @@ class LinkedInService extends EventEmitter {
         }
         console.log(`📋 CRM: Registered ${urls.length} profiles as 'visitando'`);
 
+        // NEW: Save initial state for recovery
+        await this.saveCurrentState(options);
+
         // Emit initial state
         this.emitProgress();
 
@@ -404,16 +432,59 @@ class LinkedInService extends EventEmitter {
         this.runProspectingLoop(options).catch(err => {
             console.error('❌ Prospecting loop error:', err);
             this.isRunning = false;
+            operationManager.release();
             this.emitProgress();
+        }).finally(() => {
+            // Always release the lock when done
+            operationManager.release();
+            // Clear saved state on completion
+            statePersistence.clear().catch(() => {});
         });
 
         return true;
+    }
+
+    // NEW: Save current state for crash recovery
+    private async saveCurrentState(options: ProspectingOptions): Promise<void> {
+        if (!this.currentBatchId) return;
+
+        const persistedProfiles: PersistedProfileProgress[] = this.profiles.map(p => ({
+            url: p.url,
+            status: p.status === 'done' ? 'completed' : 
+                    p.status === 'error' ? 'failed' : 
+                    p.status === 'pending' ? 'pending' : 'processing',
+            attempts: p.status === 'error' ? 1 : 0,
+            lastError: p.error,
+        }));
+
+        await statePersistence.save({
+            batchId: this.currentBatchId,
+            accountEmail: this.accountEmail || 'unknown',
+            profiles: persistedProfiles,
+            currentIndex: this.currentIndex,
+            startTime: new Date().toISOString(),
+            isPaused: this.isPaused,
+            options: {
+                totalLimit: this.profiles.length,
+                dailyLimit: this.profiles.length,
+                connectionNote: options.noteText,
+
+            },
+            stats: {
+                processed: this.profiles.filter(p => p.status !== 'pending').length,
+                successful: this.profiles.filter(p => p.status === 'done').length,
+                failed: this.profiles.filter(p => p.status === 'error').length,
+                pending: this.profiles.filter(p => p.status === 'pending').length,
+            },
+        });
     }
 
     private async runProspectingLoop(options: ProspectingOptions): Promise<void> {
         for (let i = 0; i < this.profiles.length; i++) {
             if (this.shouldStop) {
                 console.log('⏹️ Prospecting stopped by user');
+                // NEW: Save state before stopping
+                await this.saveCurrentState(options);
                 break;
             }
 
@@ -433,6 +504,13 @@ class LinkedInService extends EventEmitter {
                     error: err.message || 'Unknown error',
                 });
                 this.emitProgress();
+                // NEW: Save state on error
+                await this.saveCurrentState(options);
+            }
+
+            // NEW: Auto-save every 5 profiles
+            if (statePersistence.shouldAutoSave(i + 1, 5)) {
+                await this.saveCurrentState(options);
             }
 
             // Delay between profiles
@@ -440,9 +518,40 @@ class LinkedInService extends EventEmitter {
                 // Every 15-20 profiles, take a longer break
                 if ((i + 1) % LONG_PAUSE_EVERY === 0) {
                     console.log(`\n☕ Taking a longer break after ${i + 1} profiles...`);
+                    await this.saveCurrentState(options); // Save before long break
                     await this.randomDelay(DELAYS.longPause);
                 } else {
                     await this.randomDelay(DELAYS.betweenProfiles);
+                }
+            }
+        }
+
+        // NEW: Retry failed profiles
+        const failedProfiles = this.profiles.filter(p => p.status === 'error');
+        if (failedProfiles.length > 0 && !this.shouldStop) {
+            console.log(`\n🔄 Retrying ${failedProfiles.length} failed profiles...`);
+            for (const failedProfile of failedProfiles) {
+                if (this.shouldStop) break;
+                
+                const index = failedProfile.index;
+                console.log(`  🔄 Retrying profile ${index + 1}: ${failedProfile.url}`);
+                
+                try {
+                    // Reset status
+                    this.updateProfile(index, {
+                        status: 'pending',
+                        error: undefined,
+                    });
+                    await this.processProfile(index, options);
+                    
+                    // Delay between retries
+                    await this.randomDelay(DELAYS.betweenProfiles);
+                } catch (err: any) {
+                    console.error(`  ❌ Retry failed for profile ${index + 1}:`, err.message);
+                    this.updateProfile(index, {
+                        status: 'error',
+                        error: `Retry failed: ${err.message}`,
+                    });
                 }
             }
         }
@@ -455,12 +564,20 @@ class LinkedInService extends EventEmitter {
 
         console.log(`\n✅ Prospecting complete: ${done} done, ${errors} errors, ${this.profiles.length - done - errors} skipped`);
 
+        // NEW: Print health status
+        const health = healthMonitor.getHealthStatus();
+        console.log(`📊 Health Status: ${health.healthy ? '✅ HEALTHY' : '❌ UNHEALTHY'} (risk: ${health.riskScore})`);
+        if (health.alerts.length > 0) {
+            console.log(`⚠️ Alerts: ${health.alerts.join(', ')}`);
+        }
+
         this.emit('complete', {
             type: 'complete',
             processed: this.profiles.length,
             succeeded: done,
             failed: errors,
             skipped: this.profiles.length - done - errors,
+            health: healthMonitor.getMetrics(),
         });
     }
 
@@ -468,6 +585,7 @@ class LinkedInService extends EventEmitter {
         const profile = this.profiles[index];
         const page = this.page!;
         const normalizedUrl = this.normalizeUrl(profile.url);
+        const profileStartTime = Date.now();
 
         // ── Create per-account logger ──
         const logger = new LinkedInLogger(profile.url);
@@ -475,6 +593,9 @@ class LinkedInService extends EventEmitter {
         logger.log(`📋 Processing: ${profile.url}`);
         logger.log(`   Normalized URL: ${normalizedUrl}`);
         logger.log(`   Options: sendNote=${options.sendNote}, noteText="${(options.noteText || '').substring(0, 50)}"`);
+
+        // NEW: Start operation tracking
+        healthMonitor.startOperation(`processing_profile_${index}`);
 
         try {
             // ── CRM: Mark as 'visitando' ──
@@ -491,43 +612,88 @@ class LinkedInService extends EventEmitter {
 
             // Navigate with retry mechanism (up to 3 attempts)
             let pageLoaded = false;
-            const retryTimeouts = [30000, 45000, 60000];
-            for (let attempt = 0; attempt < retryTimeouts.length; attempt++) {
+
+            // ── Phase 1: Navigate to profile page ──
+            // LinkedIn is a heavy SPA. We try networkidle2 first, then fall back to
+            // just 'load' event, and finally no-wait + manual poll.
+            const navStrategies = [
+                { waitUntil: 'networkidle2' as const, timeout: 25000, label: 'networkidle2' },
+                { waitUntil: 'load' as const, timeout: 20000, label: 'load' },
+                { waitUntil: 'domcontentloaded' as const, timeout: 15000, label: 'domcontentloaded' },
+            ];
+
+            for (let i = 0; i < navStrategies.length; i++) {
+                const strategy = navStrategies[i];
                 try {
-                    logger.log(`  🌐 Navigating to profile... (attempt ${attempt + 1}/${retryTimeouts.length})`);
-                    await page.goto(profile.url, { waitUntil: 'domcontentloaded', timeout: retryTimeouts[attempt] });
-                    logger.log(`  ✅ Page loaded (domcontentloaded)`);
+                    logger.log(`  🌐 Navigating to profile... (strategy ${i + 1}/${navStrategies.length}: ${strategy.label}, timeout=${strategy.timeout}ms)`);
+                    await page.goto(profile.url, { waitUntil: strategy.waitUntil, timeout: strategy.timeout });
+                    logger.log(`  ✅ Page loaded (${strategy.label})`);
                     pageLoaded = true;
                     break;
                 } catch (navErr: any) {
-                    logger.log(`  ⚠️ Navigation attempt ${attempt + 1} failed: ${navErr.message?.substring(0, 60)}`);
-                    if (attempt < retryTimeouts.length - 1) {
-                        logger.log(`  🔄 Retrying in 3s...`);
+                    const msg = navErr.message?.substring(0, 100) || 'Unknown error';
+                    logger.log(`  ⚠️ Strategy ${strategy.label} failed: ${msg}`);
+
+                    // After timeout, check if the page is at least partially useful
+                    const currentUrl = page.url();
+                    logger.log(`  🔗 Current URL after timeout: ${currentUrl.substring(0, 120)}`);
+
+                    // Try to get raw HTML length — tells us if the page has content
+                    try {
+                        const html = await page.content();
+                        logger.log(`  📏 Page HTML length: ${html.length} chars`);
+                        if (html.length > 1000 && currentUrl.includes('/in/')) {
+                            logger.log(`  ✅ Page has content (${html.length} chars) — treating as loaded`);
+                            pageLoaded = true;
+                            break;
+                        }
+                    } catch (contentErr: any) {
+                        logger.log(`  ⚠️ Cannot read page content: ${contentErr.message?.substring(0, 60)}`);
+                    }
+
+                    if (i < navStrategies.length - 1) {
+                        logger.log(`  🔄 Trying next strategy in 3s...`);
                         await this.delay(3000);
                     }
                 }
             }
 
-            // Wait for the page to settle
-            logger.log(`  ⏱️ Waiting for page to settle...`);
-            await this.randomDelay(DELAYS.pageLoad);
+            // ── Phase 2: Wait for profile content to render ──
+            // Even if navigation "failed", we may have enough content. Check for h1.
+            logger.log(`  ⏱️ Waiting for profile content to render...`);
+            let contentReady = false;
 
-            // Wait for body to be available
-            let bodyFound = false;
+            // First, force a small delay to let React hydrate
+            await this.delay(2000);
+
+            // Try to take a diagnostic screenshot regardless of page state
+            await logger.screenshot(page, 'after_navigation').catch(() => { });
+
             try {
-                await page.waitForSelector('body', { timeout: 10000 });
-                bodyFound = true;
+                await page.waitForSelector('h1', { timeout: 10000 });
+                contentReady = true;
+                logger.log(`  ✅ Profile content detected (h1 found)`);
             } catch {
-                logger.log('  ⚠️ Body not found, page may not have loaded');
+                logger.log(`  ⚠️ h1 not found — checking page HTML for content...`);
+                try {
+                    const html = await page.content();
+                    logger.log(`  📏 Page HTML: ${html.length} chars`);
+                    // Log the first 500 chars of HTML for debugging
+                    logger.log(`  📄 HTML preview: ${html.substring(0, 500).replace(/\n/g, ' ')}`);
+                    if (html.length > 500) {
+                        contentReady = true;
+                        logger.log(`  ✅ Page has substantial HTML — proceeding`);
+                    }
+                } catch (err: any) {
+                    logger.log(`  ❌ Cannot read page content: ${err.message?.substring(0, 60)}`);
+                }
             }
 
-            // If navigation failed AND body not found, skip this profile
-            if (!pageLoaded && !bodyFound) {
-                logger.log('  ❌ Page completely failed to load after all retries — skipping profile');
+            if (!pageLoaded && !contentReady) {
+                logger.log('  ❌ Page completely failed to load — skipping profile');
                 logger.logResult(false, 'Page failed to load');
                 this.updateProfile(index, { status: 'error', error: 'Page failed to load', steps: { ...profile.steps, visit: 'error' } });
                 this.emitProgress();
-                logger.close();
                 return;
             }
 
@@ -549,6 +715,25 @@ class LinkedInService extends EventEmitter {
                 this.emitProgress();
                 logger.close();
                 return;
+            }
+
+            // NEW: Check for captcha
+            const captchaCheck = await captchaHandler.detect(page);
+            if (captchaCheck.detected) {
+                logger.log(`  🔒 CAPTCHA DETECTED (${captchaCheck.type}, confidence: ${captchaCheck.confidence})`);
+                const result = await captchaHandler.handle(page);
+                if (result !== 'resolved') {
+                    throw new Error(`Captcha not resolved: ${result}`);
+                }
+                logger.log('  ✅ Captcha resolved, continuing...');
+            }
+
+            // NEW: Check for rate limit
+            const rateLimitCheck = await rateLimitHandler.detect(page);
+            if (rateLimitCheck.isRateLimited) {
+                logger.log(`  🚫 RATE LIMIT DETECTED: ${rateLimitCheck.type} - ${rateLimitCheck.message}`);
+                await rateLimitHandler.handle(page, rateLimitCheck);
+                throw new Error(`Rate limited: ${rateLimitCheck.message}. Retry after ${rateLimitCheck.suggestedWaitHours}h`);
             }
 
             // Check for captcha
@@ -590,6 +775,16 @@ class LinkedInService extends EventEmitter {
                         logger.log(`  👤 Profile name: ${name}`);
                         this.updateProfile(index, { name });
                     }
+                } else {
+                    // Fallback: get name from page title ("Name | LinkedIn")
+                    const title = await page.title();
+                    if (title && title.includes('|')) {
+                        const name = title.split('|')[0].trim();
+                        if (name && name.length < 60) {
+                            logger.log(`  👤 Profile name (from title): ${name}`);
+                            this.updateProfile(index, { name });
+                        }
+                    }
                 }
             } catch {
                 // Name extraction failed — not critical
@@ -608,52 +803,7 @@ class LinkedInService extends EventEmitter {
             }
             await this.randomDelay(DELAYS.betweenActions);
 
-            // ── CRM: Scrape profile data and save to MongoDB ──
-            try {
-                // Scroll back to top so h1/header elements are accessible
-                await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
-                await this.delay(2000);
-
-                logger.log(`  🔍 Scraping profile data...`);
-                const scraped = await this.scrapeProfileData(page);
-                if (scraped && scraped.fullName) {
-                    await LinkedInContact.findOneAndUpdate(
-                        { profileUrl: normalizedUrl },
-                        {
-                            $set: {
-                                ...scraped,
-                                profileUrl: normalizedUrl,
-                                prospectingBatchId: new Date().toISOString().split('T')[0],
-                            },
-                        },
-                        { upsert: true, new: true }
-                    );
-                    logger.log(`  💾 CRM: Scraped data saved for: ${scraped.fullName}`);
-                } else {
-                    // Fallback: use the name we extracted from h1 earlier
-                    const fallbackName = this.profiles[index].name;
-                    if (fallbackName && fallbackName !== profile.url) {
-                        await LinkedInContact.updateOne(
-                            { profileUrl: normalizedUrl },
-                            { $set: { fullName: fallbackName, firstName: fallbackName.split(' ')[0] || '', lastName: fallbackName.split(' ').slice(1).join(' ') || '' } }
-                        );
-                        logger.log(`  💾 CRM: Saved fallback name: ${fallbackName}`);
-                    } else {
-                        logger.log(`  ⚠️ CRM: Could not scrape profile data`);
-                    }
-                }
-            } catch (crmErr: any) {
-                logger.log(`  ⚠️ CRM save error: ${crmErr.message?.substring(0, 80)}`);
-                // Non-critical — continue with prospecting
-            }
-
-            // ── Step 2: Follow Profile — SKIPPED (user wants Connect only) ──
-            this.updateProfile(index, {
-                steps: { ...this.profiles[index].steps, follow: 'skipped' },
-            });
-            this.emitProgress();
-
-            // ── Step 3: Connect ──
+            // ── Step 2: Connect ──
             await this.checkPause();
             if (this.shouldStop) { logger.close(); return; }
 
@@ -661,6 +811,7 @@ class LinkedInService extends EventEmitter {
             logger.log(`  🔄 CRM: → conectando`);
             await this.updateCrmStatus(normalizedUrl, 'conectando');
 
+            let connectionSent = false;
             try {
                 logger.section('CONNECT ATTEMPT');
                 logger.log(`  🔗 Attempting to connect...`);
@@ -671,9 +822,7 @@ class LinkedInService extends EventEmitter {
                 });
 
                 if (connected) {
-                    // ── CRM: Mark as 'esperando_aceptacion' after successful connection ──
-                    logger.log(`  🔄 CRM: → esperando_aceptacion (connection sent, waiting for acceptance)`);
-                    await this.updateCrmStatus(normalizedUrl, 'esperando_aceptacion');
+                    connectionSent = true;
                     await LinkedInContact.updateOne(
                         { profileUrl: normalizedUrl },
                         { $set: { sentAt: new Date() } }
@@ -715,6 +864,93 @@ class LinkedInService extends EventEmitter {
                 this.updateProfile(index, { steps: { ...this.profiles[index].steps, like: 'error' } });
             }
 
+            // ── Step 5: Navigate back to profile & Scrape full data ──
+            await this.checkPause();
+            if (this.shouldStop) { logger.close(); return; }
+
+            try {
+                logger.section('SCRAPE PROFILE DATA');
+                logger.log(`  📸 Navigating back to profile for full scrape...`);
+
+                // Navigate back to the profile page (like step may have gone to posts page)
+                await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+                await this.delay(3000);
+
+                // Scroll down to load lazy sections, then back up
+                await this.humanScroll(page);
+                await this.delay(1000);
+                await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+                await this.delay(2000);
+
+                logger.log(`  🔍 Scraping profile data...`);
+                const scraped = await this.scrapeProfileData(page);
+                if (scraped) {
+                    // Use fallback name if scraper couldn't get it
+                    if (!scraped.fullName) {
+                        const fallbackName = this.profiles[index].name;
+                        if (fallbackName && fallbackName !== profile.url) {
+                            scraped.fullName = fallbackName;
+                            const parts = fallbackName.split(' ');
+                            scraped.firstName = parts[0] || '';
+                            scraped.lastName = parts.slice(1).join(' ') || '';
+                        }
+                    }
+
+                    // Build $set with only non-empty values to avoid overwriting existing data with empty strings
+                    const setData: any = { profileUrl: normalizedUrl, prospectingBatchId: new Date().toISOString().split('T')[0] };
+                    for (const [key, value] of Object.entries(scraped)) {
+                        if (value && (typeof value !== 'string' || value.trim() !== '')) {
+                            if (Array.isArray(value) && value.length === 0) continue;
+                            setData[key] = value;
+                        }
+                    }
+
+                    await LinkedInContact.findOneAndUpdate(
+                        { profileUrl: normalizedUrl },
+                        { $set: setData },
+                        { upsert: true, new: true }
+                    );
+                    const savedFields = Object.keys(setData).filter(k => !['profileUrl', 'prospectingBatchId'].includes(k));
+                    logger.log(`  💾 CRM: Saved ${savedFields.length} fields for: ${scraped.fullName || normalizedUrl}`);
+                    
+                    // ── TRIGGER: Auto-enrichment AFTER scraping is complete ──
+                    // Only trigger if we have meaningful data (headline, position, or company)
+                    if (scraped.headline || scraped.currentPosition || scraped.currentCompany) {
+                        try {
+                            const contact = await LinkedInContact.findOne({ profileUrl: normalizedUrl });
+                            if (contact && contact.status === 'interactuando') {
+                                logger.log(`  🧬 Triggering auto-enrichment for ${contact.fullName}...`);
+                                enrichmentService.triggerAutoEnrichment(contact._id.toString(), 'interactuando')
+                                    .catch(err => logger.log(`  ⚠️ Auto-enrichment error: ${err.message?.substring(0, 60)}`));
+                            }
+                        } catch (enrichTriggerErr: any) {
+                            logger.log(`  ⚠️ Failed to trigger enrichment: ${enrichTriggerErr.message?.substring(0, 60)}`);
+                        }
+                    }
+                } else {
+                    // Total failure — try fallback name from h1
+                    const fallbackName = this.profiles[index].name;
+                    if (fallbackName && fallbackName !== profile.url) {
+                        await LinkedInContact.updateOne(
+                            { profileUrl: normalizedUrl },
+                            { $set: { fullName: fallbackName, firstName: fallbackName.split(' ')[0] || '', lastName: fallbackName.split(' ').slice(1).join(' ') || '' } }
+                        );
+                        logger.log(`  💾 CRM: Saved fallback name: ${fallbackName}`);
+                    } else {
+                        logger.log(`  ⚠️ CRM: Could not scrape any profile data`);
+                    }
+                }
+            } catch (crmErr: any) {
+                logger.log(`  ⚠️ CRM scrape/save error: ${crmErr.message?.substring(0, 80)}`);
+                // Non-critical — continue
+            }
+
+            // ── Final status: interactuando (scraping done, enrichment will handle next) ──
+            // The enrichment service will automatically pick up contacts in 'interactuando' status
+            // and move them through: enriqueciendo → esperando_aceptacion
+            logger.log(`  ✅ CRM: Pipeline complete for this profile`);
+            logger.log(`     → Status: interactuando (waiting for auto-enrichment)`);
+
             // Mark as done
             this.updateProfile(index, {
                 status: 'done',
@@ -724,53 +960,22 @@ class LinkedInService extends EventEmitter {
 
             logger.log(`  ✅ Profile done: ${this.profiles[index].name || profile.url}`);
 
+            // NEW: Record success in HealthMonitor
+            const duration = Date.now() - profileStartTime;
+            healthMonitor.recordSuccess(duration);
+            rateLimitHandler.recordSuccess(); // Reset rate limit counter
+
+        } catch (error: any) {
+            // NEW: Record error in HealthMonitor
+            healthMonitor.recordError(error, `profile_${index}`);
+            logger.log(`  ❌ Profile error: ${error.message}`);
+            throw error; // Re-throw to be handled by caller
+
         } finally {
             // Always close the logger, even on exceptions
             logger.close();
+            healthMonitor.endOperation();
         }
-    }
-
-    // ── Follow ───────────────────────────────────────────────
-
-    private async followProfile(page: Page): Promise<boolean> {
-        console.log('  👤 Attempting to follow...');
-
-        // Scroll to top first — action buttons are in the profile header
-        await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
-        await this.delay(this.getRandomDelay(500, 1000));
-
-        // Find the Follow button specifically within the profile's action area
-        const followButton = await page.evaluateHandle(() => {
-            // LinkedIn wraps profile actions in a section with the profile header
-            // Look for buttons whose visible text is exactly "Follow" or "Seguir"
-            const buttons = document.querySelectorAll('button');
-            for (const btn of buttons) {
-                const span = btn.querySelector('span');
-                const text = (span?.textContent || btn.textContent || '').trim();
-
-                // Skip if it's "Following" / "Siguiendo" (already following)
-                if (text === 'Following' || text === 'Siguiendo') continue;
-
-                if (text === 'Follow' || text === 'Seguir') {
-                    const rect = btn.getBoundingClientRect();
-                    // Only match buttons in the upper portion of the page (profile header area)
-                    if (rect.width > 0 && rect.height > 0 && rect.top < 600) {
-                        return btn;
-                    }
-                }
-            }
-            return null;
-        });
-
-        const followEl = followButton.asElement();
-        if (!followEl) {
-            console.log('  ⏭️ Follow button not found (possibly already following)');
-            return false;
-        }
-
-        await this.humanClick(page, followEl);
-        console.log('  ✅ Followed');
-        return true;
     }
 
     // ── Connect ──────────────────────────────────────────────
@@ -847,41 +1052,81 @@ class LinkedInService extends EventEmitter {
         }
 
         // ══════════════════════════════════════════════════════════
-        // Strategy 1: Direct <button> with "Conectar"/"Connect" (top < 400)
-        // For profiles where Connect is a primary action button.
-        // IMPORTANT: Exclude "Invita a [X]" — sidebar suggestion buttons.
+        // Strategy 0: Direct <a> link with custom-invite href
+        // LinkedIn often renders the "Conectar" action as an <a> link
+        // pointing to /preload/custom-invite/?vanityName=... 
+        // This is the MOST RELIABLE strategy — this href only appears
+        // on profiles you haven't connected with yet.
         // ══════════════════════════════════════════════════════════
-        logger.log('  🔎 Strategy 1: Looking for direct Connect <button>...');
-        const directBtn = await page.evaluateHandle(() => {
-            const buttons = document.querySelectorAll('button');
-            for (const btn of buttons) {
-                const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-                const text = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                const rect = btn.getBoundingClientRect();
-
-                if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < 400) {
-                    // SKIP suggestion card buttons — they say "Invita a [Other Person] a conectar"
-                    if (ariaLabel.includes('invita a') || ariaLabel.includes('invite ')) {
-                        continue;
-                    }
-
-                    if ((ariaLabel.includes('conectar') || ariaLabel.includes('connect')) &&
-                        !ariaLabel.includes('disconnect') && !ariaLabel.includes('desconectar')) {
-                        return btn;
-                    }
-                    if ((text === 'conectar' || text === 'connect') &&
-                        !text.includes('message') && !text.includes('mensaje')) {
-                        return btn;
+        logger.log('  🔎 Strategy 0: Looking for <a> link with custom-invite href...');
+        const customInviteLink = await page.evaluateHandle(() => {
+            const links = document.querySelectorAll('a');
+            for (const link of links) {
+                const href = (link.getAttribute('href') || '').toLowerCase();
+                const rect = link.getBoundingClientRect();
+                // Only look in the profile header area (top < 550), skip sidebar suggestions
+                if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < 550) {
+                    if (href.includes('/preload/custom-invite') || href.includes('custom-invite')) {
+                        // Check if this is a sidebar suggestion (has "Invita a" for someone else)
+                        const ariaLabel = (link.getAttribute('aria-label') || '').toLowerCase();
+                        // The profile's own Conectar link says "Invita a [PROFILE NAME]"
+                        // Sidebar suggestions also say "Invita a [OTHER NAME]"
+                        // We want the one in the profile header area (top < 550)
+                        return link;
                     }
                 }
             }
             return null;
         });
-        connectEl = directBtn.asElement();
+        connectEl = customInviteLink.asElement();
 
         if (connectEl) {
-            usedStrategy = '1 (direct button)';
-            logger.log('  ✅ Strategy 1: Found direct Connect <button>');
+            usedStrategy = '0 (custom-invite <a> link)';
+            logger.log('  ✅ Strategy 0: Found custom-invite <a> link');
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // Strategy 1: Direct <button> OR <a> with "Conectar"/"Connect" (top < 400)
+        // For profiles where Connect is a primary action button or link.
+        // IMPORTANT: Exclude sidebar suggestion buttons.
+        // ══════════════════════════════════════════════════════════
+        if (!connectEl) {
+            logger.log('  🔎 Strategy 1: Looking for direct Connect <button> or <a>...');
+            const directBtn = await page.evaluateHandle(() => {
+                // Search both buttons AND links
+                const elements = document.querySelectorAll('button, a');
+                for (const el of elements) {
+                    const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+                    const text = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                    const rect = el.getBoundingClientRect();
+                    const tag = el.tagName.toLowerCase();
+
+                    if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < 400) {
+                        // SKIP suggestion card buttons — they say "Invita a [Other Person] a conectar"
+                        // But DON'T skip the profile's own "Invita a [Profile Name] a conectar" link
+                        // Distinguish: sidebar suggestions are typically at top > 350 or in the right panel
+                        if (tag === 'button' && (ariaLabel.includes('invita a') || ariaLabel.includes('invite '))) {
+                            continue;
+                        }
+
+                        if ((ariaLabel.includes('conectar') || ariaLabel.includes('connect')) &&
+                            !ariaLabel.includes('disconnect') && !ariaLabel.includes('desconectar')) {
+                            return el;
+                        }
+                        if ((text === 'conectar' || text === 'connect') &&
+                            !text.includes('message') && !text.includes('mensaje')) {
+                            return el;
+                        }
+                    }
+                }
+                return null;
+            });
+            connectEl = directBtn.asElement();
+
+            if (connectEl) {
+                usedStrategy = '1 (direct button/link)';
+                logger.log('  ✅ Strategy 1: Found direct Connect element');
+            }
         }
 
 
@@ -1192,19 +1437,41 @@ class LinkedInService extends EventEmitter {
         }
 
         // ── Handle the connect modal ──
-        // Wait for modal to appear (both artdeco-modal and role=dialog)
+        // Wait for the INVITE-specific modal (not generic role=dialog which always exists)
         let modalVisible = false;
         try {
-            await page.waitForSelector('[role="dialog"], .artdeco-modal, .send-invite', { timeout: 5000 });
-            modalVisible = true;
-            logger.log('  📋 Connect modal detected');
-        } catch {
-            // Check again with evaluate as fallback
+            // Wait for the actual modal overlay that LinkedIn shows for invitations
+            await page.waitForSelector('.artdeco-modal-overlay--visible, .artdeco-modal-overlay, .send-invite', { timeout: 5000 });
+            // Verify it's actually an invite modal (contains send button text)
             modalVisible = await page.evaluate(() => {
-                return !!document.querySelector('[role="dialog"], .artdeco-modal, .send-invite');
+                const overlay = document.querySelector('.artdeco-modal-overlay--visible, .artdeco-modal-overlay, .send-invite');
+                if (!overlay) return false;
+                const text = (overlay.textContent || '').toLowerCase();
+                return text.includes('enviar sin nota') || text.includes('send without') ||
+                    text.includes('añadir una nota') || text.includes('add a note') ||
+                    text.includes('enviar invitación') || text.includes('send invitation') ||
+                    text.includes('nota a la invitación') || text.includes('note to invitation');
             });
             if (modalVisible) {
-                logger.log('  📋 Connect modal detected (via evaluate)');
+                logger.log('  📋 Connect/invite modal detected');
+            } else {
+                logger.log('  ⚠️ Modal overlay exists but does NOT contain invite content');
+            }
+        } catch {
+            // No modal overlay found — check if maybe it's a different type of dialog
+            modalVisible = await page.evaluate(() => {
+                const modals = document.querySelectorAll('[role="dialog"][aria-modal="true"], .artdeco-modal');
+                for (const m of modals) {
+                    const text = (m.textContent || '').toLowerCase();
+                    if (text.includes('enviar sin nota') || text.includes('send without') ||
+                        text.includes('añadir una nota') || text.includes('add a note')) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (modalVisible) {
+                logger.log('  📋 Connect modal detected (via evaluate fallback)');
             }
         }
 
@@ -1283,37 +1550,66 @@ class LinkedInService extends EventEmitter {
             }
         }
 
-        // DEBUG: Log ALL visible buttons before searching for Send
+        // DEBUG: Log ALL visible buttons INSIDE the modal overlay
         try {
             const sendDebug = await page.evaluate((invPage: boolean) => {
-                const selector = invPage
-                    ? 'button'
-                    : '[role="dialog"] button, .artdeco-modal button, button.artdeco-button, button';
-                const btns = document.querySelectorAll(selector);
-                return Array.from(btns)
-                    .filter(b => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
-                    .slice(0, 10)
-                    .map(b => ({
+                const overlay = document.querySelector('.artdeco-modal-overlay--visible, .artdeco-modal-overlay, .artdeco-modal');
+                const modalBtns = overlay ? overlay.querySelectorAll('button') : null;
+                const allBtns = document.querySelectorAll('button');
+                const wh = window.innerHeight;
+
+                // Use function declaration instead of const arrow to avoid __name issues
+                function formatBtn(b: Element) {
+                    return {
                         text: (b.textContent || '').replace(/\s+/g, ' ').trim().substring(0, 50),
                         aria: (b.getAttribute('aria-label') || '').substring(0, 60),
                         top: Math.round(b.getBoundingClientRect().top),
-                    }));
+                        inModal: !!b.closest('.artdeco-modal-overlay--visible, .artdeco-modal-overlay, .artdeco-modal'),
+                    };
+                }
+
+                const modalResults = modalBtns
+                    ? Array.from(modalBtns).filter(b => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).map(formatBtn)
+                    : [];
+
+                const viewportEnviar = Array.from(allBtns)
+                    .filter(b => {
+                        const r = b.getBoundingClientRect();
+                        const t = (b.textContent || '').toLowerCase().trim();
+                        return r.width > 0 && r.height > 0 && r.top > -50 && r.top < wh && t.includes('enviar');
+                    })
+                    .map(formatBtn);
+
+                return { modalButtons: modalResults, viewportEnviar, hasOverlay: !!overlay, viewportHeight: wh };
             }, isInvitePage);
-            logger.log(`  🔍 Send candidates (isInvitePage=${isInvitePage}): ${JSON.stringify(sendDebug)}`);
+            logger.log(`  🔍 Modal overlay found: ${sendDebug.hasOverlay}, modal buttons: ${sendDebug.modalButtons.length}, viewport enviar: ${sendDebug.viewportEnviar.length}`);
+            if (sendDebug.modalButtons.length > 0) {
+                logger.log(`  🔍 Modal buttons: ${JSON.stringify(sendDebug.modalButtons)}`);
+            }
+            if (sendDebug.viewportEnviar.length > 0) {
+                logger.log(`  🔍 Viewport "enviar" buttons: ${JSON.stringify(sendDebug.viewportEnviar)}`);
+            }
         } catch { /* skip */ }
 
-        // Search broadly: modal buttons AND all artdeco-buttons on the page
+        // ── 2-Phase Send Button Search ──
+        // Phase 1: Search ONLY inside the modal overlay (most reliable)
+        // Phase 2: Search viewport-visible buttons as fallback
+        // NOTE: All logic is inlined to avoid __name decorator issues with tsx/esbuild
         const sendBtn = await page.evaluateHandle(() => {
-            const buttons = document.querySelectorAll(
-                '[role="dialog"] button, .artdeco-modal button, button.artdeco-button, button'
-            );
-            for (const btn of buttons) {
-                const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-                const text = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                const rect = btn.getBoundingClientRect();
+            const wh = window.innerHeight;
 
-                if (rect.width > 0 && rect.height > 0) {
-                    // Match Send/Enviar variants but NOT "Enviar mensaje" or "Enviar perfil"
+            // Phase 1: Search inside the modal overlay
+            const overlays = document.querySelectorAll(
+                '.artdeco-modal-overlay--visible, .artdeco-modal-overlay, .artdeco-modal, [role="dialog"][aria-modal="true"]'
+            );
+            for (const overlay of overlays) {
+                const btns = overlay.querySelectorAll('button');
+                for (const btn of btns) {
+                    const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    const text = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                    const rect = btn.getBoundingClientRect();
+                    if (rect.width <= 0 || rect.height <= 0) continue;
+
                     if (text === 'enviar sin nota' || text === 'send without a note' ||
                         text === 'enviar invitación' || text === 'send invitation' ||
                         text === 'enviar' || text === 'send') {
@@ -1330,6 +1626,34 @@ class LinkedInService extends EventEmitter {
                     }
                 }
             }
+
+            // Phase 2: Search ALL buttons but ONLY if visible in viewport
+            const allButtons = document.querySelectorAll('button');
+            for (const btn of allButtons) {
+                const rect = btn.getBoundingClientRect();
+                // STRICT viewport check: must be visible on screen
+                if (rect.top < -50 || rect.top > wh + 50) continue;
+                if (rect.width <= 0 || rect.height <= 0) continue;
+
+                const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                const text = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+                if (text === 'enviar sin nota' || text === 'send without a note' ||
+                    text === 'enviar invitación' || text === 'send invitation' ||
+                    text === 'enviar' || text === 'send') {
+                    if (!text.includes('mensaje') && !text.includes('message') &&
+                        !text.includes('perfil') && !text.includes('profile')) {
+                        return btn;
+                    }
+                }
+                if ((ariaLabel.includes('send without') || ariaLabel.includes('enviar sin') ||
+                    ariaLabel === 'send' || ariaLabel === 'enviar') &&
+                    !ariaLabel.includes('message') && !ariaLabel.includes('mensaje') &&
+                    !ariaLabel.includes('perfil') && !ariaLabel.includes('profile')) {
+                    return btn;
+                }
+            }
+
             return null;
         });
 
@@ -1378,80 +1702,34 @@ class LinkedInService extends EventEmitter {
 
     private async verifyConnectionSent(page: Page, logger: LinkedInLogger, profileUrl: string): Promise<'verified' | 'failed' | 'uncertain'> {
         try {
-            // Navigate back to the profile to check the current state
-            logger.log('  🌐 Reloading profile for verification...');
-            await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => { });
-            await this.delay(this.getRandomDelay(3000, 5000));
-
+            // NEW: Use the robust ConnectionVerifier
+            logger.log('  🌐 Reloading profile for verification (using multi-method verifier)...');
+            
+            const verification = await connectionVerifier.verify(page, profileUrl, 2);
+            
             // 📸 Screenshot during verification
             await logger.screenshot(page, 'verification');
             await logger.logPageState(page, 'verification');
 
-            // Check for indicators on the reloaded profile
-            const result = await page.evaluate(() => {
-                const buttons = document.querySelectorAll('button, a');
-                let hasPendiente = false;
-                let hasConectar = false;
-                let hasRetirar = false;
-                const debugInfo: string[] = [];
-
-                for (const btn of buttons) {
-                    const text = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                    const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-                    const rect = btn.getBoundingClientRect();
-
-                    // Only check visible elements in the header area (top < 600)
-                    if (rect.width <= 0 || rect.height <= 0 || rect.top > 600) continue;
-
-                    // Check for "Pendiente" / "Pending" indicators
-                    if (text === 'pendiente' || text === 'pending' ||
-                        ariaLabel.includes('pendiente') || ariaLabel.includes('pending') ||
-                        ariaLabel.includes('invitation sent') || ariaLabel.includes('invitación enviada')) {
-                        hasPendiente = true;
-                        debugInfo.push(`PENDIENTE: text="${text}" aria="${ariaLabel.substring(0, 50)}" top=${Math.round(rect.top)}`);
-                    }
-
-                    // Check for "Retirar" / "Withdraw" indicators
-                    if (text === 'retirar' || text === 'withdraw' ||
-                        ariaLabel.includes('retirar') || ariaLabel.includes('withdraw')) {
-                        hasRetirar = true;
-                        debugInfo.push(`RETIRAR: text="${text}" aria="${ariaLabel.substring(0, 50)}" top=${Math.round(rect.top)}`);
-                    }
-
-                    // Check if "Conectar" / "Connect" is still visible (= connection NOT sent)
-                    // Exclude sidebar suggestion cards ("Invita a")
-                    if ((text === 'conectar' || text === 'connect') &&
-                        !ariaLabel.includes('invita a') && !ariaLabel.includes('invite ') &&
-                        rect.top < 500) {
-                        hasConectar = true;
-                        debugInfo.push(`CONECTAR: text="${text}" aria="${ariaLabel.substring(0, 50)}" top=${Math.round(rect.top)}`);
-                    }
-
-                    // REMOVED: Do NOT check <a> connect links here.
-                    // <a> links with /preload/custom-invite are ALWAYS present on the profile
-                    // page, even AFTER a connection request has been sent.
-                    // They are NOT evidence that the connection was not sent.
-                }
-
-                return { hasPendiente, hasConectar, hasRetirar, debugInfo };
-            });
-
-            logger.log(`  🔍 Verification check: pendiente=${result.hasPendiente}, retirar=${result.hasRetirar}, conectar=${result.hasConectar}`);
-            if (result.debugInfo.length > 0) {
-                for (const info of result.debugInfo) {
-                    logger.log(`     → ${info}`);
+            logger.log(`  🔍 Verification result: connected=${verification.connected}, confidence=${verification.confidence}, method=${verification.method}`);
+            
+            if (verification.evidence.length > 0) {
+                for (const evidence of verification.evidence.slice(0, 3)) {
+                    logger.log(`     → ${evidence}`);
                 }
             }
 
-            // Decision logic
-            if (result.hasPendiente || result.hasRetirar) {
+            // Map new verification result to legacy return type
+            if (verification.connected && verification.confidence === 'high') {
                 return 'verified';
-            }
-            if (result.hasConectar) {
+            } else if (!verification.connected && verification.confidence === 'high') {
                 return 'failed';
+            } else if (verification.connected && verification.confidence === 'medium') {
+                return 'verified'; // Accept medium confidence as verified
+            } else if (!verification.connected && verification.confidence === 'medium') {
+                return 'uncertain'; // Medium confidence failure is uncertain
             }
-            // Neither Pendiente nor Conectar found — could be already connected (1st degree)
-            // or page didn't load properly
+            
             return 'uncertain';
         } catch (err: any) {
             logger.log(`  ⚠️ Verification error: ${err.message?.substring(0, 80)}`);
@@ -1633,16 +1911,43 @@ class LinkedInService extends EventEmitter {
         this.emit('resumed', { current: this.currentIndex, total: this.profiles.length });
     }
 
-    async stop(): Promise<void> {
+    async stop(): Promise<{ deletedCount: number }> {
         this.shouldStop = true;
         this.isPaused = false;
+        this.isRunning = false;
 
         if (this.pauseResolve) {
             this.pauseResolve();
             this.pauseResolve = null;
         }
 
+        // 🗑️ Eliminar contactos pendientes (estado 'visitando' - aún no procesados)
+        let deletedCount = 0;
+        try {
+            const pendingStatuses = ['visitando', 'conectando'];
+            const deleteResult = await LinkedInContact.deleteMany({
+                status: { $in: pendingStatuses },
+            });
+            deletedCount = deleteResult.deletedCount || 0;
+            console.log(`🗑️ Eliminados ${deletedCount} contactos pendientes`);
+            
+            // También limpiar el array de profiles interno
+            this.profiles = [];
+            this.currentIndex = 0;
+        } catch (err: any) {
+            console.error('❌ Error eliminando contactos pendientes:', err.message);
+        }
+
+        // 🧹 Limpiar estado guardado para que la próxima vez empiece desde cero
+        try {
+            await statePersistence.clear();
+            console.log('[StatePersistence] 🧹 Estado limpiado tras detención manual');
+        } catch (err: any) {
+            console.error('[StatePersistence] ❌ Error limpiando estado:', err.message);
+        }
+
         console.log('⏹️ Prospecting stopped');
+        return { deletedCount };
     }
 
     private async checkPause(): Promise<void> {
@@ -1705,83 +2010,439 @@ class LinkedInService extends EventEmitter {
         console.log('  📸 CRM: Scraping profile data...');
 
         try {
-            const data = await page.evaluate(() => {
-                const result: any = {};
+            // Pre-diagnostic: log page state
+            const pageUrl = page.url();
+            const pageTitle = await page.title();
+            console.log(`  📸 CRM: Page URL: ${pageUrl}`);
+            console.log(`  📸 CRM: Page title: "${pageTitle}"`);
 
-                // ── Name ──
+            // Wait for the profile to be fully rendered
+            // Try multiple selectors — LinkedIn DOM varies
+            let foundMainElement = false;
+            const selectors = ['h1', '.text-heading-xlarge', '.pv-text-details__left-panel', '.scaffold-layout__main'];
+            for (const sel of selectors) {
                 try {
-                    const h1 = document.querySelector('h1');
-                    result.fullName = h1?.textContent?.trim() || '';
+                    await page.waitForSelector(sel, { timeout: 5000 });
+                    console.log(`  📸 CRM: Found selector: ${sel}`);
+                    foundMainElement = true;
+                    break;
+                } catch {
+                    // Try next selector
+                }
+            }
+            if (!foundMainElement) {
+                console.log('  ⚠️ CRM: No main profile selectors found, trying to scrape anyway...');
+            }
+
+            // Small extra wait for lazy-loaded images
+            await new Promise(r => setTimeout(r, 1500));
+
+            const data = await page.evaluate(() => {
+                const result: any = { _debug: {} };
+
+                // ── Name (multiple fallbacks) ──
+                try {
+                    // Try LinkedIn-specific class first (most reliable)
+                    const nameEl =
+                        document.querySelector('.text-heading-xlarge') ||
+                        document.querySelector('h1.text-heading-xlarge') ||
+                        document.querySelector('h1') ||
+                        document.querySelector('[data-anonymize="person-name"]');
+                    result.fullName = nameEl?.textContent?.trim() || '';
+                    result._debug.nameSelector = nameEl ? (nameEl.tagName + '.' + (nameEl.className || '').split(' ')[0]) : 'none';
+
+                    // Fallback: look for div with role="button" containing the name (profile header)
+                    if (!result.fullName) {
+                        const nameButtons = document.querySelectorAll('div[role="button"]');
+                        for (const btn of nameButtons) {
+                            const rect = btn.getBoundingClientRect();
+                            const text = (btn.textContent || '').trim();
+                            // Profile name is usually top 300-400px, short text
+                            if (rect.top > 300 && rect.top < 450 && text.length > 2 && text.length < 60 && text.includes(' ')) {
+                                result.fullName = text;
+                                result._debug.nameSelector = 'div-role-button';
+                                break;
+                            }
+                        }
+                    }
+
+                    // Fallback: try aria-label on profile section
+                    if (!result.fullName) {
+                        const profileSection = document.querySelector('section.pv-top-card, .scaffold-layout__main');
+                        const ariaName = profileSection?.querySelector('[aria-label]');
+                        if (ariaName) {
+                            const label = ariaName.getAttribute('aria-label') || '';
+                            if (label && label.length < 80) {
+                                result.fullName = label;
+                                result._debug.nameSelector = 'aria-label';
+                            }
+                        }
+                    }
+
+                    // Fallback: try title tag
+                    if (!result.fullName) {
+                        const titleText = document.title || '';
+                        // LinkedIn titles: "Name | LinkedIn"
+                        if (titleText.includes('|')) {
+                            result.fullName = titleText.split('|')[0].trim();
+                            result._debug.nameSelector = 'title-tag';
+                        }
+                    }
+
                     const parts = (result.fullName || '').split(' ');
                     result.firstName = parts[0] || '';
                     result.lastName = parts.slice(1).join(' ') || '';
                 } catch { /* skip */ }
 
-                // ── Headline ──
+                // ── Headline (multiple fallbacks) ──
                 try {
-                    const headline = document.querySelector('.text-body-medium.break-words');
-                    result.headline = headline?.textContent?.trim() || '';
+                    // Strategy 1: Try LinkedIn-specific selectors
+                    const headlineSelectors = [
+                        '.text-body-medium.break-words',
+                        'div.text-body-medium',
+                        '[data-generated-suggestion-target]',
+                        '.pv-text-details__left-panel .text-body-medium',
+                        '.pv-top-card .text-body-medium',
+                        'h2.text-body-medium',
+                        '[class*="headline"]'
+                    ];
+                    
+                    let headline = null;
+                    for (const sel of headlineSelectors) {
+                        headline = document.querySelector(sel);
+                        if (headline?.textContent?.trim()) {
+                            result.headline = headline.textContent.trim();
+                            break;
+                        }
+                    }
+                    
+                    // Strategy 2: Search for text containing "|" pipe separator
+                    // Modern LinkedIn uses obfuscated classes, so search by content pattern
+                    if (!result.headline) {
+                        const allElements = document.querySelectorAll('div, span, h2, h3');
+                        for (const el of Array.from(allElements)) {
+                            const text = el.textContent?.trim();
+                            // Look for text with pattern containing "|"
+                            // Must have content before and after the pipe
+                            if (text && 
+                                text.length >= 20 && 
+                                text.length <= 150 &&
+                                text.includes('|') &&
+                                !text.includes('seguidores') &&
+                                !text.includes('contactos') &&
+                                !text.includes('en común') &&
+                                !text.includes('LinkedIn') &&  // Exclude page title artifacts
+                                text.split('|')[0].trim().length > 5) {  // Must have content before pipe
+                                result.headline = text;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // CLEANUP: Remove name from headline if it's prepended
+                    // LinkedIn sometimes shows "NameTitle at Company" without space
+                    if (result.headline && result.fullName) {
+                        // Remove name if it's at the start (with or without space)
+                        const nameVariants = [
+                            result.fullName,
+                            result.fullName.replace(/\s+/g, '')
+                        ];
+                        for (const nameVar of nameVariants) {
+                            if (result.headline.toLowerCase().startsWith(nameVar.toLowerCase())) {
+                                result.headline = result.headline.substring(nameVar.length).trim();
+                                break;
+                            }
+                        }
+                        
+                        // Also clean up common artifacts
+                        result.headline = result.headline
+                            .replace(/^[\s•·–—-]+/, '') // Remove leading separators
+                            .replace(/Enviar mensaje.*$/i, '') // Remove UI artifacts
+                            .replace(/Seguir.*$/i, '')
+                            .trim();
+                    }
+                    
+                    // Validate: reject invalid headlines
+                    if (result.headline) {
+                        const invalidPatterns = [
+                            /^\|?\s*LinkedIn$/i,  // Just "| LinkedIn"
+                            /^\s*\|\s*$/,           // Just "|"
+                            /seguidores/i,
+                            /contactos/i
+                        ];
+                        if (invalidPatterns.some(p => p.test(result.headline))) {
+                            result._debug.headlineRejected = result.headline;
+                            result.headline = '';
+                        }
+                    }
+                    
+                    result._debug.headline = !!result.headline;
                 } catch { /* skip */ }
 
-                // ── Location ──
+                // ── Location (multiple fallbacks) ──
                 try {
-                    const loc = document.querySelector('.text-body-small.inline.t-black--light.break-words');
+                    const loc =
+                        document.querySelector('.text-body-small.inline.t-black--light.break-words') ||
+                        document.querySelector('.pv-text-details__left-panel .text-body-small') ||
+                        document.querySelector('span.text-body-small.inline.t-black--light');
                     result.location = loc?.textContent?.trim() || '';
+                    result._debug.location = !!result.location;
                 } catch { /* skip */ }
 
-                // ── Profile Photo ──
+                // ── Profile Photo (robust detection) ──
                 try {
-                    const img = document.querySelector('img.pv-top-card-profile-picture__image--show') ||
-                        document.querySelector('.pv-top-card__photo img') ||
-                        document.querySelector('img[alt*="foto"], img[alt*="photo"]');
-                    result.profilePhotoUrl = (img as HTMLImageElement)?.src || '';
+                    // Strategy 1: Look for profile-displayphoto in src
+                    // But prioritize images that are likely the profile photo (not user's own photo)
+                    const allImgs = document.querySelectorAll('img');
+                    let photoUrl = '';
+                    
+                    // First, try to find the largest profile photo image
+                    // The main profile photo is usually larger than thumbnails
+                    let largestPhoto = { src: '', size: 0 };
+                    
+                    for (const img of Array.from(allImgs)) {
+                        const src = img.src || '';
+                        if (src.includes('profile-displayphoto') || src.includes('profile-framedphoto')) {
+                            // Calculate size (width * height, or use 100 as default if not loaded)
+                            const size = (img.width || 100) * (img.height || 100);
+                            if (size > largestPhoto.size) {
+                                largestPhoto = { src, size };
+                            }
+                        }
+                    }
+                    
+                    photoUrl = largestPhoto.src;
+                    
+                    // Strategy 2: Try specific selectors
+                    if (!photoUrl) {
+                        const selectors = [
+                            'button[aria-label*="photo"] img',
+                            'img[class*="profile-photo" i]',
+                            'img[class*="EntityPhoto" i]',
+                            'img.pv-top-card-profile-picture__image',
+                            '.pv-top-card__photo img',
+                            '.pv-top-card img'
+                        ];
+                        for (const sel of selectors) {
+                            const el = document.querySelector(sel) as HTMLImageElement;
+                            if (el?.src && (el.src.includes('licdn.com') || el.src.includes('linkedin'))) {
+                                photoUrl = el.src;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Strategy 3: Look for any LinkedIn image with person's name in alt
+                    if (!photoUrl && result.fullName) {
+                        const nameForAlt = result.fullName.toLowerCase();
+                        for (const img of Array.from(allImgs)) {
+                            const imgEl = img as HTMLImageElement;
+                            const alt = (img.getAttribute('alt') || '').toLowerCase();
+                            const src = imgEl.src || '';
+                            if (alt.includes(nameForAlt) && src.includes('licdn.com')) {
+                                photoUrl = src;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Strategy 4: Find largest image in top card area
+                    if (!photoUrl) {
+                        const topCard = document.querySelector('.pv-top-card, .scaffold-layout__main section, [class*="top-card"]');
+                        if (topCard) {
+                            let largestImg = null;
+                            let largestSize = 0;
+                            for (const img of Array.from(topCard.querySelectorAll('img'))) {
+                                const imgEl = img as HTMLImageElement;
+                                const src = imgEl.src || '';
+                                if (src.includes('licdn.com') || src.includes('media.licdn')) {
+                                    const size = (imgEl.width || 0) * (imgEl.height || 0);
+                                    if (size > largestSize) {
+                                        largestSize = size;
+                                        largestImg = imgEl;
+                                    }
+                                }
+                            }
+                            if (largestImg) {
+                                photoUrl = largestImg.src;
+                            }
+                        }
+                    }
+
+                    result.profilePhotoUrl = photoUrl;
+                    result._debug.photo = !!photoUrl;
                 } catch { /* skip */ }
 
                 // ── Banner ──
                 try {
-                    const banner = document.querySelector('.profile-background-image img, .pv-top-card__bg-photo img');
+                    const banner =
+                        document.querySelector('.profile-background-image img') ||
+                        document.querySelector('.pv-top-card__bg-photo img') ||
+                        document.querySelector('img[class*="profile-background"]');
                     result.bannerUrl = (banner as HTMLImageElement)?.src || '';
                 } catch { /* skip */ }
 
                 // ── Connection degree ──
                 try {
-                    const degree = document.querySelector('.dist-value, .pv-text-details__separator + span');
-                    result.connectionDegree = degree?.textContent?.trim() || '';
+                    const degree =
+                        document.querySelector('.dist-value') ||
+                        document.querySelector('.pv-text-details__separator + span') ||
+                        document.querySelector('span.text-body-small:not(.break-words)');
+                    const degreeText = degree?.textContent?.trim() || '';
+                    // Only keep if it looks like "1°", "2°", "3°"
+                    if (degreeText.match(/^\d[°º]?$/)) {
+                        result.connectionDegree = degreeText;
+                    }
                 } catch { /* skip */ }
 
                 // ── Connections/Followers count ──
                 try {
-                    const connEl = document.querySelector('span.t-bold') ||
-                        document.querySelector('a[href*="connections"] span');
-                    const connText = connEl?.textContent?.trim() || '';
-                    if (connText.includes('connections') || connText.includes('conexiones') || connText.match(/\d+/)) {
+                    const connectionsLink = document.querySelector('a[href*="connections"], a[href*="/detail/connections"]');
+                    if (connectionsLink) {
+                        const connText = connectionsLink.textContent?.trim() || '';
                         result.connectionsCount = connText;
+                    } else {
+                        const spanBold = document.querySelector('li.text-body-small span.t-bold');
+                        result.connectionsCount = spanBold?.textContent?.trim() || '';
                     }
                 } catch { /* skip */ }
 
                 // ── About / Summary ──
                 try {
-                    const aboutSection = document.querySelector('#about ~ .display-flex .inline-show-more-text, #about ~ div .pv-shared-text-with-see-more span[aria-hidden="true"]');
+                    const aboutSection =
+                        document.querySelector('#about ~ .display-flex .inline-show-more-text') ||
+                        document.querySelector('#about ~ div .pv-shared-text-with-see-more span[aria-hidden="true"]') ||
+                        document.querySelector('#about + .pvs-list__outer-container span[aria-hidden="true"]') ||
+                        document.querySelector('section:has(#about) .inline-show-more-text span[aria-hidden="true"]');
                     result.about = aboutSection?.textContent?.trim()?.substring(0, 2000) || '';
+                    result._debug.about = !!result.about;
                 } catch { /* skip */ }
 
-                // ── Current Company + Position ──
+                // ── Current Company + Position (from top card area) ──
                 try {
-                    const expItems = document.querySelectorAll('.pvs-list__paged-list-item .display-flex.flex-column');
-                    if (expItems.length > 0) {
-                        const first = expItems[0];
-                        const spans = first.querySelectorAll('span[aria-hidden="true"]');
-                        if (spans.length >= 2) {
-                            result.currentPosition = spans[0]?.textContent?.trim() || '';
-                            result.currentCompany = spans[1]?.textContent?.trim() || '';
+                    // Method 1: Top card buttons/links near company (multilingual)
+                    const companyBtn = document.querySelector(
+                        'button[aria-label*="empresa actual"], a[aria-label*="empresa actual"], ' +
+                        'button[aria-label*="current company"], a[aria-label*="current company"], ' +
+                        'button[aria-label*="Current company"], a[aria-label*="Current company"], ' +
+                        'a[href*="company"], a[href*="/company/"]'
+                    );
+                    if (companyBtn) {
+                        result.currentCompany = companyBtn.textContent?.trim() || '';
+                    }
+
+                    // Method 2: Experience section first item (most reliable for position)
+                    if (!result.currentPosition || !result.currentCompany) {
+                        // Try different selectors for experience section
+                        const expSelectors = [
+                            '#experience ~ .pvs-list__outer-container .pvs-list__paged-list-item',
+                            'section:has(#experience) .pvs-list__paged-list-item',
+                            '#experience-section .pvs-list__paged-list-item',
+                            '[data-section="experience"] .pvs-list__paged-list-item',
+                            'section:has(h2:contains("Experience")) .pvs-list__paged-list-item',
+                            'section:has(h2:contains("Experiencia")) .pvs-list__paged-list-item'
+                        ];
+                        
+                        let expItems: NodeListOf<Element> | null = null;
+                        for (const sel of expSelectors) {
+                            try {
+                                expItems = document.querySelectorAll(sel);
+                                if (expItems && expItems.length > 0) break;
+                            } catch { /* invalid selector, try next */ }
+                        }
+                        
+                        if (expItems && expItems.length > 0) {
+                            const first = expItems[0];
+                            // Try to get position from various elements
+                            const positionEl = 
+                                first.querySelector('.mr1 .t-bold, .t-bold, span[aria-hidden="true"]') ||
+                                first.querySelector('div[data-test-id="experience-title"]');
+                            if (positionEl && !result.currentPosition) {
+                                result.currentPosition = positionEl.textContent?.trim() || '';
+                            }
+                            
+                            // Try to get company from various elements
+                            const companyEl = 
+                                first.querySelector('.t-14.t-normal, span[class*="company"], a[href*="company"]') ||
+                                first.querySelector('div[data-test-id="experience-company"]');
+                            if (companyEl && !result.currentCompany) {
+                                result.currentCompany = companyEl.textContent?.trim() || '';
+                            }
+                            
+                            // Fallback: get all spans and use first two
+                            if ((!result.currentPosition || !result.currentCompany)) {
+                                const spans = first.querySelectorAll('span[aria-hidden="true"], .visually-hidden');
+                                const texts: string[] = [];
+                                spans.forEach(s => {
+                                    const text = s.textContent?.trim() || '';
+                                    if (text && text.length > 2 && !texts.includes(text)) {
+                                        texts.push(text);
+                                    }
+                                });
+                                if (texts.length >= 2) {
+                                    if (!result.currentPosition) result.currentPosition = texts[0];
+                                    if (!result.currentCompany) result.currentCompany = texts[1];
+                                } else if (texts.length === 1 && !result.currentPosition) {
+                                    result.currentPosition = texts[0];
+                                }
+                            }
                         }
                     }
 
-                    // Try the top card info area too
+                    // Method 3: From the top card detail links
                     if (!result.currentCompany) {
-                        const companyLink = document.querySelector('button[aria-label*="Current company"], a[aria-label*="Current company"]');
-                        result.currentCompany = companyLink?.textContent?.trim() || '';
+                        const detailSelectors = [
+                            '.pv-text-details__right-panel li',
+                            '.pv-text-details__right-panel-item-text',
+                            '.pv-top-card__list-container li',
+                            '[class*="top-card"] a[href*="company"]',
+                            '.text-body-medium a[href*="company"]'
+                        ];
+                        for (const sel of detailSelectors) {
+                            const links = document.querySelectorAll(sel);
+                            for (const link of Array.from(links)) {
+                                const text = link.textContent?.trim() || '';
+                                if (text && text.length < 100 && text.length > 2) {
+                                    result.currentCompany = text;
+                                    break;
+                                }
+                            }
+                            if (result.currentCompany) break;
+                        }
                     }
+
+                    // Method 4: Try to extract from headline if still missing company/position
+                    if ((!result.currentCompany || !result.currentPosition) && result.headline) {
+                        // Format 1: "Position at Company | Rest" (English)
+                        // Format 2: "Cargo: Empresa | Resto" (Spanish with colon)
+                        
+                        const pipeIndex = result.headline.indexOf('|');
+                        const colonIndex = result.headline.indexOf(':');
+                        
+                        if (colonIndex > 0 && (pipeIndex === -1 || colonIndex < pipeIndex)) {
+                            // Format: "Cargo: Empresa | Resto"
+                            if (!result.currentPosition) {
+                                result.currentPosition = result.headline.substring(0, colonIndex).trim();
+                            }
+                            if (!result.currentCompany) {
+                                const afterColon = result.headline.substring(colonIndex + 1).trim();
+                                const afterPipe = afterColon.indexOf('|');
+                                result.currentCompany = afterPipe > 0 
+                                    ? afterColon.substring(0, afterPipe).trim()
+                                    : afterColon.trim();
+                            }
+                        } else {
+                            // Format: "Position at Company | Rest" or "Position @ Company"
+                            const atMatch = result.headline.match(/(.+?)\s+(at|en|@)\s+(.+?)(\s+[|·]\s+|$)/i);
+                            if (atMatch) {
+                                if (!result.currentPosition) result.currentPosition = atMatch[1].trim();
+                                if (!result.currentCompany) result.currentCompany = atMatch[3].trim();
+                            }
+                        }
+                    }
+
+                    result._debug.company = !!result.currentCompany;
+                    result._debug.position = !!result.currentPosition;
                 } catch { /* skip */ }
 
                 // ── Company Logo ──
@@ -1798,7 +2459,9 @@ class LinkedInService extends EventEmitter {
                 try {
                     const expSection = document.querySelector('#experience');
                     if (expSection) {
-                        const items = expSection.closest('section')?.querySelectorAll(':scope > .pvs-list__outer-container .pvs-list__paged-list-item') || [];
+                        const section = expSection.closest('section');
+                        const items = section?.querySelectorAll(':scope > .pvs-list__outer-container .pvs-list__paged-list-item') ||
+                            section?.querySelectorAll('.pvs-list__paged-list-item') || [];
                         const maxItems = Math.min(items.length, 3);
                         for (let i = 0; i < maxItems; i++) {
                             const item = items[i];
@@ -1814,6 +2477,7 @@ class LinkedInService extends EventEmitter {
                             }
                         }
                     }
+                    result._debug.experience = result.experience.length;
                 } catch { /* skip */ }
 
                 // ── Education (last 2) ──
@@ -1821,7 +2485,9 @@ class LinkedInService extends EventEmitter {
                 try {
                     const eduSection = document.querySelector('#education');
                     if (eduSection) {
-                        const items = eduSection.closest('section')?.querySelectorAll(':scope > .pvs-list__outer-container .pvs-list__paged-list-item') || [];
+                        const section = eduSection.closest('section');
+                        const items = section?.querySelectorAll(':scope > .pvs-list__outer-container .pvs-list__paged-list-item') ||
+                            section?.querySelectorAll('.pvs-list__paged-list-item') || [];
                         const maxItems = Math.min(items.length, 2);
                         for (let i = 0; i < maxItems; i++) {
                             const item = items[i];
@@ -1835,6 +2501,7 @@ class LinkedInService extends EventEmitter {
                             }
                         }
                     }
+                    result._debug.education = result.education.length;
                 } catch { /* skip */ }
 
                 // ── Skills (top 5) ──
@@ -1842,7 +2509,8 @@ class LinkedInService extends EventEmitter {
                 try {
                     const skillsSection = document.querySelector('#skills');
                     if (skillsSection) {
-                        const items = skillsSection.closest('section')?.querySelectorAll('.pvs-list__paged-list-item span[aria-hidden="true"]') || [];
+                        const section = skillsSection.closest('section');
+                        const items = section?.querySelectorAll('.pvs-list__paged-list-item span[aria-hidden="true"]') || [];
                         const maxItems = Math.min(items.length, 5);
                         for (let i = 0; i < maxItems; i++) {
                             const text = items[i]?.textContent?.trim();
@@ -1851,16 +2519,49 @@ class LinkedInService extends EventEmitter {
                             }
                         }
                     }
+                    result._debug.skills = result.skills.length;
                 } catch { /* skip */ }
 
                 return result;
             });
 
-            if (!data || !data.fullName) {
-                console.log('  ⚠️ CRM: Could not extract profile name');
+            // Extract and log debug info
+            const debug = data?._debug || {};
+            delete data?._debug;
+            console.log(`  🔍 CRM Scrape debug: name=${debug.nameSelector || 'none'}, headline=${debug.headline}, location=${debug.location}, photo=${debug.photo}, position=${debug.position}, company=${debug.company}, about=${debug.about}, exp=${debug.experience}, edu=${debug.education}, skills=${debug.skills}`);
+
+            if (!data) {
+                console.log('  ⚠️ CRM: page.evaluate returned null');
                 return null;
             }
 
+            // Accept partial data — don't discard everything just because fullName is empty
+            if (!data.fullName) {
+                console.log('  ⚠️ CRM: fullName empty, checking page title...');
+                try {
+                    const title = await page.title();
+                    // LinkedIn: "FirstName LastName | LinkedIn"
+                    if (title && title.includes('|')) {
+                        data.fullName = title.split('|')[0].trim();
+                        const parts = data.fullName.split(' ');
+                        data.firstName = parts[0] || '';
+                        data.lastName = parts.slice(1).join(' ') || '';
+                        console.log(`  ✅ CRM: Got name from page title: ${data.fullName}`);
+                    }
+                } catch { /* skip */ }
+            }
+
+            // Log what we got with actual values for key fields
+            const fields = ['fullName', 'headline', 'location', 'profilePhotoUrl', 'currentCompany', 'currentPosition', 'about'];
+            const found = fields.filter(f => data[f]);
+            console.log(`  📊 CRM: Scraped ${found.length}/${fields.length} fields: [${found.join(', ')}]`);
+            
+            // Log actual values for debugging
+            if (data.currentPosition) console.log(`     → Position: ${data.currentPosition.substring(0, 50)}`);
+            if (data.currentCompany) console.log(`     → Company: ${data.currentCompany.substring(0, 50)}`);
+            if (data.profilePhotoUrl) console.log(`     → Photo: ${data.profilePhotoUrl.substring(0, 80)}...`);
+
+            // Return whatever we have (even partial) — the save logic will merge
             return data as ScrapedProfileData;
         } catch (err: any) {
             console.log(`  ⚠️ CRM: Scraping failed: ${err.message}`);
@@ -1871,10 +2572,14 @@ class LinkedInService extends EventEmitter {
     // ── CRM: Check Accepted Connections ───────────────────────
 
     async checkAcceptedConnections(): Promise<{ found: number; updated: number }> {
-        if (this.isBusy) {
-            throw new Error('Another operation is in progress (prospecting or check)');
+        // NEW: Use operation manager for mutual exclusion
+        if (!await operationManager.acquire('checking_accepted')) {
+            const current = operationManager.getCurrent();
+            throw new Error(`Cannot check accepted — operation '${current}' in progress`);
         }
+        
         if (!this.page || this.status !== 'logged-in') {
+            operationManager.release();
             throw new Error('Browser not open or not logged in');
         }
 
@@ -1883,84 +2588,258 @@ class LinkedInService extends EventEmitter {
 
         try {
             const page = this.page!;
-            const currentUrl = page.url();
 
-            // Navigate to connections page
-            await page.goto('https://www.linkedin.com/mynetwork/invite-connect/connections/', {
-                waitUntil: 'networkidle2',
-                timeout: 15000,
-            }).catch(() => { });
+            // ── Phase 1: Get contacts waiting for acceptance ──
+            const pendingContacts = await LinkedInContact.find({ status: 'esperando_aceptacion' });
 
-            await this.randomDelay(DELAYS.pageLoad);
+            if (pendingContacts.length === 0) {
+                console.log('  ℹ️ No contacts in esperando_aceptacion — nothing to check');
+                this.lastAcceptedCheck = new Date();
+                return { found: 0, updated: 0 };
+            }
 
-            let found = 0;
-            let updated = 0;
-            let scrollAttempts = 0;
-            const maxScrolls = 10; // Limit scrolling to avoid detection
+            console.log(`  📋 Found ${pendingContacts.length} contacts to verify`);
 
-            while (scrollAttempts < maxScrolls) {
-                // Scrape visible connection cards
-                const connections = await page.evaluate(() => {
-                    const cards = document.querySelectorAll('.mn-connection-card, .reusable-search__result-container, li.mn-connection-card');
-                    const results: { name: string; profileUrl: string; connectedDate: string }[] = [];
+            // ── Phase 2: Visit each profile to get real name + check status ──
+            // The stored fullName may be the vanityName, not the actual name
+            const contactInfos: Array<{
+                _id: any;
+                profileUrl: string;
+                vanityName: string;
+                realName: string;
+                firstName: string;
+                isConnected: boolean;
+            }> = [];
 
-                    cards.forEach(card => {
-                        try {
-                            const link = card.querySelector('a[href*="/in/"]') as HTMLAnchorElement;
-                            const nameEl = card.querySelector('.mn-connection-card__name, .entity-result__title-text a span, span[aria-hidden="true"]');
-                            const timeEl = card.querySelector('.mn-connection-card__connected-time, time, .time-badge');
+            for (let i = 0; i < pendingContacts.length; i++) {
+                const contact = pendingContacts[i];
+                const vanityName = contact.profileUrl
+                    .replace(/\/$/, '')
+                    .split('/in/')[1]
+                    ?.toLowerCase() || '';
 
-                            if (link && nameEl) {
-                                results.push({
-                                    name: nameEl.textContent?.trim() || '',
-                                    profileUrl: link.href.split('?')[0].replace(/\/+$/, '').toLowerCase(),
-                                    connectedDate: timeEl?.textContent?.trim() || '',
-                                });
+                console.log(`  🌐 [${i + 1}/${pendingContacts.length}] Visiting profile: ${vanityName}...`);
+
+                try {
+                    // Navigate to profile
+                    try {
+                        await page.goto(contact.profileUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+                    } catch {
+                        try { await page.goto(contact.profileUrl, { waitUntil: 'load', timeout: 15000 }); } catch { /* proceed */ }
+                    }
+                    await this.delay(this.getRandomDelay(3000, 5000));
+
+                    // Scrape real name from h1 (with title fallback) and check connection indicators
+                    const profileData = await page.evaluate(() => {
+                        // Get the real name from h1
+                        const h1 = document.querySelector('h1');
+                        let realName = h1?.textContent?.trim() || '';
+
+                        // Fallback: extract name from page title ("Name | LinkedIn")
+                        if (!realName) {
+                            const title = document.title || '';
+                            if (title.includes('|')) {
+                                realName = title.split('|')[0].trim();
                             }
-                        } catch { /* skip card */ }
+                        }
+
+                        // Check for connection indicators
+                        const buttons = document.querySelectorAll('button, a, span');
+                        let hasPendiente = false;
+                        let hasConectar = false;
+                        let hasEnviarMensaje = false;
+                        let connectionDegree = '';
+
+                        for (const btn of buttons) {
+                            const text = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                            const rect = btn.getBoundingClientRect();
+
+                            if (rect.width <= 0 || rect.height <= 0 || rect.top > 700) continue;
+
+                            if (text === 'pendiente' || text === 'pending' ||
+                                ariaLabel.includes('pendiente') || ariaLabel.includes('pending')) {
+                                hasPendiente = true;
+                            }
+                            if (text === 'conectar' || text === 'connect') {
+                                hasConectar = true;
+                            }
+                            if (text === 'enviar mensaje' || text === 'message' || text === 'mensaje') {
+                                hasEnviarMensaje = true;
+                            }
+                        }
+
+                        // Check connection degree (1º = connected)
+                        const degreeEl = document.querySelector('.dist-value, .distance-badge, span[class*="degree"]');
+                        if (degreeEl) {
+                            connectionDegree = degreeEl.textContent?.trim() || '';
+                        }
+                        // Also check for "1º" in spans near the name
+                        const allSpans = document.querySelectorAll('span');
+                        for (const span of allSpans) {
+                            const t = span.textContent?.trim() || '';
+                            if (t === '1º' || t === '1st') {
+                                connectionDegree = t;
+                                break;
+                            }
+                        }
+
+                        return { realName, hasPendiente, hasConectar, hasEnviarMensaje, connectionDegree };
                     });
 
-                    return results;
-                });
+                    const isConnected = !profileData.hasPendiente && !profileData.hasConectar &&
+                        (profileData.hasEnviarMensaje || profileData.connectionDegree === '1º' || profileData.connectionDegree === '1st');
 
-                found += connections.length;
+                    const firstName = profileData.realName.split(' ')[0] || '';
 
-                // Update each matched connection in MongoDB
-                for (const conn of connections) {
-                    try {
-                        const result = await LinkedInContact.findOneAndUpdate(
-                            { profileUrl: conn.profileUrl, status: 'conectado' },
-                            {
-                                $set: {
-                                    status: 'aceptado',
-                                    acceptedAt: new Date(),
-                                },
-                            }
+                    console.log(`     Name: "${profileData.realName}", 1st: ${isConnected}, pendiente: ${profileData.hasPendiente}, degree: ${profileData.connectionDegree}`);
+
+                    // Update fullName in DB if we got a real name
+                    if (profileData.realName && profileData.realName !== contact.fullName) {
+                        await LinkedInContact.updateOne(
+                            { _id: contact._id },
+                            { $set: { fullName: profileData.realName, firstName } }
                         );
-                        if (result) {
-                            updated++;
-                            console.log(`  ✅ CRM: ${conn.name} accepted connection`);
-                        }
-                    } catch { /* skip */ }
+                    }
+
+                    contactInfos.push({
+                        _id: contact._id,
+                        profileUrl: contact.profileUrl,
+                        vanityName,
+                        realName: profileData.realName,
+                        firstName,
+                        isConnected,
+                    });
+
+                    // If already connected based on profile check, update immediately
+                    if (isConnected) {
+                        await LinkedInContact.updateOne(
+                            { _id: contact._id },
+                            { $set: { status: 'aceptado', acceptedAt: new Date() } }
+                        );
+                        console.log(`  ✅ ${profileData.realName} → aceptado ✓ (detected from profile)`);
+                    }
+
+                } catch (err: any) {
+                    console.log(`  ⚠️ Error visiting ${vanityName}: ${err.message?.substring(0, 60)}`);
+                    contactInfos.push({
+                        _id: contact._id,
+                        profileUrl: contact.profileUrl,
+                        vanityName,
+                        realName: '',
+                        firstName: '',
+                        isConnected: false,
+                    });
                 }
 
-                // Try to scroll for more
-                const previousHeight = await page.evaluate(() => document.body.scrollHeight);
-                await page.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
-                await this.randomDelay({ min: 2000, max: 4000 });
+                // Human-like delay between profiles
+                if (i < pendingContacts.length - 1) {
+                    await this.delay(this.getRandomDelay(2000, 4000));
+                }
+            }
 
-                const newHeight = await page.evaluate(() => document.body.scrollHeight);
-                if (newHeight === previousHeight) break; // No more content
+            // Count already-updated ones
+            let updated = contactInfos.filter(c => c.isConnected).length;
+            const remaining = contactInfos.filter(c => !c.isConnected && c.firstName);
 
-                scrollAttempts++;
+            // ── Phase 3: Verify remaining via connections search ──
+            if (remaining.length > 0) {
+                console.log(`\n  🔍 Phase 3: Verifying ${remaining.length} remaining contacts via connections search...`);
+
+                // Navigate to connections page
+                try {
+                    await page.goto('https://www.linkedin.com/mynetwork/invite-connect/connections/', {
+                        waitUntil: 'networkidle2',
+                        timeout: 20000,
+                    });
+                } catch {
+                    try {
+                        await page.goto('https://www.linkedin.com/mynetwork/invite-connect/connections/', {
+                            waitUntil: 'load',
+                            timeout: 15000,
+                        });
+                    } catch { /* proceed */ }
+                }
+                await this.randomDelay(DELAYS.pageLoad);
+
+                // Find search input
+                const searchInput = await page.$(
+                    'input[data-testid="typeahead-input"]'
+                ) || await page.$(
+                    'input[placeholder="Buscar por nombre"]'
+                ) || await page.$(
+                    'input[placeholder="Search by name"]'
+                ) || await page.$(
+                    'input[componentkey*="connectionsListTypeahead"]'
+                );
+
+                if (searchInput) {
+                    console.log('  ✅ Search input found on connections page');
+
+                    for (let i = 0; i < remaining.length; i++) {
+                        const contact = remaining[i];
+
+                        console.log(`  🔍 [${i + 1}/${remaining.length}] Searching "${contact.firstName}" (vanity: ${contact.vanityName})...`);
+
+                        // Clear input
+                        await searchInput.click({ clickCount: 3 });
+                        await this.delay(200);
+                        await page.keyboard.press('Backspace');
+                        await this.delay(300);
+
+                        // Type firstName
+                        await page.keyboard.type(contact.firstName, { delay: this.getRandomDelay(50, 120) });
+
+                        // Wait for results
+                        await this.delay(this.getRandomDelay(2500, 4000));
+
+                        // Check if vanityName appears in result links
+                        const isFound = await page.evaluate((vn: string) => {
+                            const links = document.querySelectorAll('a[href*="/in/"]');
+                            for (const link of links) {
+                                const href = (link.getAttribute('href') || '').toLowerCase();
+                                if (href.includes('/in/' + vn)) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }, contact.vanityName);
+
+                        if (isFound) {
+                            await LinkedInContact.updateOne(
+                                { _id: contact._id },
+                                { $set: { status: 'aceptado', acceptedAt: new Date() } }
+                            );
+                            updated++;
+                            console.log(`  ✅ ${contact.realName || contact.vanityName} → aceptado ✓ (found in search)`);
+                        } else {
+                            console.log(`  ⏳ ${contact.realName || contact.vanityName} — not in connections yet`);
+                        }
+
+                        // Delay between searches
+                        if (i < remaining.length - 1) {
+                            await this.delay(this.getRandomDelay(2000, 4000));
+                        }
+                    }
+
+                    // Clear search
+                    try {
+                        await searchInput.click({ clickCount: 3 });
+                        await this.delay(200);
+                        await page.keyboard.press('Backspace');
+                    } catch { /* non-critical */ }
+                } else {
+                    console.log('  ⚠️ Search input not found — skipping connections page verification');
+                }
             }
 
             this.lastAcceptedCheck = new Date();
-            console.log(`\n🔄 CRM: Check complete — ${found} connections found, ${updated} updated to accepted`);
+            console.log(`\n🔄 CRM: Check complete — ${pendingContacts.length} contacts checked, ${updated} updated to aceptado`);
 
-            return { found, updated };
+            return { found: pendingContacts.length, updated };
         } finally {
             this.isBusy = false;
+            operationManager.release(); // NEW: Release operation lock
         }
     }
 

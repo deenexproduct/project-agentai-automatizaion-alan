@@ -2,7 +2,9 @@ import { API_BASE } from '../config';
 
 // ── Types ────────────────────────────────────────────────────
 
-export type ContactStatus = 'visitando' | 'conectando' | 'conectado' | 'interactuando' | 'esperando_aceptacion' | 'aceptado' | 'listo_para_mensaje' | 'mensaje_enviado';
+export type ContactStatus = 'visitando' | 'conectando' | 'interactuando' | 'enriqueciendo' | 'esperando_aceptacion' | 'aceptado' | 'mensaje_enviado';
+
+export type EnrichmentStatus = 'pending' | 'enriching' | 'completed' | 'failed';
 
 export interface IExperience {
     company: string;
@@ -46,13 +48,17 @@ export interface LinkedInContact {
     skills: string[];
     status: ContactStatus;
     sentAt: string;
+    interactedAt?: string;
+    enrichedAt?: string;
     acceptedAt?: string;
-    readyForMessageAt?: string;
     messageSentAt?: string;
     notes: INote[];
     prospectingBatchId?: string;
     createdAt: string;
     updatedAt: string;
+    enrichmentData?: any;
+    enrichmentStatus?: EnrichmentStatus;
+    contextFilePath?: string;
 }
 
 export interface ContactCardData {
@@ -65,10 +71,12 @@ export interface ContactCardData {
     profileUrl: string;
     status: ContactStatus;
     sentAt: string;
+    interactedAt?: string;
+    enrichedAt?: string;
     acceptedAt?: string;
-    readyForMessageAt?: string;
     messageSentAt?: string;
     headline?: string;
+    enrichmentStatus?: EnrichmentStatus;
 }
 
 export interface PaginatedContacts {
@@ -81,11 +89,10 @@ export interface PaginatedContacts {
 export interface StatusCounts {
     visitando: number;
     conectando: number;
-    conectado: number;
     interactuando: number;
+    enriqueciendo: number;
     esperando_aceptacion: number;
     aceptado: number;
-    listo_para_mensaje: number;
     mensaje_enviado: number;
 }
 
@@ -155,4 +162,30 @@ export async function getLastCheckStatus(): Promise<{ lastCheck: string | null }
     const res = await fetch(`${CRM_BASE}/check-accepted/status`);
     if (!res.ok) throw new Error('Failed to fetch check status');
     return res.json();
+}
+
+// ── Enrichment Functions ─────────────────────────────────────
+
+export async function enrichContact(id: string): Promise<any> {
+    const res = await fetch(`${CRM_BASE}/contacts/${id}/enrich`, { method: 'POST' });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Enrichment failed' }));
+        throw new Error(err.error || 'Enrichment failed');
+    }
+    return res.json();
+}
+
+export async function getEnrichmentConfig(): Promise<any> {
+    const res = await fetch(`${CRM_BASE}/enrichment/config`);
+    if (!res.ok) throw new Error('Failed to fetch config');
+    return res.json();
+}
+
+export async function updateEnrichmentConfig(config: any): Promise<void> {
+    const res = await fetch(`${CRM_BASE}/enrichment/config`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    });
+    if (!res.ok) throw new Error('Failed to update config');
 }

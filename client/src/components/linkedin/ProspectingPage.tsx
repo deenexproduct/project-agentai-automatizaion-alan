@@ -153,6 +153,11 @@ export default function ProspectingPage() {
             return;
         }
 
+        // 🧹 Limpiar estados anteriores antes de iniciar
+        setProfiles([]);
+        setCurrentIndex(0);
+        setTotalProfiles(0);
+
         try {
             const result = await startProspecting(parsedUrls, sendNote, noteText || undefined);
             if (result.success) {
@@ -161,9 +166,12 @@ export default function ProspectingPage() {
                 showNotification('success', `▶️ Iniciando prospecting para ${parsedUrls.length} perfiles`);
             } else {
                 showNotification('error', result.error || 'Error al iniciar');
+                // Limpiar estados si falló
+                setIsRunning(false);
             }
         } catch (err) {
             showNotification('error', 'Error al iniciar el prospecting');
+            setIsRunning(false);
         }
     };
 
@@ -177,10 +185,35 @@ export default function ProspectingPage() {
         setIsPaused(false);
     };
 
-    const handleStop = async () => {
-        await stopProspecting();
-        setIsRunning(false);
-        setIsPaused(false);
+    const [showStopConfirm, setShowStopConfirm] = useState(false);
+    const [isStopping, setIsStopping] = useState(false);
+
+    const handleStopClick = () => {
+        setShowStopConfirm(true);
+    };
+
+    const handleStopCancel = () => {
+        setShowStopConfirm(false);
+    };
+
+    const handleStopConfirm = async () => {
+        setIsStopping(true);
+        try {
+            const result = await stopProspecting();
+            setIsRunning(false);
+            setIsPaused(false);
+            setProfiles([]);
+            setCurrentIndex(0);
+            setTotalProfiles(0);
+            showNotification('success', 
+                `⏹️ Detenido. ${result.deletedCount} contacto${result.deletedCount !== 1 ? 's' : ''} pendiente${result.deletedCount !== 1 ? 's' : ''} eliminado${result.deletedCount !== 1 ? 's' : ''} del CRM.`
+            );
+        } catch (err) {
+            showNotification('error', 'Error al detener el prospecting');
+        } finally {
+            setIsStopping(false);
+            setShowStopConfirm(false);
+        }
     };
 
     // ── Progress Calculation ───────────────────
@@ -212,6 +245,76 @@ export default function ProspectingPage() {
                     }}
                 >
                     {notification.text}
+                </div>
+            )}
+
+            {/* ── Stop Confirmation Modal ──────────── */}
+            {showStopConfirm && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center"
+                    style={{ background: 'rgba(0, 0, 0, 0.5)' }}
+                    onClick={handleStopCancel}
+                >
+                    <div 
+                        className="rounded-2xl p-6 max-w-md w-full mx-4"
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.95)',
+                            backdropFilter: 'blur(20px)',
+                            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 rounded-full flex items-center justify-center"
+                                style={{ background: 'rgba(239, 68, 68, 0.1)' }}
+                            >
+                                <span className="text-2xl">⚠️</span>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold" style={{ color: '#1e1b4b' }}>
+                                    ¿Detener prospecting?
+                                </h3>
+                                <p className="text-sm" style={{ color: '#6b7280' }}>
+                                    Esta acción no se puede deshacer
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div className="p-4 rounded-xl mb-5" style={{ background: 'rgba(239, 68, 68, 0.05)' }}>
+                            <p className="text-sm" style={{ color: '#dc2626' }}>
+                                <strong>Se eliminarán:</strong> Todos los contactos pendientes 
+                                (estados "Visitando" y "Conectando") del CRM.
+                            </p>
+                            <p className="text-sm mt-2" style={{ color: '#6b7280' }}>
+                                Los contactos ya procesados (conectados, con mensaje enviado) 
+                                se mantendrán.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleStopCancel}
+                                className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all"
+                                style={{
+                                    background: 'rgba(156, 163, 175, 0.2)',
+                                    color: '#4b5563',
+                                }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleStopConfirm}
+                                disabled={isStopping}
+                                className="flex-1 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50"
+                                style={{
+                                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                                    boxShadow: '0 4px 20px rgba(239, 68, 68, 0.3)',
+                                }}
+                            >
+                                {isStopping ? '⏳ Deteniendo...' : '⏹️ Sí, detener'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -385,14 +488,15 @@ export default function ProspectingPage() {
                                 </button>
                             )}
                             <button
-                                onClick={handleStop}
-                                className="px-6 py-3 rounded-xl text-white font-semibold text-sm transition-all duration-300"
+                                onClick={handleStopClick}
+                                disabled={isStopping}
+                                className="px-6 py-3 rounded-xl text-white font-semibold text-sm transition-all duration-300 disabled:opacity-50"
                                 style={{
                                     background: 'linear-gradient(135deg, #ef4444, #dc2626)',
                                     boxShadow: '0 4px 20px rgba(239, 68, 68, 0.3)',
                                 }}
                             >
-                                ⏹️ Detener
+                                {isStopping ? '⏳ Deteniendo...' : '⏹️ Detener'}
                             </button>
                         </>
                     )}
@@ -443,7 +547,6 @@ export default function ProspectingPage() {
                                     <th className="px-3 py-2.5 text-left font-semibold" style={{ color: '#6b7280' }}>#</th>
                                     <th className="px-3 py-2.5 text-left font-semibold" style={{ color: '#6b7280' }}>Perfil</th>
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>👁️</th>
-                                    <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>👤</th>
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>🔗</th>
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>❤️</th>
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>Estado</th>
@@ -476,7 +579,6 @@ export default function ProspectingPage() {
                                                 {profileName}
                                             </td>
                                             <td className="px-3 py-2.5 text-center">{STEP_ICONS[profile.steps.visit as StepStatus] || '🕐'}</td>
-                                            <td className="px-3 py-2.5 text-center">{STEP_ICONS[profile.steps.follow as StepStatus] || '🕐'}</td>
                                             <td className="px-3 py-2.5 text-center">{STEP_ICONS[profile.steps.connect as StepStatus] || '🕐'}</td>
                                             <td className="px-3 py-2.5 text-center">{STEP_ICONS[profile.steps.like as StepStatus] || '🕐'}</td>
                                             <td className="px-3 py-2.5 text-center">
@@ -516,7 +618,7 @@ function StatusBadge({ status }: { status: string }) {
     const config: Record<string, { bg: string; color: string; text: string }> = {
         pending: { bg: 'rgba(156, 163, 175, 0.1)', color: '#9ca3af', text: 'Pendiente' },
         visiting: { bg: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', text: 'Visitando' },
-        followed: { bg: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', text: 'Siguiendo' },
+
         connected: { bg: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', text: 'Conectando' },
         liked: { bg: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', text: 'Like' },
         done: { bg: 'rgba(34, 197, 94, 0.1)', color: '#16a34a', text: 'Hecho' },

@@ -20,7 +20,78 @@ export interface INote {
     createdAt: Date;
 }
 
-export type ContactStatus = 'visitando' | 'conectando' | 'conectado' | 'interactuando' | 'esperando_aceptacion' | 'aceptado' | 'listo_para_mensaje' | 'mensaje_enviado';
+export type ContactStatus = 'visitando' | 'conectando' | 'interactuando' | 'enriqueciendo' | 'esperando_aceptacion' | 'aceptado' | 'mensaje_enviado';
+
+export type EnrichmentStatus = 'pending' | 'enriching' | 'completed' | 'failed';
+
+export interface IEnrichmentNews {
+    title: string;
+    source: string;
+    url: string;
+    date?: string;
+    summary?: string;
+    urlValid?: boolean;
+}
+
+export interface IEnrichmentCompany {
+    name?: string;
+    nameSource?: string;      // Fuente del nombre (ej: "LinkedIn", "Website oficial")
+    
+    description?: string;     // Descripción completa de la empresa
+    descriptionSource?: string; // Fuente de la descripción
+    
+    website?: string;         // URL oficial
+    websiteSource?: string;   // Fuente del website
+    
+    category?: string;        // Categoría específica
+    categorySource?: string;  // Fuente de la categoría
+    
+    sector?: string;          // Sector general
+    sectorSource?: string;    // Fuente del sector
+    
+    locationsCount?: string;  // Cantidad de locales
+    locationsCountSource?: string; // Fuente: "LinkedIn", "Noticia: [URL]", "Website"
+    
+    socialMedia?: {
+        instagram?: string;
+        twitter?: string;
+    };
+    socialMediaSource?: string; // Fuente de redes sociales
+}
+
+export interface IEnrichmentInsight {
+    text: string;
+    source?: string;      // Fuente del insight (ej: "Noticia: [URL]", "LinkedIn", "Análisis")
+    confidence?: 'high' | 'medium' | 'low';  // Nivel de confianza
+}
+
+export interface IEnrichmentSignal {
+    text: string;
+    source?: string;      // Fuente de la señal
+    evidence?: string;    // Evidencia específica que respalda la señal
+    confidence?: 'high' | 'medium' | 'low';
+}
+
+export interface IEnrichmentData {
+    personProfile?: {
+        verifiedPosition?: string;
+        positionSource?: string;  // Fuente del cargo
+        verifiedCompany?: string;
+        companySource?: string;   // Fuente de la empresa verificada
+        summary?: string;
+        summarySource?: string;   // Fuente del summary
+    };
+    personNews?: IEnrichmentNews[];
+    company?: IEnrichmentCompany;
+    companyNews?: IEnrichmentNews[];
+    keyInsights?: IEnrichmentInsight[];  // Ahora con fuentes
+    buyingSignals?: IEnrichmentSignal[]; // Ahora con fuentes y evidencia
+    
+    // Metadata de confianza
+    confidenceScore?: number;  // 0-100
+    dataQuality?: 'verified' | 'partial' | 'estimated' | 'insufficient';
+    lastVerifiedAt?: Date;     // Cuándo se verificaron los datos
+}
 
 export interface ILinkedInContact extends Document {
     // Identification
@@ -54,10 +125,11 @@ export interface ILinkedInContact extends Document {
     status: ContactStatus;
 
     // Pipeline timestamps
-    sentAt: Date;
-    acceptedAt?: Date;
-    readyForMessageAt?: Date;
-    messageSentAt?: Date;
+    sentAt: Date;                    // Cuando se envió la solicitud de conexión
+    interactedAt?: Date;             // Cuando se dio like al post
+    enrichedAt?: Date;               // Cuando se completó el enriquecimiento
+    acceptedAt?: Date;               // Cuando aceptaron la conexión
+    messageSentAt?: Date;            // Cuando se envió el mensaje manual
 
     // Notes
     notes: INote[];
@@ -66,6 +138,11 @@ export interface ILinkedInContact extends Document {
     prospectingBatchId?: string;
     createdAt: Date;
     updatedAt: Date;
+
+    // Enrichment
+    enrichmentData?: IEnrichmentData;
+    enrichmentStatus?: EnrichmentStatus;
+    contextFilePath?: string;
 }
 
 // ── Schema ────────────────────────────────────────────────────
@@ -119,14 +196,15 @@ const LinkedInContactSchema = new Schema<ILinkedInContact>({
     // CRM State
     status: {
         type: String,
-        enum: ['visitando', 'conectando', 'conectado', 'interactuando', 'esperando_aceptacion', 'aceptado', 'listo_para_mensaje', 'mensaje_enviado'],
-        default: 'conectado',
+        enum: ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'],
+        default: 'visitando',
     },
 
     // Pipeline timestamps
     sentAt: { type: Date, default: Date.now },
+    interactedAt: { type: Date },
+    enrichedAt: { type: Date },
     acceptedAt: { type: Date },
-    readyForMessageAt: { type: Date },
     messageSentAt: { type: Date },
 
     // Notes
@@ -134,6 +212,11 @@ const LinkedInContactSchema = new Schema<ILinkedInContact>({
 
     // Metadata
     prospectingBatchId: { type: String },
+
+    // Enrichment
+    enrichmentData: { type: Schema.Types.Mixed, default: null },
+    enrichmentStatus: { type: String, enum: ['pending', 'enriching', 'completed', 'failed'], default: null },
+    contextFilePath: { type: String },
 }, {
     timestamps: true, // adds createdAt + updatedAt automatically
 });
@@ -141,7 +224,7 @@ const LinkedInContactSchema = new Schema<ILinkedInContact>({
 // ── Indexes for 100K+ performance ─────────────────────────────
 
 // Unique profile URL — prevent duplicates
-LinkedInContactSchema.index({ profileUrl: 1 }, { unique: true });
+// LinkedInContactSchema.index({ profileUrl: 1 }, { unique: true }); // Already handled by schema definition
 
 // Filter by status + sort by date — Kanban columns
 LinkedInContactSchema.index({ status: 1, updatedAt: -1 });
@@ -155,5 +238,8 @@ LinkedInContactSchema.index(
 // Sort by pipeline dates
 LinkedInContactSchema.index({ sentAt: -1 });
 LinkedInContactSchema.index({ acceptedAt: -1 });
+
+// Enrichment status queries
+LinkedInContactSchema.index({ enrichmentStatus: 1 });
 
 export const LinkedInContact = mongoose.model<ILinkedInContact>('LinkedInContact', LinkedInContactSchema);

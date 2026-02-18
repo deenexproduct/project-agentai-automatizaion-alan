@@ -10,12 +10,12 @@ const SCREENSHOTS_DIR = path.join(LOGS_DIR, 'screenshots');
  * Per-account file logger for LinkedIn automation.
  * Creates a log file per username + timestamp.
  * Captures screenshots at key decision points.
- * 
+ *
  * Usage:
  *   const logger = new LinkedInLogger('https://www.linkedin.com/in/johndoe/');
  *   logger.log('Starting connection...');
  *   await logger.screenshot(page, 'before_click');
- *   logger.close();
+ *   logger.close();  // safe to call multiple times
  */
 export class LinkedInLogger {
     private stream: fs.WriteStream;
@@ -23,24 +23,26 @@ export class LinkedInLogger {
     private logFilePath: string;
     private startTime: number;
     private screenshotCount = 0;
+    private closed = false;
 
     constructor(profileUrl: string) {
-        // Extract username from LinkedIn URL
         this.username = this.extractUsername(profileUrl);
         this.startTime = Date.now();
 
-        // Create directories
         fs.mkdirSync(LOGS_DIR, { recursive: true });
         fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
-        // Create log file with timestamp
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
         const filename = `${this.username}_${timestamp}.log`;
         this.logFilePath = path.join(LOGS_DIR, filename);
 
         this.stream = fs.createWriteStream(this.logFilePath, { flags: 'a' });
 
-        // Write header
+        // Prevent unhandled 'error' events from crashing the process
+        this.stream.on('error', (err) => {
+            console.error(`⚠️ Logger stream error: ${err.message}`);
+        });
+
         this.stream.write(`════════════════════════════════════════════════════════════\n`);
         this.stream.write(`  LinkedIn Automation Log\n`);
         this.stream.write(`  Profile: ${profileUrl}\n`);
@@ -51,45 +53,37 @@ export class LinkedInLogger {
         console.log(`📄 Log file created: ${this.logFilePath}`);
     }
 
-    /**
-     * Log a message to both the file and console.
-     * All messages are timestamped with millisecond precision.
-     */
+    /** Log a message to both the file and console. */
     log(message: string): void {
         const elapsed = Date.now() - this.startTime;
         const elapsedStr = this.formatElapsed(elapsed);
-        const timestamp = new Date().toISOString().substring(11, 23); // HH:mm:ss.SSS
+        const timestamp = new Date().toISOString().substring(11, 23);
         const line = `[${timestamp}] [+${elapsedStr}] ${message}\n`;
 
-        // Write to file
-        this.stream.write(line);
-
-        // Also write to console for real-time visibility
+        if (!this.closed) {
+            this.stream.write(line);
+        }
         console.log(message);
     }
 
-    /**
-     * Log a separator/section header for readability.
-     */
+    /** Log a separator/section header for readability. */
     section(title: string): void {
         const line = `\n──────────────── ${title} ────────────────\n`;
-        this.stream.write(line);
+        if (!this.closed) {
+            this.stream.write(line);
+        }
         console.log(line.trim());
     }
 
-    /**
-     * Capture a screenshot and log its path.
-     * Screenshots are saved as PNG with descriptive names.
-     */
+    /** Capture a screenshot and log its path. */
     async screenshot(page: Page, label: string): Promise<string | null> {
         try {
             this.screenshotCount++;
-            const timestamp = Date.now();
-            const filename = `${this.username}_${String(this.screenshotCount).padStart(2, '0')}_${label}_${timestamp}.png`;
+            const ts = Date.now();
+            const filename = `${this.username}_${String(this.screenshotCount).padStart(2, '0')}_${label}_${ts}.png`;
             const filepath = path.join(SCREENSHOTS_DIR, filename);
 
             await page.screenshot({ path: filepath, fullPage: false });
-
             this.log(`  📸 Screenshot saved: ${filename}`);
             return filepath;
         } catch (err: any) {
@@ -98,9 +92,7 @@ export class LinkedInLogger {
         }
     }
 
-    /**
-     * Log a full HTML snippet of an element for deep debugging.
-     */
+    /** Log a full HTML snippet of an element for deep debugging. */
     async logElementHTML(page: Page, selector: string, label: string): Promise<void> {
         try {
             const html = await page.evaluate((sel: string) => {
@@ -119,9 +111,7 @@ export class LinkedInLogger {
         }
     }
 
-    /**
-     * Log all visible buttons/links on the page (comprehensive DOM dump).
-     */
+    /** Log all visible buttons/links on the page (comprehensive DOM dump). */
     async logAllInteractiveElements(page: Page, maxTop: number = 700): Promise<void> {
         try {
             const elements = await page.evaluate((mt: number) => {
@@ -160,9 +150,7 @@ export class LinkedInLogger {
         }
     }
 
-    /**
-     * Log complete page state (URL, title, document ready state).
-     */
+    /** Log complete page state (URL, title, document ready state). */
     async logPageState(page: Page, label: string = ''): Promise<void> {
         try {
             const url = page.url();
@@ -184,9 +172,7 @@ export class LinkedInLogger {
         }
     }
 
-    /**
-     * Log the result of the connection attempt.
-     */
+    /** Log the result of the connection attempt. */
     logResult(success: boolean, reason: string): void {
         this.section('RESULT');
         const elapsed = Date.now() - this.startTime;
@@ -195,9 +181,13 @@ export class LinkedInLogger {
     }
 
     /**
-     * Close the log file stream.
+     * Close the log file stream. Idempotent — safe to call multiple times.
+     * The guard flag prevents ERR_STREAM_WRITE_AFTER_END crashes.
      */
     close(): void {
+        if (this.closed) return;
+        this.closed = true;
+
         const elapsed = Date.now() - this.startTime;
         this.stream.write(`\n════════════════════════════════════════════════════════════\n`);
         this.stream.write(`  Log ended: ${new Date().toISOString()}\n`);
@@ -207,9 +197,6 @@ export class LinkedInLogger {
         this.stream.end();
     }
 
-    /**
-     * Get the path to the log file.
-     */
     getLogFilePath(): string {
         return this.logFilePath;
     }
@@ -217,7 +204,6 @@ export class LinkedInLogger {
     // ── Private helpers ──────────────────────────────────────
 
     private extractUsername(url: string): string {
-        // https://www.linkedin.com/in/johndoe/ → johndoe
         const match = url.match(/\/in\/([^/?#]+)/);
         return match ? match[1].toLowerCase() : 'unknown';
     }

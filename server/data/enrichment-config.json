@@ -1,0 +1,7 @@
+{
+    "autoEnrichOnStatus": "interactuando",
+    "maxEnrichmentsPerDay": 45,
+    "delayBetweenRequests": 4000,
+    "model": "moonshotai/kimi-k2",
+    "reEnrichAfterDays": 30
+}

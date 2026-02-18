@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import type { ContactCardData, ContactStatus } from '../../services/linkedin-crm.service';
+import { enrichContact } from '../../services/linkedin-crm.service';
 
 // ── Status Colors ────────────────────────────────────────────
 
 const STATUS_COLORS: Record<ContactStatus, string> = {
     visitando: '#06b6d4',
     conectando: '#eab308',
-    conectado: '#22c55e',
     interactuando: '#f97316',
+    enriqueciendo: '#a855f7',
     esperando_aceptacion: '#f59e0b',
     aceptado: '#10b981',
-    listo_para_mensaje: '#06b6d4',
     mensaje_enviado: '#8b5cf6',
 };
 
@@ -31,8 +31,9 @@ function formatRelativeDate(dateStr: string | undefined): string {
 function getRelevantDate(contact: ContactCardData): string {
     switch (contact.status) {
         case 'mensaje_enviado': return formatRelativeDate(contact.messageSentAt);
-        case 'listo_para_mensaje': return formatRelativeDate(contact.readyForMessageAt);
         case 'aceptado': return formatRelativeDate(contact.acceptedAt);
+        case 'enriqueciendo': return formatRelativeDate(contact.enrichedAt);
+        case 'interactuando': return formatRelativeDate(contact.interactedAt);
         default: return formatRelativeDate(contact.sentAt);
     }
 }
@@ -43,12 +44,28 @@ interface Props {
     contact: ContactCardData;
     onClick: () => void;
     provided?: any;
+    onEnriched?: () => void;
 }
 
-export default function ContactCard({ contact, onClick, provided }: Props) {
+export default function ContactCard({ contact, onClick, provided, onEnriched }: Props) {
     const [hovered, setHovered] = useState(false);
+    const [enriching, setEnriching] = useState(false);
     const color = STATUS_COLORS[contact.status];
     const date = getRelevantDate(contact);
+
+    const handleEnrich = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (enriching) return;
+        setEnriching(true);
+        try {
+            await enrichContact(contact._id);
+            onEnriched?.();
+        } catch (err: any) {
+            console.error('Enrichment error:', err.message);
+        } finally {
+            setEnriching(false);
+        }
+    };
 
     return (
         <div
@@ -88,6 +105,7 @@ export default function ContactCard({ contact, onClick, provided }: Props) {
                             src={contact.profilePhotoUrl}
                             alt={contact.fullName}
                             className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
                             onError={(e) => {
                                 (e.target as HTMLImageElement).style.display = 'none';
                                 (e.target as HTMLImageElement).parentElement!.innerHTML =
@@ -117,15 +135,80 @@ export default function ContactCard({ contact, onClick, provided }: Props) {
                         </p>
                     )}
                 </div>
+
+                {/* Enrich button */}
+                {contact.enrichmentStatus !== 'completed' && contact.enrichmentStatus !== 'enriching' && (
+                    <button
+                        onClick={handleEnrich}
+                        disabled={enriching}
+                        title="Enriquecer contacto"
+                        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 6,
+                            border: 'none',
+                            background: enriching ? '#e2e8f0' : 'rgba(124, 58, 237, 0.1)',
+                            cursor: enriching ? 'wait' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 13,
+                            opacity: hovered ? 1 : 0,
+                            transition: 'opacity 0.2s',
+                        }}
+                    >
+                        {enriching ? '⏳' : '🔬'}
+                    </button>
+                )}
             </div>
 
             {/* Footer row */}
             <div className="flex items-center justify-between mt-2 pl-[52px]">
-                {contact.location && (
-                    <span className="text-[10px] text-slate-400 truncate max-w-[60%]">
-                        📍 {contact.location}
-                    </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                    {contact.location && (
+                        <span className="text-[10px] text-slate-400 truncate max-w-[60%]">
+                            📍 {contact.location}
+                        </span>
+                    )}
+                    {/* Enrichment badge */}
+                    {contact.enrichmentStatus === 'completed' && (
+                        <span
+                            className="text-[10px] px-1.5 py-0.5 rounded-full"
+                            style={{
+                                background: 'rgba(16, 185, 129, 0.1)',
+                                color: '#10b981',
+                                fontWeight: 600,
+                            }}
+                        >
+                            ✅ Enriquecido
+                        </span>
+                    )}
+                    {contact.enrichmentStatus === 'enriching' && (
+                        <span
+                            className="text-[10px] px-1.5 py-0.5 rounded-full"
+                            style={{
+                                background: 'rgba(234, 179, 8, 0.1)',
+                                color: '#eab308',
+                                fontWeight: 600,
+                            }}
+                        >
+                            ⏳ Enriqueciendo...
+                        </span>
+                    )}
+                    {contact.enrichmentStatus === 'failed' && (
+                        <span
+                            className="text-[10px] px-1.5 py-0.5 rounded-full"
+                            style={{
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                color: '#ef4444',
+                                fontWeight: 600,
+                            }}
+                        >
+                            ❌ Error
+                        </span>
+                    )}
+                </div>
                 {date && (
                     <span className="text-[10px] text-slate-400 ml-auto">
                         {date}

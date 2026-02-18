@@ -1,5 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { linkedinService } from '../services/linkedin.service';
+import { healthMonitor } from '../services/linkedin/health-monitor.service';
+import { operationManager } from '../services/linkedin/operation-manager.service';
+import { rateLimitHandler } from '../services/linkedin/rate-limit-handler.service';
+import { statePersistence } from '../services/linkedin/state-persistence.service';
 
 const router = Router();
 
@@ -59,8 +63,12 @@ router.post('/resume', async (_req: Request, res: Response) => {
 
 // ── POST /stop — Stop prospecting completely ───────────────
 router.post('/stop', async (_req: Request, res: Response) => {
-    await linkedinService.stop();
-    res.json({ success: true, message: 'Prospecting stopped' });
+    const result = await linkedinService.stop();
+    res.json({ 
+        success: true, 
+        message: 'Prospecting stopped',
+        deletedCount: result.deletedCount 
+    });
 });
 
 // ── GET /progress — Current progress (polling) ─────────────
@@ -122,6 +130,64 @@ router.get('/progress/stream', (req: Request, res: Response) => {
         linkedinService.off('captcha', onCaptcha);
         linkedinService.off('session-expired', onSessionExpired);
     });
+});
+
+// ── GET /health — System health status ──────────────────────
+router.get('/health', (_req: Request, res: Response) => {
+    res.json({
+        health: healthMonitor.getHealthStatus(),
+        metrics: healthMonitor.getMetrics(),
+        operation: {
+            current: operationManager.getCurrent(),
+            info: operationManager.getCurrentOperationInfo(),
+        },
+        rateLimit: rateLimitHandler.getStatus(),
+        state: statePersistence.hasState(),
+    });
+});
+
+// ── GET /health/history — Metrics history ───────────────────
+router.get('/health/history', (_req: Request, res: Response) => {
+    res.json({
+        history: healthMonitor.getMetricsHistory(),
+    });
+});
+
+// ── POST /health/reset — Reset health metrics ───────────────
+router.post('/health/reset', (_req: Request, res: Response) => {
+    healthMonitor.reset();
+    res.json({ success: true, message: 'Health metrics reset' });
+});
+
+// ── GET /state — Persistence state status ───────────────────
+router.get('/state', async (_req: Request, res: Response) => {
+    const summary = await statePersistence.getSummary();
+    res.json({
+        hasState: summary.hasState,
+        summary: summary.summary,
+        backups: statePersistence.listBackups(),
+    });
+});
+
+// ── POST /state/clear — Clear persistence state ─────────────
+router.post('/state/clear', async (_req: Request, res: Response) => {
+    await statePersistence.clear();
+    res.json({ success: true, message: 'State cleared' });
+});
+
+// ── POST /state/restore — Restore from backup ───────────────
+router.post('/state/restore', async (req: Request, res: Response) => {
+    const { backupFile } = req.body;
+    if (!backupFile) {
+        return res.status(400).json({ error: 'backupFile is required' });
+    }
+    
+    const state = await statePersistence.restoreFromBackup(backupFile);
+    if (state) {
+        res.json({ success: true, message: 'State restored', batchId: state.batchId });
+    } else {
+        res.status(500).json({ error: 'Failed to restore state' });
+    }
 });
 
 export default router;

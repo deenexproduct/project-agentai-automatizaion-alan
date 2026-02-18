@@ -12,7 +12,6 @@ export interface LinkedInStatus {
 
 export interface ProfileSteps {
     visit: 'pending' | 'done' | 'error';
-    follow: 'pending' | 'done' | 'skipped' | 'error';
     connect: 'pending' | 'done' | 'skipped' | 'error';
     like: 'pending' | 'done' | 'skipped' | 'error';
 }
@@ -21,7 +20,7 @@ export interface ProfileProgress {
     index: number;
     url: string;
     name?: string;
-    status: 'pending' | 'visiting' | 'followed' | 'connected' | 'liked' | 'done' | 'error' | 'paused';
+    status: 'pending' | 'visiting' | 'connected' | 'liked' | 'done' | 'error' | 'paused';
     steps: ProfileSteps;
     error?: string;
     startedAt?: string;
@@ -68,8 +67,9 @@ export async function resumeProspecting(): Promise<void> {
     await fetch(`${API_URL}/resume`, { method: 'POST' });
 }
 
-export async function stopProspecting(): Promise<void> {
-    await fetch(`${API_URL}/stop`, { method: 'POST' });
+export async function stopProspecting(): Promise<{ success: boolean; message: string; deletedCount: number }> {
+    const res = await fetch(`${API_URL}/stop`, { method: 'POST' });
+    return res.json();
 }
 
 export async function getProgress(): Promise<ProgressData> {

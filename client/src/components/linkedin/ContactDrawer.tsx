@@ -1,17 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import type { LinkedInContact, INote } from '../../services/linkedin-crm.service';
-import { getContact, addNote } from '../../services/linkedin-crm.service';
+import { getContact, addNote, enrichContact } from '../../services/linkedin-crm.service';
 
 // ── Status config ─────────────────────────────────────────────
 
 const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
     visitando: { label: 'Visitando', color: '#06b6d4', icon: '👁️' },
     conectando: { label: 'Conectando', color: '#eab308', icon: '🔗' },
-    conectado: { label: 'Conectado', color: '#22c55e', icon: '✅' },
     interactuando: { label: 'Interactuando', color: '#f97316', icon: '👋' },
+    enriqueciendo: { label: 'Enriqueciendo', color: '#a855f7', icon: '🔬' },
     esperando_aceptacion: { label: 'Esperando Aceptación', color: '#f59e0b', icon: '⏳' },
     aceptado: { label: 'Aceptado', color: '#10b981', icon: '🤝' },
-    listo_para_mensaje: { label: 'Listo para Mensaje', color: '#06b6d4', icon: '💬' },
     mensaje_enviado: { label: 'Mensaje Enviado', color: '#8b5cf6', icon: '🚀' },
 };
 
@@ -38,6 +37,7 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
     const [loading, setLoading] = useState(false);
     const [noteText, setNoteText] = useState('');
     const [savingNote, setSavingNote] = useState(false);
+    const [enriching, setEnriching] = useState(false);
     const drawerRef = useRef<HTMLDivElement>(null);
 
     // Fetch full contact details
@@ -73,6 +73,24 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
             setNoteText('');
         } catch { /* ignore */ }
         setSavingNote(false);
+    };
+
+    const handleEnrich = async () => {
+        if (!contact || enriching) return;
+        setEnriching(true);
+        try {
+            const result = await enrichContact(contact._id);
+            if (result.contact) setContact(result.contact);
+            else {
+                // Refresh
+                const updated = await getContact(contact._id);
+                setContact(updated);
+            }
+        } catch (err: any) {
+            console.error('Enrichment failed:', err.message);
+        } finally {
+            setEnriching(false);
+        }
     };
 
     if (!contactId) return null;
@@ -129,7 +147,7 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     }}
                                 >
                                     {contact.profilePhotoUrl ? (
-                                        <img src={contact.profilePhotoUrl} alt={contact.fullName} className="w-full h-full object-cover" />
+                                        <img src={contact.profilePhotoUrl} alt={contact.fullName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                     ) : (
                                         <span className="text-white text-xl font-bold">{contact.fullName?.charAt(0)}</span>
                                     )}
@@ -175,12 +193,11 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                             <div className="space-y-2">
                                 {[
                                     { label: 'Visitando', date: contact.createdAt, color: '#06b6d4' },
-                                    { label: 'Conectando', date: contact.createdAt, color: '#ec4899' },
-                                    { label: 'Conectado', date: contact.createdAt, color: '#64748b' },
-                                    { label: 'Interactuando', date: contact.createdAt, color: '#f97316' },
+                                    { label: 'Conectando', date: contact.createdAt, color: '#eab308' },
+                                    { label: 'Interactuando', date: contact.interactedAt, color: '#f97316' },
+                                    { label: 'Enriqueciendo', date: contact.enrichedAt, color: '#a855f7' },
                                     { label: 'Esperando Aceptación', date: contact.sentAt, color: '#f59e0b' },
                                     { label: 'Aceptado', date: contact.acceptedAt, color: '#10b981' },
-                                    { label: 'Listo p/ Mensaje', date: contact.readyForMessageAt, color: '#3b82f6' },
                                     { label: 'Mensaje Enviado', date: contact.messageSentAt, color: '#8b5cf6' },
                                 ].map((step, i) => (
                                     <div key={i} className="flex items-center gap-3">
@@ -275,6 +292,125 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                 </div>
                             </div>
                         )}
+
+                        {/* Enrichment Section */}
+                        <div className="px-6 py-4 border-b border-purple-100/50">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                    🔬 Enriquecimiento
+                                </h3>
+                                {contact.enrichmentStatus !== 'enriching' && (
+                                    <button
+                                        onClick={handleEnrich}
+                                        disabled={enriching}
+                                        className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                                        style={{
+                                            background: enriching ? '#e2e8f0' : 'rgba(124,58,237,0.1)',
+                                            color: enriching ? '#94a3b8' : '#7c3aed',
+                                            cursor: enriching ? 'wait' : 'pointer',
+                                        }}
+                                    >
+                                        {enriching ? '⏳ Enriqueciendo...' : contact.enrichmentStatus === 'completed' ? '🔄 Re-enriquecer' : '🔬 Enriquecer'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Status banner */}
+                            {contact.enrichmentStatus === 'enriching' && (
+                                <div className="p-3 rounded-lg mb-3 text-sm" style={{ background: 'rgba(234,179,8,0.1)', color: '#ca8a04' }}>
+                                    ⏳ Enriquecimiento en proceso...
+                                </div>
+                            )}
+                            {contact.enrichmentStatus === 'failed' && (
+                                <div className="p-3 rounded-lg mb-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626' }}>
+                                    ❌ El enriquecimiento falló. Intentá de nuevo.
+                                </div>
+                            )}
+
+                            {/* Enrichment data display */}
+                            {contact.enrichmentStatus === 'completed' && contact.enrichmentData && (
+                                <div className="space-y-3">
+                                    {/* Company info */}
+                                    {contact.enrichmentData.company && (
+                                        <div className="p-3 rounded-lg bg-white/60 border border-purple-50">
+                                            <p className="text-xs font-semibold text-slate-600 mb-1">🏢 {contact.enrichmentData.company.name || 'Empresa'}</p>
+                                            {contact.enrichmentData.company.description && (
+                                                <p className="text-xs text-slate-500 mb-1">{contact.enrichmentData.company.description}</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-2 mt-1">
+                                                {contact.enrichmentData.company.locationsCount && (
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
+                                                        🏪 {contact.enrichmentData.company.locationsCount} locales
+                                                    </span>
+                                                )}
+                                                {contact.enrichmentData.company.sector && (
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
+                                                        📂 {contact.enrichmentData.company.sector}
+                                                    </span>
+                                                )}
+                                                {contact.enrichmentData.company.website && contact.enrichmentData.company.website !== 'No verificado' && (
+                                                    <a href={contact.enrichmentData.company.website} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,0.1)', color: '#7c3aed' }}>
+                                                        🌐 Web
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Person news */}
+                                    {contact.enrichmentData.personNews?.length > 0 && (
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">📰 Noticias</p>
+                                            {contact.enrichmentData.personNews.slice(0, 3).map((news: any, i: number) => (
+                                                <div key={i} className="p-2 rounded-lg bg-white/40 mb-1">
+                                                    <p className="text-xs text-slate-700 font-medium">{news.title}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        {news.source && <span className="text-[10px] text-slate-400">{news.source}</span>}
+                                                        {news.date && <span className="text-[10px] text-slate-400">{news.date}</span>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Key insights */}
+                                    {contact.enrichmentData.keyInsights?.length > 0 && (
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">💡 Insights</p>
+                                            {contact.enrichmentData.keyInsights.map((insight: string, i: number) => (
+                                                <p key={i} className="text-xs text-slate-600 mb-0.5">• {insight}</p>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Buying signals */}
+                                    {contact.enrichmentData.buyingSignals?.length > 0 && (
+                                        <div>
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">🚦 Señales de Compra</p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {contact.enrichmentData.buyingSignals.map((signal: string, i: number) => (
+                                                    <span key={i} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
+                                                        {signal}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Enriched timestamp */}
+                                    {contact.enrichedAt && (
+                                        <p className="text-[10px] text-slate-400 text-right">
+                                            Enriquecido: {formatDate(contact.enrichedAt)}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Not enriched yet */}
+                            {!contact.enrichmentStatus && !enriching && (
+                                <p className="text-xs text-slate-400 italic">Sin datos de enriquecimiento. Hacé click en "Enriquecer" para investigar este contacto.</p>
+                            )}
+                        </div>
 
                         {/* Notes */}
                         <div className="px-6 py-4 border-b border-purple-100/50">
