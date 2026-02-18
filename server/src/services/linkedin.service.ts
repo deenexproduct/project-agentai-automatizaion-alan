@@ -1541,11 +1541,35 @@ class LinkedInService extends EventEmitter {
 
                     const profileName = this.profiles[this.currentIndex]?.name || '';
                     const firstName = profileName.split(' ')[0] || '';
-                    const personalizedNote = note.replace(/\{nombre\}/gi, firstName);
+                    
+                    // Get scraped data for this profile if available
+                    const currentProfile = this.profiles[this.currentIndex];
+                    const scraped = await this.scrapeProfileData(page).catch(() => null);
+                    
+                    // Extended variable substitution
+                    const variables: Record<string, string> = {
+                        nombre: firstName,
+                        name: firstName,
+                        empresa: scraped?.currentCompany || currentProfile?.name?.split(' at ')[1] || '',
+                        company: scraped?.currentCompany || currentProfile?.name?.split(' at ')[1] || '',
+                        cargo: scraped?.currentPosition || '',
+                        position: scraped?.currentPosition || '',
+                        role: scraped?.currentPosition || '',
+                        industria: scraped?.industry || '',
+                        industry: scraped?.industry || '',
+                        ubicacion: scraped?.location || '',
+                        location: scraped?.location || '',
+                    };
+                    
+                    let personalizedNote = note;
+                    for (const [key, value] of Object.entries(variables)) {
+                        const regex = new RegExp(`\\{${key}\\}`, 'gi');
+                        personalizedNote = personalizedNote.replace(regex, value);
+                    }
 
                     await page.keyboard.type(personalizedNote, { delay: this.getRandomDelay(30, 80) });
                     await this.delay(this.getRandomDelay(500, 1000));
-                    logger.log('  ✅ Note typed');
+                    logger.log(`  ✅ Note typed (${Object.entries(variables).filter(([k,v]) => v).length} variables substituted)`);
                 }
             }
         }

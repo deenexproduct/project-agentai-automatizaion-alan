@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
 import CRMPage from './CRMPage';
 
@@ -7,17 +8,17 @@ type SidebarTab = 'crm' | 'prospecting' | 'comments' | 'requests' | 'config';
 
 interface SidebarItem {
     id: SidebarTab;
-    icon: string;
+    Icon: React.ElementType;
     label: string;
     disabled?: boolean;
 }
 
 const sidebarItems: SidebarItem[] = [
-    { id: 'crm', icon: '📊', label: 'CRM' },
-    { id: 'prospecting', icon: '🎯', label: 'Prospecting' },
-    { id: 'comments', icon: '💬', label: 'Comentarios', disabled: true },
-    { id: 'requests', icon: '👥', label: 'Solicitudes', disabled: true },
-    { id: 'config', icon: '⚙️', label: 'Configuración', disabled: true },
+    { id: 'crm', Icon: BarChart3, label: 'CRM' },
+    { id: 'prospecting', Icon: Target, label: 'Prospecting' },
+    { id: 'comments', Icon: MessageSquare, label: 'Comentarios', disabled: true },
+    { id: 'requests', Icon: Users, label: 'Solicitudes', disabled: true },
+    { id: 'config', Icon: Settings, label: 'Configuración', disabled: true },
 ];
 
 export default function LinkedInApp() {
@@ -51,7 +52,7 @@ export default function LinkedInApp() {
                     {sidebarItems.map((item) => (
                         <SidebarButton
                             key={item.id}
-                            icon={item.icon}
+                            Icon={item.Icon}
                             label={item.label}
                             active={activeTab === item.id}
                             disabled={item.disabled}
@@ -63,7 +64,7 @@ export default function LinkedInApp() {
                 {/* Bottom: Back button */}
                 <div className="flex flex-col items-center gap-2">
                     <SidebarButton
-                        icon="🔙"
+                        Icon={ArrowLeft}
                         label="Volver"
                         active={false}
                         onClick={() => navigate('/')}
@@ -112,8 +113,9 @@ export default function LinkedInApp() {
                     {activeTab === 'crm' && <CRMPage />}
                     {activeTab === 'prospecting' && <ProspectingPage />}
                     {activeTab === 'config' && (
-                        <div className="text-center py-20 text-slate-400">
-                            ⚙️ Configuración — Próximamente
+                        <div className="text-center py-20 text-slate-400 flex flex-col items-center gap-3">
+                            <Settings size={48} opacity={0.5} />
+                            <span>Configuración — Próximamente</span>
                         </div>
                     )}
                 </div>
@@ -125,13 +127,13 @@ export default function LinkedInApp() {
 // ── Sidebar Button Component ────────────────────────────────
 
 function SidebarButton({
-    icon,
+    Icon,
     label,
     active,
     disabled,
     onClick,
 }: {
-    icon: string;
+    Icon: React.ElementType;
     label: string;
     active: boolean;
     disabled?: boolean;
@@ -169,7 +171,7 @@ function SidebarButton({
                         }}
                     />
                 )}
-                <span className="text-lg">{icon}</span>
+                <Icon size={20} color={active ? '#e9d5ff' : disabled ? '#6b7280' : '#a78bfa'} />
             </button>
 
             {/* Tooltip */}

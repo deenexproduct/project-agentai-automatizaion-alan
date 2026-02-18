@@ -189,3 +189,53 @@ export async function updateEnrichmentConfig(config: any): Promise<void> {
     });
     if (!res.ok) throw new Error('Failed to update config');
 }
+
+// ── Bulk Operations ──────────────────────────────────────────
+
+export interface BulkEnrichResult {
+    success: boolean;
+    summary: { total: number; succeeded: number; failed: number };
+    results: { id: string; status: string; error?: string }[];
+}
+
+export async function bulkEnrichContacts(ids: string[]): Promise<BulkEnrichResult> {
+    const res = await fetch(`${CRM_BASE}/contacts/bulk/enrich`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) throw new Error('Failed to bulk enrich');
+    return res.json();
+}
+
+export async function bulkUpdateStatus(ids: string[], status: ContactStatus): Promise<{ success: boolean; modified: number }> {
+    const res = await fetch(`${CRM_BASE}/contacts/bulk/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, status }),
+    });
+    if (!res.ok) throw new Error('Failed to bulk update status');
+    return res.json();
+}
+
+export function exportContactsUrl(status?: ContactStatus, search?: string): string {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (search) params.set('search', search);
+    return `${CRM_BASE}/contacts/export?${params}`;
+}
+
+// ── Stats ────────────────────────────────────────────────────
+
+export interface ContactStats {
+    total: number;
+    byStatus: Record<string, number>;
+    byEnrichmentStatus: Record<string, number>;
+    recentLast7Days: number;
+}
+
+export async function getContactStats(): Promise<ContactStats> {
+    const res = await fetch(`${CRM_BASE}/contacts/stats`);
+    if (!res.ok) throw new Error('Failed to fetch stats');
+    return res.json();
+}

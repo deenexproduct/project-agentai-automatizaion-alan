@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
+import { Eye, Link, Hand, Microscope, Clock, CheckCircle, Send, Search, RefreshCw, Loader2, X, Download } from 'lucide-react';
 import ContactCard from './ContactCard';
 import ContactDrawer from './ContactDrawer';
 import {
@@ -7,6 +8,7 @@ import {
     getCounts,
     updateContactStatus,
     checkAccepted,
+    exportContactsUrl,
     type ContactCardData,
     type ContactStatus,
     type StatusCounts,
@@ -17,19 +19,19 @@ import {
 interface ColumnConfig {
     id: ContactStatus;
     label: string;
-    icon: string;
+    Icon: React.ElementType;
     color: string;
     accentBg: string;
 }
 
 const COLUMNS: ColumnConfig[] = [
-    { id: 'visitando', label: 'Visitando', icon: '👁️', color: '#06b6d4', accentBg: 'rgba(6,182,212,0.08)' },
-    { id: 'conectando', label: 'Conectando', icon: '🔗', color: '#eab308', accentBg: 'rgba(234,179,8,0.08)' },
-    { id: 'interactuando', label: 'Interactuando', icon: '👋', color: '#f97316', accentBg: 'rgba(249,115,22,0.08)' },
-    { id: 'enriqueciendo', label: 'Enriqueciendo', icon: '🔬', color: '#a855f7', accentBg: 'rgba(168,85,247,0.08)' },
-    { id: 'esperando_aceptacion', label: 'Esperando Aceptación', icon: '⏳', color: '#f59e0b', accentBg: 'rgba(245,158,11,0.08)' },
-    { id: 'aceptado', label: 'Aceptado', icon: '🤝', color: '#10b981', accentBg: 'rgba(16,185,129,0.08)' },
-    { id: 'mensaje_enviado', label: 'Mensaje Enviado', icon: '🚀', color: '#8b5cf6', accentBg: 'rgba(139,92,246,0.08)' },
+    { id: 'visitando', label: 'Visitando', Icon: Eye, color: '#06b6d4', accentBg: 'rgba(6,182,212,0.08)' },
+    { id: 'conectando', label: 'Conectando', Icon: Link, color: '#eab308', accentBg: 'rgba(234,179,8,0.08)' },
+    { id: 'interactuando', label: 'Interactuando', Icon: Hand, color: '#f97316', accentBg: 'rgba(249,115,22,0.08)' },
+    { id: 'enriqueciendo', label: 'Enriqueciendo', Icon: Microscope, color: '#a855f7', accentBg: 'rgba(168,85,247,0.08)' },
+    { id: 'esperando_aceptacion', label: 'Esperando Aceptación', Icon: Clock, color: '#f59e0b', accentBg: 'rgba(245,158,11,0.08)' },
+    { id: 'aceptado', label: 'Aceptado', Icon: CheckCircle, color: '#10b981', accentBg: 'rgba(16,185,129,0.08)' },
+    { id: 'mensaje_enviado', label: 'Mensaje Enviado', Icon: Send, color: '#8b5cf6', accentBg: 'rgba(139,92,246,0.08)' },
 ];
 
 // Valid drag transitions (only forward)
@@ -245,8 +247,23 @@ export default function CRMPage() {
                             placeholder="Buscar nombre, cargo, empresa..."
                             className="text-sm pl-9 pr-4 py-2 rounded-xl border border-purple-100 focus:border-purple-300 focus:outline-none bg-white/70 backdrop-blur-sm w-64"
                         />
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                     </div>
+
+                    {/* Export button */}
+                    <button
+                        onClick={() => window.open(exportContactsUrl(), '_blank')}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+                        style={{
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            color: '#3b82f6',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                        }}
+                        title="Exportar contactos a CSV"
+                    >
+                        <Download size={16} />
+                        Exportar
+                    </button>
 
                     {/* Check accepted */}
                     <button
@@ -260,7 +277,7 @@ export default function CRMPage() {
                             boxShadow: !checking ? '0 2px 10px rgba(16,185,129,0.3)' : 'none',
                         }}
                     >
-                        <span className={checking ? 'animate-spin' : ''}>🔄</span>
+                        {checking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
                         {checking ? 'Verificando...' : 'Verificar aceptados'}
                     </button>
                 </div>
@@ -269,7 +286,7 @@ export default function CRMPage() {
             {/* Check result toast */}
             {checkResult && (
                 <div
-                    className="mb-3 px-4 py-2 rounded-xl text-sm font-medium"
+                    className="mb-3 px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
                     style={{
                         background: checkResult.found === -1
                             ? 'rgba(239,68,68,0.1)'
@@ -284,11 +301,13 @@ export default function CRMPage() {
                         animation: 'fadeIn 0.3s ease',
                     }}
                 >
-                    {checkResult.found === -1
-                        ? '❌ Error al verificar — ¿browser activo y logueado?'
-                        : checkResult.updated > 0
-                            ? `✅ ${checkResult.updated} conexiones aceptadas actualizadas`
-                            : '📭 Sin nuevas aceptaciones encontradas'}
+                    {checkResult.found === -1 ? (
+                        <><X size={16} /> Error al verificar — ¿browser activo y logueado?</>
+                    ) : checkResult.updated > 0 ? (
+                        <><CheckCircle size={16} /> {checkResult.updated} conexiones aceptadas actualizadas</>
+                    ) : (
+                        <><Mail size={16} /> Sin nuevas aceptaciones encontradas</>
+                    )}
                 </div>
             )}
 
@@ -312,7 +331,7 @@ export default function CRMPage() {
                                 {/* Column Header */}
                                 <div className="flex items-center justify-between px-4 pt-4 pb-2">
                                     <div className="flex items-center gap-2">
-                                        <span>{col.icon}</span>
+                                        <col.Icon size={18} color={col.color} />
                                         <h3 className="text-sm font-semibold text-slate-700">{col.label}</h3>
                                     </div>
                                     <span
@@ -341,8 +360,8 @@ export default function CRMPage() {
                                         >
                                             {columns[col.id].length === 0 && !snapshot.isDraggingOver && (
                                                 <div className="flex flex-col items-center justify-center py-12 text-slate-300">
-                                                    <span className="text-3xl mb-2">{col.icon}</span>
-                                                    <p className="text-xs">Sin contactos</p>
+                                                    <col.Icon size={32} opacity={0.3} />
+                                                    <p className="text-xs mt-2">Sin contactos</p>
                                                 </div>
                                             )}
 

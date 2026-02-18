@@ -1,0 +1,102 @@
+# =============================================================================
+# VoiceCommand - Alpine-based Dockerfile (Experimental)
+# 
+# WARNING: This is an experimental build using Alpine Linux.
+# Chrome/Chromium on Alpine may have compatibility issues with Puppeteer.
+# Use Dockerfile.optimized (based on node:18-slim) for production.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# STAGE 1: Dependencies
+# -----------------------------------------------------------------------------
+FROM node:18-alpine AS dependencies
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+COPY server/package*.json ./
+
+# Install production dependencies
+RUN npm ci --only=production --no-audit --no-fund && \
+    npm cache clean --force
+
+# -----------------------------------------------------------------------------
+# STAGE 2: Builder
+# -----------------------------------------------------------------------------
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache python3 make g++
+
+COPY server/package*.json ./
+COPY server/tsconfig.json ./
+
+RUN npm ci --no-audit --no-fund && \
+    npm cache clean --force
+
+COPY server/src/ ./src/
+RUN npx tsc --build
+
+# -----------------------------------------------------------------------------
+# STAGE 3: Runtime (Alpine with Chromium)
+# -----------------------------------------------------------------------------
+FROM node:18-alpine AS runtime
+
+# Install Chromium and dependencies
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    ffmpeg \
+    # Additional dependencies for WhatsApp Web.js
+    cairo \
+    pango \
+    libxi \
+    libxcursor \
+    libxdamage \
+    libxrandr \
+    libxcomposite \
+    alsa-lib \
+    atk \
+    at-spi2-atk \
+    at-spi2-core \
+    dbus
+
+# Create non-root user
+RUN addgroup -g 1000 voicecommand && \
+    adduser -D -u 1000 -G voicecommand voicecommand
+
+WORKDIR /app
+
+# Copy production dependencies
+COPY --from=dependencies --chown=voicecommand:voicecommand /app/node_modules ./node_modules
+COPY --from=dependencies --chown=voicecommand:voicecommand /app/package*.json ./
+
+# Copy compiled code
+COPY --from=builder --chown=voicecommand:voicecommand /app/dist ./dist
+
+# Create required directories
+RUN mkdir -p uploads logs wa-session linkedin-session data && \
+    chown -R voicecommand:voicecommand /app
+
+USER voicecommand
+
+# Environment variables
+ENV NODE_ENV=production \
+    PORT=3000 \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1))"
+
+CMD ["node", "dist/index.js"]

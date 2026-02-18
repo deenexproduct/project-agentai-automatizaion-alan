@@ -259,4 +259,189 @@ router.patch('/enrichment/config', async (req: Request, res: Response) => {
     }
 });
 
+// ── POST /contacts/bulk/enrich — Bulk enrichment ─────────────
+
+router.post('/contacts/bulk/enrich', async (req: Request, res: Response) => {
+    try {
+        const { ids } = req.body;
+        
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'ids array is required' });
+        }
+        
+        if (ids.length > 50) {
+            return res.status(400).json({ error: 'Maximum 50 contacts per bulk operation' });
+        }
+
+        const results = await Promise.allSettled(
+            ids.map(id => enrichmentService.enrichContact(id))
+        );
+
+        const succeeded = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+
+        res.json({ 
+            success: true, 
+            summary: { total: ids.length, succeeded, failed },
+            results: results.map((r, i) => ({
+                id: ids[i],
+                status: r.status,
+                ...(r.status === 'rejected' ? { error: (r as PromiseRejectedResult).reason?.message } : {})
+            }))
+        });
+    } catch (err: any) {
+        console.error('CRM bulk enrichment error:', err.message);
+        res.status(500).json({ error: 'Failed to bulk enrich contacts' });
+    }
+});
+
+// ── POST /contacts/bulk/status — Bulk status update ──────────
+
+router.post('/contacts/bulk/status', async (req: Request, res: Response) => {
+    try {
+        const { ids, status } = req.body;
+        const validStatuses: ContactStatus[] = ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'];
+
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'ids array is required' });
+        }
+        
+        if (!status || !validStatuses.includes(status)) {
+            return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        const timestampField: Record<string, string> = {
+            interactuando: 'interactedAt',
+            enriqueciendo: 'enrichedAt',
+            aceptado: 'acceptedAt',
+            mensaje_enviado: 'messageSentAt',
+        };
+
+        const update: any = { status };
+        if (timestampField[status]) {
+            update[timestampField[status]] = new Date();
+        }
+
+        const result = await LinkedInContact.updateMany(
+            { _id: { $in: ids } },
+            { $set: update }
+        );
+
+        res.json({ 
+            success: true, 
+            modified: result.modifiedCount 
+        });
+    } catch (err: any) {
+        console.error('CRM bulk status update error:', err.message);
+        res.status(500).json({ error: 'Failed to bulk update status' });
+    }
+});
+
+// ── GET /contacts/export — Export contacts to CSV ────────────
+
+router.get('/contacts/export', async (req: Request, res: Response) => {
+    try {
+        const { status, search } = req.query;
+        
+        // Build query
+        const query: any = {};
+        
+        if (status && ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'].includes(status as string)) {
+            query.status = status;
+        }
+        
+        if (search && (search as string).trim().length > 0) {
+            const s = (search as string).trim();
+            query.$or = [
+                { fullName: { $regex: s, $options: 'i' } },
+                { currentCompany: { $regex: s, $options: 'i' } },
+                { currentPosition: { $regex: s, $options: 'i' } },
+                { headline: { $regex: s, $options: 'i' } },
+            ];
+        }
+
+        const contacts = await LinkedInContact.find(query).lean();
+
+        // Build CSV
+        const headers = [
+            'ID', 'Full Name', 'First Name', 'Last Name', 'Headline', 
+            'Current Position', 'Current Company', 'Industry', 'Location',
+            'Profile URL', 'Status', 'Sent At', 'Accepted At', 
+            'Enriched At', 'Message Sent At', 'Enrichment Status',
+            'Created At', 'Notes Count'
+        ];
+
+        const rows = contacts.map(c => [
+            c._id?.toString() || '',
+            c.fullName || '',
+            c.firstName || '',
+            c.lastName || '',
+            c.headline || '',
+            c.currentPosition || '',
+            c.currentCompany || '',
+            c.industry || '',
+            c.location || '',
+            c.profileUrl || '',
+            c.status || '',
+            c.sentAt ? new Date(c.sentAt).toISOString() : '',
+            c.acceptedAt ? new Date(c.acceptedAt).toISOString() : '',
+            c.enrichedAt ? new Date(c.enrichedAt).toISOString() : '',
+            c.messageSentAt ? new Date(c.messageSentAt).toISOString() : '',
+            c.enrichmentStatus || '',
+            c.createdAt ? new Date(c.createdAt).toISOString() : '',
+            (c.notes?.length || 0).toString()
+        ]);
+
+        // Escape CSV values
+        const escapeCsv = (value: string) => {
+            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+                return `"${value.replace(/"/g, '""')}"`;
+            }
+            return value;
+        };
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(escapeCsv).join(','))
+        ].join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="linkedin-contacts-${new Date().toISOString().split('T')[0]}.csv"`);
+        res.send(csvContent);
+    } catch (err: any) {
+        console.error('CRM export error:', err.message);
+        res.status(500).json({ error: 'Failed to export contacts' });
+    }
+});
+
+// ── GET /contacts/stats — Contact statistics ─────────────────
+
+router.get('/contacts/stats', async (_req: Request, res: Response) => {
+    try {
+        const total = await LinkedInContact.countDocuments();
+        
+        const byStatus = await LinkedInContact.aggregate([
+            { $group: { _id: '$status', count: { $sum: 1 } } }
+        ]);
+        
+        const byEnrichmentStatus = await LinkedInContact.aggregate([
+            { $group: { _id: '$enrichmentStatus', count: { $sum: 1 } } }
+        ]);
+
+        const recent = await LinkedInContact.countDocuments({
+            createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+        });
+
+        res.json({
+            total,
+            byStatus: byStatus.reduce((acc, curr) => ({ ...acc, [curr._id || 'unknown']: curr.count }), {}),
+            byEnrichmentStatus: byEnrichmentStatus.reduce((acc, curr) => ({ ...acc, [curr._id || 'none']: curr.count }), {}),
+            recentLast7Days: recent
+        });
+    } catch (err: any) {
+        console.error('CRM stats error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
+
 export default router;

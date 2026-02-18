@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Calendar, Clock, Mail, Loader2 } from 'lucide-react'
 import QRLogin from './QRLogin'
 import ScheduleForm from './ScheduleForm'
 import ScheduledList from './ScheduledList'
@@ -53,7 +54,7 @@ export default function WhatsAppTab() {
     if (checkingStatus) {
         return (
             <div className="flex justify-center py-20">
-                <div className="animate-spin w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full" style={{ borderWidth: '3px' }}></div>
+                <Loader2 size={32} className="animate-spin text-violet-600" />
             </div>
         )
     }
@@ -75,19 +76,20 @@ export default function WhatsAppTab() {
             {/* Sub-tabs */}
             <div className="flex gap-2 mb-6">
                 {[
-                    { id: 'schedule' as SubTab, icon: '📅', label: 'Programar' },
-                    { id: 'pending' as SubTab, icon: '⏳', label: 'Pendientes' },
-                    { id: 'history' as SubTab, icon: '📬', label: 'Enviados' },
-                ].map(({ id, icon, label }) => (
+                    { id: 'schedule' as SubTab, Icon: Calendar, label: 'Programar' },
+                    { id: 'pending' as SubTab, Icon: Clock, label: 'Pendientes' },
+                    { id: 'history' as SubTab, Icon: Mail, label: 'Enviados' },
+                ].map(({ id, Icon, label }) => (
                     <button
                         key={id}
                         onClick={() => setActiveSubTab(id)}
-                        className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all ${activeSubTab === id
+                        className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${activeSubTab === id
                             ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
                             : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                             }`}
                     >
-                        {icon} {label}
+                        <Icon size={16} />
+                        {label}
                     </button>
                 ))}
             </div>

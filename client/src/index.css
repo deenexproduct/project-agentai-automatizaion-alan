@@ -1,4 +1,37 @@
+/**
+ * VoiceCommand - Global Styles
+ * Importa el Design System antes de Tailwind para que las variables estén disponibles
+ */
+@import './styles/design-system.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   BASE STYLES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    font-family: var(--vc-font-family-base);
+  }
+  
+  body {
+    background: var(--vc-gray-50);
+    color: var(--vc-gray-800);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CUSTOM UTILITIES
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, var(--vc-purple-600), var(--vc-purple-500));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}

@@ -1,0 +1,8 @@
+version: 1
+agent:
+  name: database-engineer
+  description: "Especialista en MongoDB, Mongoose, diseño de schemas y optimización de queries"
+  extend: ../voicecommand-main.yaml
+  system_prompt_path: ./database-engineer.md
+  exclude_tools:
+    - "kimi_cli.tools.multiagent:Task"

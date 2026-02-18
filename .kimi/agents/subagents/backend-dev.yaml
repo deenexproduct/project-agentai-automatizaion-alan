@@ -1,0 +1,8 @@
+version: 1
+agent:
+  name: backend-dev
+  description: "Especialista en backend Node.js, Express, TypeScript y APIs REST"
+  extend: ../voicecommand-main.yaml
+  system_prompt_path: ./backend-dev.md
+  exclude_tools:
+    - "kimi_cli.tools.multiagent:Task"

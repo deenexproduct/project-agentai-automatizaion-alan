@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Building2, MapPin, CheckCircle, Loader2, X, Microscope } from 'lucide-react';
 import type { ContactCardData, ContactStatus } from '../../services/linkedin-crm.service';
 import { enrichContact } from '../../services/linkedin-crm.service';
 
@@ -130,8 +131,9 @@ export default function ContactCard({ contact, onClick, provided, onEnriched }: 
                         </p>
                     )}
                     {contact.currentCompany && (
-                        <p className="text-xs text-slate-400 truncate">
-                            🏢 {contact.currentCompany}
+                        <p className="text-xs text-slate-400 truncate flex items-center gap-1">
+                            <Building2 size={10} />
+                            {contact.currentCompany}
                         </p>
                     )}
                 </div>
@@ -158,7 +160,7 @@ export default function ContactCard({ contact, onClick, provided, onEnriched }: 
                             transition: 'opacity 0.2s',
                         }}
                     >
-                        {enriching ? '⏳' : '🔬'}
+                        {enriching ? <Loader2 size={14} className="animate-spin text-slate-500" /> : <Microscope size={14} color="#7c3aed" />}
                     </button>
                 )}
             </div>
@@ -167,45 +169,49 @@ export default function ContactCard({ contact, onClick, provided, onEnriched }: 
             <div className="flex items-center justify-between mt-2 pl-[52px]">
                 <div className="flex items-center gap-1.5">
                     {contact.location && (
-                        <span className="text-[10px] text-slate-400 truncate max-w-[60%]">
-                            📍 {contact.location}
+                        <span className="text-[10px] text-slate-400 truncate max-w-[60%] flex items-center gap-0.5">
+                            <MapPin size={10} />
+                            {contact.location}
                         </span>
                     )}
                     {/* Enrichment badge */}
                     {contact.enrichmentStatus === 'completed' && (
                         <span
-                            className="text-[10px] px-1.5 py-0.5 rounded-full"
+                            className="text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1"
                             style={{
                                 background: 'rgba(16, 185, 129, 0.1)',
                                 color: '#10b981',
                                 fontWeight: 600,
                             }}
                         >
-                            ✅ Enriquecido
+                            <CheckCircle size={10} />
+                            Enriquecido
                         </span>
                     )}
                     {contact.enrichmentStatus === 'enriching' && (
                         <span
-                            className="text-[10px] px-1.5 py-0.5 rounded-full"
+                            className="text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1"
                             style={{
                                 background: 'rgba(234, 179, 8, 0.1)',
                                 color: '#eab308',
                                 fontWeight: 600,
                             }}
                         >
-                            ⏳ Enriqueciendo...
+                            <Loader2 size={10} className="animate-spin" />
+                            Enriqueciendo...
                         </span>
                     )}
                     {contact.enrichmentStatus === 'failed' && (
                         <span
-                            className="text-[10px] px-1.5 py-0.5 rounded-full"
+                            className="text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1"
                             style={{
                                 background: 'rgba(239, 68, 68, 0.1)',
                                 color: '#ef4444',
                                 fontWeight: 600,
                             }}
                         >
-                            ❌ Error
+                            <X size={10} />
+                            Error
                         </span>
                     )}
                 </div>

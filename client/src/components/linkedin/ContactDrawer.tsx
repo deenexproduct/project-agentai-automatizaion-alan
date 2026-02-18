@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
+import { 
+    Eye, Link, Hand, Microscope, Clock, CheckCircle, Send, X, Loader2, RefreshCw,
+    Briefcase, GraduationCap, Building2, Globe, Newspaper, Lightbulb, TrafficCone, Save, MapPin, Store, Folder
+} from 'lucide-react';
 import type { LinkedInContact, INote } from '../../services/linkedin-crm.service';
 import { getContact, addNote, enrichContact } from '../../services/linkedin-crm.service';
 
 // ── Status config ─────────────────────────────────────────────
 
-const STATUS_INFO: Record<string, { label: string; color: string; icon: string }> = {
-    visitando: { label: 'Visitando', color: '#06b6d4', icon: '👁️' },
-    conectando: { label: 'Conectando', color: '#eab308', icon: '🔗' },
-    interactuando: { label: 'Interactuando', color: '#f97316', icon: '👋' },
-    enriqueciendo: { label: 'Enriqueciendo', color: '#a855f7', icon: '🔬' },
-    esperando_aceptacion: { label: 'Esperando Aceptación', color: '#f59e0b', icon: '⏳' },
-    aceptado: { label: 'Aceptado', color: '#10b981', icon: '🤝' },
-    mensaje_enviado: { label: 'Mensaje Enviado', color: '#8b5cf6', icon: '🚀' },
+const STATUS_INFO: Record<string, { label: string; color: string; Icon: React.ElementType }> = {
+    visitando: { label: 'Visitando', color: '#06b6d4', Icon: Eye },
+    conectando: { label: 'Conectando', color: '#eab308', Icon: Link },
+    interactuando: { label: 'Interactuando', color: '#f97316', Icon: Hand },
+    enriqueciendo: { label: 'Enriqueciendo', color: '#a855f7', Icon: Microscope },
+    esperando_aceptacion: { label: 'Esperando Aceptación', color: '#f59e0b', Icon: Clock },
+    aceptado: { label: 'Aceptado', color: '#10b981', Icon: CheckCircle },
+    mensaje_enviado: { label: 'Mensaje Enviado', color: '#8b5cf6', Icon: Send },
 };
 
 function formatDate(dateStr?: string): string {
@@ -95,6 +99,8 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
 
     if (!contactId) return null;
 
+    const StatusIcon = contact ? STATUS_INFO[contact.status]?.Icon : null;
+
     return (
         <div
             onClick={handleBackdropClick}
@@ -132,7 +138,7 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                             className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center z-10 hover:bg-slate-200/60 transition-colors"
                             style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)' }}
                         >
-                            ✕
+                            <X size={16} />
                         </button>
 
                         {/* Header */}
@@ -158,7 +164,10 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                         <p className="text-sm text-slate-500 mt-1 line-clamp-2">{contact.headline}</p>
                                     )}
                                     {contact.location && (
-                                        <p className="text-xs text-slate-400 mt-1">📍 {contact.location}</p>
+                                        <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                                            <MapPin size={10} />
+                                            {contact.location}
+                                        </p>
                                     )}
                                 </div>
                             </div>
@@ -166,13 +175,14 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                             {/* Status badge */}
                             <div className="mt-3 flex items-center gap-2">
                                 <span
-                                    className="text-xs font-medium px-3 py-1 rounded-full"
+                                    className="text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1.5"
                                     style={{
                                         background: `${STATUS_INFO[contact.status]?.color}20`,
                                         color: STATUS_INFO[contact.status]?.color,
                                     }}
                                 >
-                                    {STATUS_INFO[contact.status]?.icon} {STATUS_INFO[contact.status]?.label}
+                                    {StatusIcon && <StatusIcon size={12} />}
+                                    {STATUS_INFO[contact.status]?.label}
                                 </span>
                                 {contact.connectionDegree && (
                                     <span className="text-xs text-slate-400 px-2 py-1 rounded-full bg-slate-100">
@@ -180,8 +190,9 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     </span>
                                 )}
                                 {contact.connectionsCount && (
-                                    <span className="text-xs text-slate-400 px-2 py-1 rounded-full bg-slate-100">
-                                        🔗 {contact.connectionsCount}
+                                    <span className="text-xs text-slate-400 px-2 py-1 rounded-full bg-slate-100 flex items-center gap-1">
+                                        <Link size={10} />
+                                        {contact.connectionsCount}
                                     </span>
                                 )}
                             </div>
@@ -235,12 +246,12 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     {contact.experience.map((exp, i) => (
                                         <div key={i} className="flex items-start gap-3">
                                             <div
-                                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs"
+                                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                                                 style={{ background: 'rgba(124,58,237,0.08)' }}
                                             >
                                                 {exp.logoUrl ? (
                                                     <img src={exp.logoUrl} alt="" className="w-full h-full object-contain rounded-lg" />
-                                                ) : '💼'}
+                                                ) : <Briefcase size={14} color="#7c3aed" />}
                                             </div>
                                             <div>
                                                 <p className="text-sm font-medium text-slate-700">{exp.position}</p>
@@ -261,9 +272,11 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     {contact.education.map((edu, i) => (
                                         <div key={i} className="flex items-start gap-3">
                                             <div
-                                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs"
+                                                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                                                 style={{ background: 'rgba(124,58,237,0.08)' }}
-                                            >🎓</div>
+                                            >
+                                                <GraduationCap size={14} color="#7c3aed" />
+                                            </div>
                                             <div>
                                                 <p className="text-sm font-medium text-slate-700">{edu.institution}</p>
                                                 {edu.degree && <p className="text-xs text-slate-500">{edu.degree}</p>}
@@ -296,34 +309,43 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                         {/* Enrichment Section */}
                         <div className="px-6 py-4 border-b border-purple-100/50">
                             <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                    🔬 Enriquecimiento
+                                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Microscope size={12} />
+                                    Enriquecimiento
                                 </h3>
                                 {contact.enrichmentStatus !== 'enriching' && (
                                     <button
                                         onClick={handleEnrich}
                                         disabled={enriching}
-                                        className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                                        className="text-xs px-3 py-1 rounded-full font-medium transition-all flex items-center gap-1"
                                         style={{
                                             background: enriching ? '#e2e8f0' : 'rgba(124,58,237,0.1)',
                                             color: enriching ? '#94a3b8' : '#7c3aed',
                                             cursor: enriching ? 'wait' : 'pointer',
                                         }}
                                     >
-                                        {enriching ? '⏳ Enriqueciendo...' : contact.enrichmentStatus === 'completed' ? '🔄 Re-enriquecer' : '🔬 Enriquecer'}
+                                        {enriching ? (
+                                            <><Loader2 size={12} className="animate-spin" /> Enriqueciendo...</>
+                                        ) : contact.enrichmentStatus === 'completed' ? (
+                                            <><RefreshCw size={12} /> Re-enriquecer</>
+                                        ) : (
+                                            <><Microscope size={12} /> Enriquecer</>
+                                        )}
                                     </button>
                                 )}
                             </div>
 
                             {/* Status banner */}
                             {contact.enrichmentStatus === 'enriching' && (
-                                <div className="p-3 rounded-lg mb-3 text-sm" style={{ background: 'rgba(234,179,8,0.1)', color: '#ca8a04' }}>
-                                    ⏳ Enriquecimiento en proceso...
+                                <div className="p-3 rounded-lg mb-3 text-sm flex items-center gap-2" style={{ background: 'rgba(234,179,8,0.1)', color: '#ca8a04' }}>
+                                    <Loader2 size={14} className="animate-spin" />
+                                    Enriquecimiento en proceso...
                                 </div>
                             )}
                             {contact.enrichmentStatus === 'failed' && (
-                                <div className="p-3 rounded-lg mb-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626' }}>
-                                    ❌ El enriquecimiento falló. Intentá de nuevo.
+                                <div className="p-3 rounded-lg mb-3 text-sm flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626' }}>
+                                    <X size={14} />
+                                    El enriquecimiento falló. Intentá de nuevo.
                                 </div>
                             )}
 
@@ -333,24 +355,30 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     {/* Company info */}
                                     {contact.enrichmentData.company && (
                                         <div className="p-3 rounded-lg bg-white/60 border border-purple-50">
-                                            <p className="text-xs font-semibold text-slate-600 mb-1">🏢 {contact.enrichmentData.company.name || 'Empresa'}</p>
+                                            <p className="text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
+                                                <Building2 size={12} />
+                                                {contact.enrichmentData.company.name || 'Empresa'}
+                                            </p>
                                             {contact.enrichmentData.company.description && (
                                                 <p className="text-xs text-slate-500 mb-1">{contact.enrichmentData.company.description}</p>
                                             )}
                                             <div className="flex flex-wrap gap-2 mt-1">
                                                 {contact.enrichmentData.company.locationsCount && (
-                                                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
-                                                        🏪 {contact.enrichmentData.company.locationsCount} locales
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
+                                                        <Store size={10} />
+                                                        {contact.enrichmentData.company.locationsCount} locales
                                                     </span>
                                                 )}
                                                 {contact.enrichmentData.company.sector && (
-                                                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
-                                                        📂 {contact.enrichmentData.company.sector}
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>
+                                                        <Folder size={10} />
+                                                        {contact.enrichmentData.company.sector}
                                                     </span>
                                                 )}
                                                 {contact.enrichmentData.company.website && contact.enrichmentData.company.website !== 'No verificado' && (
-                                                    <a href={contact.enrichmentData.company.website} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,0.1)', color: '#7c3aed' }}>
-                                                        🌐 Web
+                                                    <a href={contact.enrichmentData.company.website} target="_blank" rel="noopener noreferrer" className="text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'rgba(124,58,237,0.1)', color: '#7c3aed' }}>
+                                                        <Globe size={10} />
+                                                        Web
                                                     </a>
                                                 )}
                                             </div>
@@ -360,7 +388,10 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     {/* Person news */}
                                     {contact.enrichmentData.personNews?.length > 0 && (
                                         <div>
-                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">📰 Noticias</p>
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                                                <Newspaper size={10} />
+                                                Noticias
+                                            </p>
                                             {contact.enrichmentData.personNews.slice(0, 3).map((news: any, i: number) => (
                                                 <div key={i} className="p-2 rounded-lg bg-white/40 mb-1">
                                                     <p className="text-xs text-slate-700 font-medium">{news.title}</p>
@@ -376,9 +407,23 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     {/* Key insights */}
                                     {contact.enrichmentData.keyInsights?.length > 0 && (
                                         <div>
-                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">💡 Insights</p>
-                                            {contact.enrichmentData.keyInsights.map((insight: string, i: number) => (
-                                                <p key={i} className="text-xs text-slate-600 mb-0.5">• {insight}</p>
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                                                <Lightbulb size={10} />
+                                                Insights
+                                            </p>
+                                            {contact.enrichmentData.keyInsights.map((insight: any, i: number) => (
+                                                <div key={i} className="flex items-start gap-1.5 mb-1">
+                                                    <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                                                        insight.confidence === 'high' ? 'bg-green-500' : 
+                                                        insight.confidence === 'medium' ? 'bg-yellow-500' : 'bg-red-400'
+                                                    }`} />
+                                                    <div className="flex-1">
+                                                        <p className="text-xs text-slate-600">{insight.text || insight}</p>
+                                                        {insight.source && insight.source !== 'No verificado' && (
+                                                            <span className="text-[10px] text-slate-400">{insight.source}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             ))}
                                         </div>
                                     )}
@@ -386,11 +431,25 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     {/* Buying signals */}
                                     {contact.enrichmentData.buyingSignals?.length > 0 && (
                                         <div>
-                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">🚦 Señales de Compra</p>
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                                                <TrafficCone size={10} />
+                                                Señales de Compra
+                                            </p>
                                             <div className="flex flex-wrap gap-1.5">
-                                                {contact.enrichmentData.buyingSignals.map((signal: string, i: number) => (
-                                                    <span key={i} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
-                                                        {signal}
+                                                {contact.enrichmentData.buyingSignals.map((signal: any, i: number) => (
+                                                    <span 
+                                                        key={i} 
+                                                        className="text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1" 
+                                                        style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}
+                                                        title={signal.source || ''}
+                                                    >
+                                                        {signal.text || signal}
+                                                        {signal.confidence && (
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${
+                                                                signal.confidence === 'high' ? 'bg-green-500' : 
+                                                                signal.confidence === 'medium' ? 'bg-yellow-500' : 'bg-red-400'
+                                                            }`} />
+                                                        )}
                                                     </span>
                                                 ))}
                                             </div>
@@ -408,7 +467,7 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
 
                             {/* Not enriched yet */}
                             {!contact.enrichmentStatus && !enriching && (
-                                <p className="text-xs text-slate-400 italic">Sin datos de enriquecimiento. Hacé click en "Enriquecer" para investigar este contacto.</p>
+                                <p className="text-xs text-slate-400 italic">Sin datos de enriquecimiento. Hacé click en &quot;Enriquecer&quot; para investigar este contacto.</p>
                             )}
                         </div>
 
@@ -431,10 +490,10 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                 <button
                                     onClick={handleAddNote}
                                     disabled={!noteText.trim() || savingNote}
-                                    className="px-3 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50"
+                                    className="px-3 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50 flex items-center justify-center"
                                     style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
                                 >
-                                    {savingNote ? '...' : '💾'}
+                                    {savingNote ? '...' : <Save size={16} />}
                                 </button>
                             </div>
 
@@ -463,7 +522,8 @@ export default function ContactDrawer({ contactId, onClose }: Props) {
                                     color: 'white',
                                 }}
                             >
-                                🔗 Ver en LinkedIn
+                                <Link size={16} />
+                                Ver en LinkedIn
                             </a>
                         </div>
                     </>

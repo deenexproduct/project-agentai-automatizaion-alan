@@ -21,6 +21,28 @@ const STEP_ICONS: Record<StepStatus, string> = {
     error: '❌',
 };
 
+// Message templates with variables
+const MESSAGE_TEMPLATES = [
+    {
+        label: 'Simple',
+        text: 'Hola {nombre}, me interesa conectar contigo.',
+    },
+    {
+        label: 'Profesional',
+        text: 'Hola {nombre}, veo que trabajas en {empresa}. Me gustaría conectar para explorar posibles sinergias entre nuestras empresas.',
+    },
+    {
+        label: 'Por cargo',
+        text: 'Hola {nombre}, como {cargo} en {empresa}, seguro entiendes los desafíos del sector {industria}. Me gustaría conectar y compartir ideas.',
+    },
+    {
+        label: 'Personalizado',
+        text: 'Hola {nombre}, vi tu perfil y me interesa tu experiencia en {empresa}. Me gustaría conectar y aprender más sobre tu trabajo en {industria}.',
+    },
+];
+
+const AVAILABLE_VARIABLES = ['{nombre}', '{empresa}', '{cargo}', '{industria}', '{ubicacion}'];
+
 export default function ProspectingPage() {
     // ── State ──────────────────────────────────
     const [status, setStatus] = useState<LinkedInStatus | null>(null);
@@ -433,19 +455,64 @@ export default function ProspectingPage() {
                 </div>
 
                 {sendNote && (
-                    <textarea
-                        value={noteText}
-                        onChange={(e) => setNoteText(e.target.value)}
-                        placeholder="Hola {nombre}, me interesa conectar contigo..."
-                        rows={3}
-                        disabled={isRunning}
-                        className="w-full mt-3 rounded-xl p-4 text-sm resize-none transition-all outline-none"
-                        style={{
-                            background: 'rgba(30, 27, 75, 0.03)',
-                            border: '1px solid rgba(124, 58, 237, 0.15)',
-                            color: '#1e1b4b',
-                        }}
-                    />
+                    <>
+                        {/* Template buttons */}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {MESSAGE_TEMPLATES.map((template) => (
+                                <button
+                                    key={template.label}
+                                    onClick={() => setNoteText(template.text)}
+                                    disabled={isRunning}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                                    style={{
+                                        background: noteText === template.text 
+                                            ? 'rgba(124, 58, 237, 0.2)' 
+                                            : 'rgba(124, 58, 237, 0.08)',
+                                        color: '#7c3aed',
+                                        border: noteText === template.text 
+                                            ? '1px solid rgba(124, 58, 237, 0.3)' 
+                                            : '1px solid transparent',
+                                    }}
+                                >
+                                    {template.label}
+                                </button>
+                            ))}
+                        </div>
+                        
+                        <textarea
+                            value={noteText}
+                            onChange={(e) => setNoteText(e.target.value)}
+                            placeholder="Hola {nombre}, me interesa conectar contigo...&#10;&#10;Variables disponibles: {nombre}, {empresa}, {cargo}, {industria}, {ubicacion}"
+                            rows={4}
+                            disabled={isRunning}
+                            className="w-full mt-3 rounded-xl p-4 text-sm resize-none transition-all outline-none"
+                            style={{
+                                background: 'rgba(30, 27, 75, 0.03)',
+                                border: '1px solid rgba(124, 58, 237, 0.15)',
+                                color: '#1e1b4b',
+                            }}
+                        />
+                        
+                        {/* Variables hint */}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-xs" style={{ color: '#9ca3af' }}>Variables:</span>
+                            {AVAILABLE_VARIABLES.map((variable) => (
+                                <button
+                                    key={variable}
+                                    onClick={() => setNoteText(noteText + variable)}
+                                    disabled={isRunning}
+                                    className="px-2 py-0.5 rounded text-xs font-mono transition-all hover:bg-purple-100 disabled:opacity-50"
+                                    style={{
+                                        background: 'rgba(124, 58, 237, 0.08)',
+                                        color: '#7c3aed',
+                                    }}
+                                    title={`Insertar ${variable}`}
+                                >
+                                    {variable}
+                                </button>
+                            ))}
+                        </div>
+                    </>
                 )}
 
                 {/* Action Buttons */}

@@ -1,0 +1,42 @@
+version: 1
+agent:
+  name: voicecommand-main
+  description: "Orquestador principal del proyecto VoiceCommand - CRM con LinkedIn automation y AI enrichment"
+  system_prompt_path: ./system.md
+  tools:
+    - "kimi_cli.tools.multiagent:Task"
+    - "kimi_cli.tools.todo:SetTodoList"
+    - "kimi_cli.tools.shell:Shell"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:ReadMediaFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.file:Grep"
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.web:SearchWeb"
+    - "kimi_cli.tools.web:FetchURL"
+  subagents:
+    backend-dev:
+      path: ./subagents/backend-dev.yaml
+      description: "Especialista en backend Node.js, Express, TypeScript y APIs REST"
+    frontend-dev:
+      path: ./subagents/frontend-dev.yaml
+      description: "Especialista en frontend React, Vite, TypeScript y UI/UX"
+    database-engineer:
+      path: ./subagents/database-engineer.yaml
+      description: "Especialista en MongoDB, diseño de schemas y optimización de queries"
+    devops-engineer:
+      path: ./subagents/devops-engineer.yaml
+      description: "Especialista en Docker, deployment, CI/CD y infraestructura"
+    qa-tester:
+      path: ./subagents/qa-tester.yaml
+      description: "Especialista en testing con Jest, Playwright y calidad de código"
+    linkedin-automation:
+      path: ./subagents/linkedin-automation.yaml
+      description: "Especialista en Puppeteer, scraping de LinkedIn y automatización"
+    ai-enrichment:
+      path: ./subagents/ai-enrichment.yaml
+      description: "Especialista en OpenRouter, prompts engineering y enriquecimiento de datos"
+    documentation:
+      path: ./subagents/documentation.yaml
+      description: "Especialista en documentación técnica, READMEs y guías de usuario"

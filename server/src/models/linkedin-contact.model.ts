@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Model, FilterQuery, QueryOptions } from 'mongoose';
 
 // ── Interfaces ────────────────────────────────────────────────
 
@@ -123,6 +123,13 @@ export interface ILinkedInContact extends Document {
 
     // CRM State
     status: ContactStatus;
+    /**
+     * @deprecated Use `status` instead. Maintained for backward compatibility.
+     */
+    pipelineStatus?: ContactStatus;
+
+    // Multi-tenant support (optional, for future use)
+    userId?: mongoose.Types.ObjectId;
 
     // Pipeline timestamps
     sentAt: Date;                    // Cuando se envió la solicitud de conexión
@@ -143,6 +150,15 @@ export interface ILinkedInContact extends Document {
     enrichmentData?: IEnrichmentData;
     enrichmentStatus?: EnrichmentStatus;
     contextFilePath?: string;
+}
+
+// ── Query Options Interface ───────────────────────────────────
+
+export interface IContactQueryOptions extends QueryOptions {
+    limit?: number;
+    skip?: number;
+    sort?: Record<string, 1 | -1>;
+    populate?: string | string[];
 }
 
 // ── Schema ────────────────────────────────────────────────────
@@ -167,18 +183,32 @@ const NoteSchema = new Schema<INote>({
 
 const LinkedInContactSchema = new Schema<ILinkedInContact>({
     // Identification
-    profileUrl: { type: String, required: true, unique: true },
-    fullName: { type: String, required: true },
-    firstName: { type: String },
-    lastName: { type: String },
-    headline: { type: String },
+    profileUrl: { 
+        type: String, 
+        required: true, 
+        unique: true,
+        trim: true,
+        index: true, // Single index for exact lookups
+    },
+    fullName: { 
+        type: String, 
+        required: true,
+        trim: true,
+    },
+    firstName: { type: String, trim: true },
+    lastName: { type: String, trim: true },
+    headline: { type: String, trim: true },
 
     // Professional
-    currentCompany: { type: String },
-    currentPosition: { type: String },
+    currentCompany: { 
+        type: String, 
+        trim: true,
+        index: true, // Index for company-based queries
+    },
+    currentPosition: { type: String, trim: true },
     companyLogoUrl: { type: String },
-    industry: { type: String },
-    location: { type: String },
+    industry: { type: String, trim: true },
+    location: { type: String, trim: true },
 
     // Extended profile
     profilePhotoUrl: { type: String },
@@ -198,6 +228,21 @@ const LinkedInContactSchema = new Schema<ILinkedInContact>({
         type: String,
         enum: ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'],
         default: 'visitando',
+        index: true, // Single index for status filtering
+    },
+    // Alias for backward compatibility and future multi-status support
+    pipelineStatus: {
+        type: String,
+        enum: ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'],
+        default: null,
+    },
+
+    // Multi-tenant support (optional)
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+        index: true,
     },
 
     // Pipeline timestamps
@@ -211,35 +256,243 @@ const LinkedInContactSchema = new Schema<ILinkedInContact>({
     notes: { type: [NoteSchema], default: [] },
 
     // Metadata
-    prospectingBatchId: { type: String },
+    prospectingBatchId: { type: String, index: true },
 
     // Enrichment
     enrichmentData: { type: Schema.Types.Mixed, default: null },
-    enrichmentStatus: { type: String, enum: ['pending', 'enriching', 'completed', 'failed'], default: null },
+    enrichmentStatus: { 
+        type: String, 
+        enum: ['pending', 'enriching', 'completed', 'failed'], 
+        default: null,
+        index: true,
+    },
     contextFilePath: { type: String },
 }, {
     timestamps: true, // adds createdAt + updatedAt automatically
 });
 
-// ── Indexes for 100K+ performance ─────────────────────────────
+// ── Optimized Indexes for High-Volume Performance ─────────────
 
-// Unique profile URL — prevent duplicates
-// LinkedInContactSchema.index({ profileUrl: 1 }, { unique: true }); // Already handled by schema definition
+/**
+ * INDEX STRATEGY DOCUMENTATION
+ * ============================
+ * 
+ * 1. COMPOUND INDEX: pipelineStatus + createdAt
+ *    - Supports: Filtering by status sorted by creation date
+ *    - Use case: Kanban boards, recent contacts by status
+ *    - Note: Uses `status` field (pipelineStatus is alias)
+ */
+LinkedInContactSchema.index({ status: 1, createdAt: -1 });
 
-// Filter by status + sort by date — Kanban columns
-LinkedInContactSchema.index({ status: 1, updatedAt: -1 });
-
-// Full-text search on name, headline, company
+/**
+ * 2. COMPOUND INDEX: userId + pipelineStatus
+ *    - Supports: Multi-tenant queries by user and status
+ *    - Use case: User-scoped contact lists
+ *    - Note: Partial index for documents with userId
+ */
 LinkedInContactSchema.index(
-    { fullName: 'text', headline: 'text', currentCompany: 'text' },
-    { weights: { fullName: 10, currentCompany: 5, headline: 3 } }
+    { userId: 1, status: 1 },
+    { partialFilterExpression: { userId: { $exists: true } } }
 );
 
-// Sort by pipeline dates
+/**
+ * 3. INDEX: company
+ *    - Supports: Filtering by current company
+ *    - Use case: Company-based contact segmentation
+ *    - Note: Defined in schema definition above
+ */
+// currentCompany: { type: String, index: true } // Already defined in schema
+
+/**
+ * 4. TEXT INDEX: fullName
+ *    - Supports: Full-text search on contact names
+ *    - Use case: Search autocomplete, name matching
+ *    - Note: Weights prioritize fullName over other fields
+ */
+LinkedInContactSchema.index(
+    { fullName: 'text' },
+    { 
+        name: 'text_search_fullname',
+        default_language: 'spanish',
+        weights: { fullName: 10 }
+    }
+);
+
+/**
+ * 5. LEGACY TEXT INDEX (compound)
+ *    - Supports: Full-text search across multiple fields
+ *    - Use case: Global search in contact list
+ */
+LinkedInContactSchema.index(
+    { fullName: 'text', headline: 'text', currentCompany: 'text' },
+    { 
+        name: 'text_search_compound',
+        weights: { fullName: 10, currentCompany: 5, headline: 3 },
+        default_language: 'spanish',
+    }
+);
+
+/**
+ * 6. STATUS + UPDATED AT
+ *    - Supports: Kanban columns with recent activity sorting
+ *    - Use case: Main dashboard view
+ */
+LinkedInContactSchema.index({ status: 1, updatedAt: -1 });
+
+/**
+ * 7. PIPELINE DATE INDEXES
+ *    - Supports: Sorting by various pipeline events
+ *    - Use case: Timeline views, recent activity reports
+ */
 LinkedInContactSchema.index({ sentAt: -1 });
 LinkedInContactSchema.index({ acceptedAt: -1 });
+LinkedInContactSchema.index({ enrichedAt: -1 });
 
-// Enrichment status queries
-LinkedInContactSchema.index({ enrichmentStatus: 1 });
+/**
+ * 8. ENRICHMENT STATUS + CREATED AT
+ *    - Supports: Enrichment queue processing
+ *    - Use case: Batch enrichment jobs
+ */
+LinkedInContactSchema.index({ enrichmentStatus: 1, createdAt: 1 });
 
-export const LinkedInContact = mongoose.model<ILinkedInContact>('LinkedInContact', LinkedInContactSchema);
+// ── Static Methods ────────────────────────────────────────────
+
+export interface ILinkedInContactModel extends Model<ILinkedInContact> {
+    /**
+     * Find contacts by pipeline status with pagination
+     * @param status - Pipeline status to filter by
+     * @param options - Query options (limit, skip, sort, populate)
+     * @returns Promise with contacts and count
+     */
+    findByPipelineStatus(
+        status: ContactStatus,
+        options?: IContactQueryOptions
+    ): Promise<{ contacts: any[]; total: number }>;
+
+    /**
+     * Find enriched contacts with populated enrichment data
+     * @param options - Query options (limit, skip, sort)
+     * @returns Promise with enriched contacts
+     */
+    findEnriched(
+        options?: IContactQueryOptions
+    ): Promise<any[]>;
+
+    /**
+     * Find contacts pending enrichment (queued for processing)
+     * @param limit - Maximum number of contacts to return (default: 100)
+     * @returns Promise with contacts pending enrichment
+     */
+    findPendingEnrichment(
+        limit?: number
+    ): Promise<any[]>;
+}
+
+// Static method: Find by pipeline status
+LinkedInContactSchema.statics.findByPipelineStatus = async function(
+    this: ILinkedInContactModel,
+    status: ContactStatus,
+    options: IContactQueryOptions = {}
+): Promise<{ contacts: any[]; total: number }> {
+    const { limit = 50, skip = 0, sort = { createdAt: -1 }, populate } = options;
+    
+    const filter: FilterQuery<ILinkedInContact> = { 
+        $or: [{ status }, { pipelineStatus: status }] 
+    };
+    
+    const [contacts, total] = await Promise.all([
+        this.find(filter)
+            .sort(sort)
+            .skip(skip)
+            .limit(limit)
+            .populate(populate || [])
+            .lean()
+            .exec(),
+        this.countDocuments(filter).exec()
+    ]);
+    
+    return { contacts, total };
+};
+
+// Static method: Find enriched contacts
+LinkedInContactSchema.statics.findEnriched = async function(
+    this: ILinkedInContactModel,
+    options: IContactQueryOptions = {}
+): Promise<any[]> {
+    const { limit = 50, skip = 0, sort = { enrichedAt: -1 } } = options;
+    
+    return this.find({
+        enrichmentStatus: 'completed',
+        enrichmentData: { $exists: true, $ne: null }
+    })
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec();
+};
+
+// Static method: Find pending enrichment
+LinkedInContactSchema.statics.findPendingEnrichment = async function(
+    this: ILinkedInContactModel,
+    limit: number = 100
+): Promise<any[]> {
+    return this.find({
+        $and: [
+            {
+                $or: [
+                    { enrichmentStatus: 'pending' },
+                    { enrichmentStatus: { $exists: false } }
+                ]
+            },
+            // Exclude recently processed to prevent race conditions
+            {
+                $or: [
+                    { updatedAt: { $lt: new Date(Date.now() - 60000) } }, // 1 minute buffer
+                    { updatedAt: { $exists: false } }
+                ]
+            }
+        ]
+    })
+        .sort({ createdAt: 1 }) // FIFO order
+        .limit(limit)
+        .select('-enrichmentData') // Exclude large data field for performance
+        .lean()
+        .exec();
+};
+
+// ── Instance Methods ─────────────────────────────────────────
+
+/**
+ * Check if contact is fully enriched
+ */
+LinkedInContactSchema.methods.isEnriched = function(this: ILinkedInContact): boolean {
+    return this.enrichmentStatus === 'completed' && !!this.enrichmentData;
+};
+
+/**
+ * Get display name with position
+ */
+LinkedInContactSchema.methods.getDisplayName = function(this: ILinkedInContact): string {
+    if (this.currentPosition && this.currentCompany) {
+        return `${this.fullName} - ${this.currentPosition} at ${this.currentCompany}`;
+    }
+    return this.fullName;
+};
+
+// ── Pre-save Middleware ──────────────────────────────────────
+
+// Sync pipelineStatus with status for backward compatibility
+LinkedInContactSchema.pre('save', function(next) {
+    if (this.isModified('status') && !this.pipelineStatus) {
+        this.pipelineStatus = this.status;
+    }
+    next();
+});
+
+// ── Export ───────────────────────────────────────────────────
+
+export const LinkedInContact = mongoose.model<ILinkedInContact, ILinkedInContactModel>(
+    'LinkedInContact', 
+    LinkedInContactSchema
+);
