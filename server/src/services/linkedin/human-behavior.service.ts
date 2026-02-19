@@ -52,6 +52,7 @@ export class HumanBehaviorService {
 
     /**
      * Scroll humanizado con aceleración/desaceleración
+     * NOTA: Se usa scroll simple para evitar problemas con tsx/esbuild y __name
      */
     async humanScroll(page: Page, options: ScrollOptions = {}): Promise<void> {
         const {
@@ -59,8 +60,6 @@ export class HumanBehaviorService {
             maxScrolls = 5,
             minDistance = 100,
             maxDistance = 400,
-            minDuration = 800,
-            maxDuration = 2500,
             readPauseChance = 0.2
         } = options;
 
@@ -68,31 +67,16 @@ export class HumanBehaviorService {
         
         for (let i = 0; i < scrolls; i++) {
             const distance = this.getRandomInt(minDistance, maxDistance);
-            const duration = this.getRandomInt(minDuration, maxDuration);
+            const steps = this.getRandomInt(5, 15);
+            const stepDelay = this.getRandomInt(30, 80);
             
-            // Scroll suave con easing function
-            await page.evaluate(({ d, dur }) => {
-                const start = window.scrollY;
-                const startTime = performance.now();
-                
-                const animate = (currentTime: number) => {
-                    const elapsed = currentTime - startTime;
-                    const progress = Math.min(elapsed / dur, 1);
-                    
-                    // Easing function: easeInOutCubic
-                    const ease = progress < 0.5
-                        ? 4 * progress * progress * progress
-                        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-                    
-                    window.scrollTo(0, start + d * ease);
-                    
-                    if (progress < 1) {
-                        requestAnimationFrame(animate);
-                    }
-                };
-                
-                requestAnimationFrame(animate);
-            }, { d: distance, dur: duration });
+            // Scroll simple paso a paso (evita funciones anidadas en page.evaluate)
+            for (let step = 0; step < steps; step++) {
+                await page.evaluate((d) => {
+                    window.scrollBy(0, d);
+                }, Math.round(distance / steps));
+                await this.delay(stepDelay);
+            }
 
             // Pausa variable entre scrolls
             const pauseDelay = this.getRandomDelay(500, 2000);
@@ -108,28 +92,22 @@ export class HumanBehaviorService {
 
     /**
      * Scroll rápido para navegación
+     * NOTA: Se usa scroll simple para evitar problemas con tsx/esbuild y __name
      */
     async quickScroll(page: Page, direction: 'up' | 'down' = 'down'): Promise<void> {
         const distance = direction === 'down' ? 300 : -300;
-        const duration = this.getRandomInt(400, 800);
+        const steps = this.getRandomInt(3, 6);
+        const stepDelay = this.getRandomInt(50, 100);
         
-        await page.evaluate(({ d, dur }) => {
-            const start = window.scrollY;
-            const startTime = performance.now();
-            
-            const animate = (currentTime: number) => {
-                const elapsed = currentTime - startTime;
-                const progress = Math.min(elapsed / dur, 1);
-                const ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
-                window.scrollTo(0, start + d * ease);
-                
-                if (progress < 1) (window as any).requestAnimationFrame(animate);
-            };
-            
-            (window as any).requestAnimationFrame(animate);
-        }, { d: distance, dur: duration });
+        // Scroll simple paso a paso (evita funciones anidadas en page.evaluate)
+        for (let step = 0; step < steps; step++) {
+            await page.evaluate((d) => {
+                window.scrollBy(0, d);
+            }, Math.round(distance / steps));
+            await this.delay(stepDelay);
+        }
         
-        await this.delay(this.getRandomDelay(300, 800));
+        await this.delay(this.getRandomDelay(200, 500));
     }
 
     /**

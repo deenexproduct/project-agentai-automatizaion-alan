@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft } from 'lucide-react';
+import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft, Sparkles } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
 import CRMPage from './CRMPage';
+import ConfigPage from './ConfigPage';
+import PublicacionesPage from './PublicacionesPage';
 
-type SidebarTab = 'crm' | 'prospecting' | 'comments' | 'requests' | 'config';
+type SidebarTab = 'crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config';
 
 interface SidebarItem {
     id: SidebarTab;
@@ -15,10 +17,11 @@ interface SidebarItem {
 
 const sidebarItems: SidebarItem[] = [
     { id: 'crm', Icon: BarChart3, label: 'CRM' },
+    { id: 'publicaciones', Icon: Sparkles, label: 'Publicaciones' },
     { id: 'prospecting', Icon: Target, label: 'Prospecting' },
     { id: 'comments', Icon: MessageSquare, label: 'Comentarios', disabled: true },
     { id: 'requests', Icon: Users, label: 'Solicitudes', disabled: true },
-    { id: 'config', Icon: Settings, label: 'Configuración', disabled: true },
+    { id: 'config', Icon: Settings, label: 'Configuración' },
 ];
 
 export default function LinkedInApp() {
@@ -101,9 +104,10 @@ export default function LinkedInApp() {
                             }}
                         >
                             {activeTab === 'crm' ? 'CRM Pipeline' :
-                                activeTab === 'prospecting' ? 'Prospecting' :
-                                    activeTab === 'comments' ? 'Comentarios' :
-                                        activeTab === 'requests' ? 'Solicitudes' : 'Config'}
+                                activeTab === 'publicaciones' ? 'Publicaciones AI' :
+                                    activeTab === 'prospecting' ? 'Prospecting' :
+                                        activeTab === 'comments' ? 'Comentarios' :
+                                            activeTab === 'requests' ? 'Solicitudes' : 'Config'}
                         </span>
                     </div>
                 </header>
@@ -111,13 +115,9 @@ export default function LinkedInApp() {
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto p-6">
                     {activeTab === 'crm' && <CRMPage />}
+                    {activeTab === 'publicaciones' && <PublicacionesPage />}
                     {activeTab === 'prospecting' && <ProspectingPage />}
-                    {activeTab === 'config' && (
-                        <div className="text-center py-20 text-slate-400 flex flex-col items-center gap-3">
-                            <Settings size={48} opacity={0.5} />
-                            <span>Configuración — Próximamente</span>
-                        </div>
-                    )}
+                    {activeTab === 'config' && <ConfigPage />}
                 </div>
             </main>
         </div>

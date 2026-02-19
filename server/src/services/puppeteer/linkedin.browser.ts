@@ -125,7 +125,7 @@ export class LinkedInBrowserService extends EventEmitter {
             // 1. Randomizar configuración
             const userAgent = getRandomUserAgent();
             const viewport = getRandomViewport();
-            
+
             this.log(`   User Agent: ${userAgent.substring(0, 60)}...`);
             this.log(`   Viewport: ${viewport.width}x${viewport.height} (scale: ${viewport.deviceScaleFactor})`);
 
@@ -135,7 +135,7 @@ export class LinkedInBrowserService extends EventEmitter {
 
             // 3. Crear página y configurar
             const page = await browser.newPage();
-            
+
             // Configurar viewport
             await page.setViewport({
                 width: viewport.width,
@@ -219,11 +219,11 @@ export class LinkedInBrowserService extends EventEmitter {
     private async setupPageMonitoring(page: Page): Promise<void> {
         // Monitorear requests
         await page.setRequestInterception(true);
-        
+
         page.on('request', (request: HTTPRequest) => {
             // Permitir todos los requests por defecto
             request.continue();
-            
+
             // Log de requests de recursos sospechosos
             const url = request.url();
             if (url.includes('captcha') || url.includes('challenge') || url.includes('security')) {
@@ -235,7 +235,7 @@ export class LinkedInBrowserService extends EventEmitter {
         page.on('response', (response: HTTPResponse) => {
             const status = response.status();
             const url = response.url();
-            
+
             // Detectar errores HTTP
             if (status === 429) {
                 this.log(`   🚫 Rate limit detected (429) for: ${url.substring(0, 80)}`);
@@ -251,13 +251,13 @@ export class LinkedInBrowserService extends EventEmitter {
         // Manejar diálogos
         page.on('dialog', async (dialog) => {
             this.log(`   🔔 Dialog detected: "${dialog.message().substring(0, 80)}"`);
-            await dialog.dismiss().catch(() => {});
+            await dialog.dismiss().catch(() => { });
         });
 
         // Manejar errores de consola
         page.on('console', (msg) => {
             const text = msg.text().toLowerCase();
-            if (text.includes('error') && 
+            if (text.includes('error') &&
                 (text.includes('captcha') || text.includes('block') || text.includes('bot'))) {
                 this.log(`   ⚠️ Console error: ${msg.text().substring(0, 100)}`);
             }
@@ -272,8 +272,8 @@ export class LinkedInBrowserService extends EventEmitter {
      * Navega a una URL con retry automático y detección de bloqueos
      */
     async navigate(
-        url: string, 
-        options: { 
+        url: string,
+        options: {
             waitUntil?: 'load' | 'domcontentloaded' | 'networkidle0' | 'networkidle2';
             timeout?: number;
             retryConfig?: RetryConfig;
@@ -306,40 +306,40 @@ export class LinkedInBrowserService extends EventEmitter {
                 this.log(`🌐 Navigating to: ${url.substring(0, 80)} (attempt ${attempt + 1})`);
 
                 // Navegar
-                const response = await page.goto(url, { 
-                    waitUntil, 
+                const response = await page.goto(url, {
+                    waitUntil,
                     timeout,
                 });
 
                 // Verificar código de estado
                 const statusCode = response?.status() || 0;
-                
+
                 if (statusCode >= 400) {
                     throw new Error(`HTTP ${statusCode} error`);
                 }
 
                 // Verificar bloqueos por contenido
                 blockDetected = await this.checkForBlocks(page);
-                
+
                 if (blockDetected) {
                     this.log(`   🚨 Block detected: ${blockDetected.name} (${blockDetected.severity})`);
-                    
+
                     if (blockDetected.action === 'abort') {
                         throw new Error(`Critical block detected: ${blockDetected.name}`);
                     }
-                    
+
                     if (blockDetected.action === 'wait' && blockDetected.suggestedWaitMinutes) {
                         const waitMs = blockDetected.suggestedWaitMinutes * 60 * 1000;
                         this.log(`   ⏱️ Suggested wait: ${blockDetected.suggestedWaitMinutes} minutes`);
                         await this.sleep(Math.min(waitMs, 30000)); // Max 30s espera automática
                     }
-                    
+
                     if (blockDetected.action === 'captcha') {
                         this.metrics.captchasDetected++;
                         this.emit('captcha', { url, pattern: blockDetected });
                         throw new Error(`CAPTCHA detected: ${blockDetected.name}`);
                     }
-                    
+
                     // Continuar con retry para otros casos
                     throw new Error(`Block detected: ${blockDetected.name}`);
                 }
@@ -348,7 +348,7 @@ export class LinkedInBrowserService extends EventEmitter {
                 const finalUrl = page.url();
                 const title = await page.title();
                 const duration = Date.now() - startTime;
-                
+
                 this.session.requestCount++;
                 this.session.lastUsedAt = new Date();
                 this.metrics.totalRequests++;
@@ -367,7 +367,7 @@ export class LinkedInBrowserService extends EventEmitter {
 
             } catch (error: any) {
                 lastError = error;
-                
+
                 // Verificar si es un error retryable
                 if (!isRetryableError(error, retryConfig)) {
                     this.log(`   ❌ Non-retryable error: ${error.message}`);
@@ -484,7 +484,7 @@ export class LinkedInBrowserService extends EventEmitter {
 
             } catch (error: any) {
                 lastError = error;
-                
+
                 if (!isRetryableError(error, retryConfig)) {
                     break;
                 }
@@ -509,7 +509,7 @@ export class LinkedInBrowserService extends EventEmitter {
      */
     async humanClick(
         selector: string,
-        options: { 
+        options: {
             waitForSelector?: boolean;
             timeout?: number;
         } = {}
@@ -607,7 +607,7 @@ export class LinkedInBrowserService extends EventEmitter {
             ? this.metrics.responseTimes.reduce((a, b) => a + b, 0) / this.metrics.responseTimes.length
             : 0;
 
-        const uptime = this.metrics.sessionStartTime 
+        const uptime = this.metrics.sessionStartTime
             ? Date.now() - this.metrics.sessionStartTime.getTime()
             : 0;
 
@@ -629,9 +629,9 @@ export class LinkedInBrowserService extends EventEmitter {
 
         try {
             const path = options.path || `./screenshot_${Date.now()}.png`;
-            await this.session.page.screenshot({ 
+            await this.session.page.screenshot({
                 path,
-                fullPage: options.fullPage 
+                fullPage: options.fullPage
             });
             return path;
         } catch (error: any) {
@@ -673,7 +673,7 @@ export class LinkedInBrowserService extends EventEmitter {
         if (!this.session) return;
 
         this.log('🔒 Closing browser session...');
-        
+
         try {
             await this.session.browser.close();
             this.emit('closed', { sessionId: this.session.id });

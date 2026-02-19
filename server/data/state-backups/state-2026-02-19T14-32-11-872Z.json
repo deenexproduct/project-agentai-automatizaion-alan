@@ -1,0 +1,26 @@
+{
+  "batchId": "2026-02-19T14:30:13.352Z",
+  "accountEmail": "unknown",
+  "profiles": [
+    {
+      "url": "https://www.linkedin.com/in/dario-botte/",
+      "status": "pending",
+      "attempts": 0
+    }
+  ],
+  "currentIndex": 0,
+  "startTime": "2026-02-19T14:30:13.382Z",
+  "isPaused": false,
+  "options": {
+    "totalLimit": 1,
+    "dailyLimit": 1
+  },
+  "stats": {
+    "processed": 0,
+    "successful": 0,
+    "failed": 0,
+    "pending": 1
+  },
+  "lastUpdate": "2026-02-19T14:30:13.382Z",
+  "version": 1
+}

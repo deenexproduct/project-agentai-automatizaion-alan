@@ -12,7 +12,11 @@ import resumidorRoutes from './routes/resumidor.routes';
 import optimizerRoutes from './routes/optimizer.routes';
 import linkedinRoutes from './routes/linkedin.routes';
 import linkedinCrmRoutes from './routes/linkedin-crm.routes';
+import linkedinAccountsRoutes from './routes/linkedin-accounts.routes';
+import linkedinPostsRoutes from './routes/linkedin-posts.routes';
+import linkedinPublishingConfigRoutes from './routes/linkedin-publishing-config.routes';
 import { whatsappService } from './services/whatsapp.service';
+import { validateEncryptionKey } from './utils/crypto.service';
 
 const execAsync = promisify(exec);
 
@@ -206,8 +210,17 @@ app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/linkedin/crm', linkedinCrmRoutes);
 console.log('📊 LinkedIn CRM routes mounted at /api/linkedin/crm');
 
+// LinkedIn Accounts routes (multi-account management)
+app.use('/api/linkedin/accounts', linkedinAccountsRoutes);
+app.use('/api/linkedin/posts', linkedinPostsRoutes);
+app.use('/api/linkedin/publishing', linkedinPublishingConfigRoutes);
+console.log('🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts');
+
 // Start server
 async function startServer() {
+  // Validate encryption key before anything else
+  validateEncryptionKey();
+
   // Connect to MongoDB
   await connectDB();
 

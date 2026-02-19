@@ -3,7 +3,7 @@
 
 import { getJson } from 'serpapi';
 
-const SERPAPI_KEY = process.env.SERPAPI_KEY;
+
 
 export interface SearchResult {
     title: string;
@@ -13,11 +13,16 @@ export interface SearchResult {
 }
 
 export class WebSearchService {
-    private isConfigured: boolean;
+    /**
+     * Read API key lazily from process.env so dotenv can load first
+     */
+    private getApiKey(): string | undefined {
+        return process.env.SERPAPI_KEY;
+    }
 
     constructor() {
-        this.isConfigured = !!SERPAPI_KEY;
-        if (this.isConfigured) {
+        // Log initial status (may change after dotenv loads)
+        if (this.getApiKey()) {
             console.log('🔍 [WebSearch] SerpAPI configurado');
         } else {
             console.log('⚠️ [WebSearch] SerpAPI no configurado (SERPAPI_KEY faltante)');
@@ -33,19 +38,20 @@ export class WebSearchService {
         news: SearchResult[];
         knowledgeGraph?: any;
     }> {
-        if (!this.isConfigured) {
+        if (!this.getApiKey()) {
             console.log('⚠️ [WebSearch] No configurado, saltando búsqueda');
             return { news: [] };
         }
 
         try {
             console.log(`🔍 [WebSearch] Buscando: "${companyName}"`);
+            const apiKey = this.getApiKey();
 
             // Search 1: General info
             const generalResults = await getJson({
                 engine: 'google',
                 q: `${companyName} empresa sitio web oficial`,
-                api_key: SERPAPI_KEY,
+                api_key: apiKey,
                 hl: 'es',
                 gl: 'ar',
             });
@@ -54,7 +60,7 @@ export class WebSearchService {
             const newsResults = await getJson({
                 engine: 'google',
                 q: `${companyName} noticias 2024 2025`,
-                api_key: SERPAPI_KEY,
+                api_key: apiKey,
                 hl: 'es',
                 gl: 'ar',
                 tbm: 'nws',
@@ -82,19 +88,19 @@ export class WebSearchService {
         position?: string;
         news: SearchResult[];
     }> {
-        if (!this.isConfigured) {
+        if (!this.getApiKey()) {
             return { news: [] };
         }
 
         try {
-            const query = companyName 
+            const query = companyName
                 ? `${fullName} ${companyName} LinkedIn`
                 : `${fullName} LinkedIn`;
 
             const results = await getJson({
                 engine: 'google',
                 q: query,
-                api_key: SERPAPI_KEY,
+                api_key: this.getApiKey(),
                 hl: 'es',
                 gl: 'ar',
             });
@@ -125,14 +131,14 @@ export class WebSearchService {
         if (kg?.description) {
             return kg.description;
         }
-        
+
         // Fallback to first organic result snippet
         const organic = results.organic_results || [];
         const firstResult = organic[0];
         if (firstResult?.snippet) {
             return firstResult.snippet;
         }
-        
+
         return undefined;
     }
 
@@ -148,14 +154,14 @@ export class WebSearchService {
 
     private extractLinkedInUrl(results: any): string | undefined {
         const organic = results.organic_results || [];
-        const linkedInResult = organic.find((r: any) => 
+        const linkedInResult = organic.find((r: any) =>
             r.link?.includes('linkedin.com/in/')
         );
         return linkedInResult?.link;
     }
 
     isAvailable(): boolean {
-        return this.isConfigured;
+        return !!this.getApiKey();
     }
 }
 

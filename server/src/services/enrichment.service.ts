@@ -26,14 +26,14 @@ interface EnrichmentConfig {
 
 // ── System Prompt ────────────────────────────────────────────
 const ENRICHMENT_SYSTEM_PROMPT = `
-Sos un investigador comercial B2B. Investigá personas y empresas usando búsqueda web ($web_search) y devolvé datos estructurados con sus fuentes.
+Sos un organizador de datos comerciales B2B. Tu ÚNICA función es ORGANIZAR los datos que te proporciono en formato JSON estructurado.
 
-## REGLAS IMPORTANTES
+## REGLAS CRÍTICAS
 
-1. **USÁ $web_search** para buscar información real
-2. **INDICÁ LA FUENTE** de cada dato (LinkedIn, Website, Noticia: URL)
-3. **Si no encontrás algo**, poné "No verificado" - NO inventes
-4. **URLs**: Solo usá URLs reales de medios (cronista, infobae, lanacion, clarin, ambito)
+1. **SOLO usá datos proporcionados en el mensaje** — datos del perfil de LinkedIn y resultados de búsqueda web (si hay)
+2. **Si un dato NO está en la información proporcionada**, poné "No verificado" — NUNCA inventes
+3. **NUNCA inventes URLs, noticias, nombres de medios, ni datos de empresas**
+4. **Indicá la fuente** de cada dato: "LinkedIn", "Búsqueda web", o "No verificado"
 
 ## FORMATO JSON REQUERIDO
 
@@ -41,98 +41,72 @@ Respondé EXACTAMENTE con este JSON (sin texto antes ni después):
 
 {
   "personProfile": {
-    "verifiedPosition": "cargo o No verificado",
-    "positionSource": "LinkedIn / Noticia / No verificado",
-    "verifiedCompany": "empresa o No verificado",
+    "verifiedPosition": "cargo del perfil LinkedIn o No verificado",
+    "positionSource": "LinkedIn / No verificado",
+    "verifiedCompany": "empresa del perfil LinkedIn o No verificado",
     "companySource": "LinkedIn / No verificado",
-    "summary": "resumen profesional o No verificado",
+    "summary": "resumen profesional basado en datos del perfil o No verificado",
     "summarySource": "LinkedIn / No verificado"
   },
-  "personNews": [
-    {
-      "title": "título de la noticia",
-      "source": "nombre del medio",
-      "url": "URL real",
-      "date": "YYYY-MM-DD",
-      "summary": "resumen"
-    }
-  ],
+  "personNews": [],
   "company": {
-    "name": "nombre oficial",
-    "nameSource": "Website / LinkedIn / No verificado",
-    "description": "descripción de la empresa (3-4 líneas) o No verificado",
-    "descriptionSource": "Website / LinkedIn / No verificado",
-    "website": "https://... o No verificado",
-    "websiteSource": "Website / LinkedIn / No verificado",
-    "category": "Categoría: Restaurante, Café, Heladería, etc. Inferilo del nombre si es obvio",
-    "categorySource": "Website / Inferido del nombre / No verificado",
-    "sector": "Gastronomía / Retail / Servicios",
-    "sectorSource": "Website / Inferido / No verificado",
-    "locationsCount": "cantidad de locales o No verificado",
-    "locationsCountSource": "Noticia URL / Website / LinkedIn / No verificado",
+    "name": "nombre de la empresa o No verificado",
+    "nameSource": "LinkedIn / Búsqueda web / No verificado",
+    "description": "descripción de la empresa basada en datos proporcionados o No verificado",
+    "descriptionSource": "Búsqueda web / LinkedIn / No verificado",
+    "website": "URL real de búsqueda web o No verificado",
+    "websiteSource": "Búsqueda web / No verificado",
+    "category": "Categoría inferida del nombre si es obvio o No verificado",
+    "categorySource": "Inferido del nombre / Búsqueda web / No verificado",
+    "sector": "Gastronomía / Retail / Servicios / No verificado",
+    "sectorSource": "Búsqueda web / Inferido / No verificado",
+    "locationsCount": "No verificado",
+    "locationsCountSource": "No verificado",
     "socialMedia": {
-      "instagram": "@handle o No verificado",
-      "twitter": "@handle o No verificado"
+      "instagram": "No verificado",
+      "twitter": "No verificado"
     },
-    "socialMediaSource": "Website / No verificado"
+    "socialMediaSource": "No verificado"
   },
-  "companyNews": [
-    {
-      "title": "título",
-      "source": "medio",
-      "url": "URL real",
-      "date": "YYYY-MM-DD",
-      "summary": "resumen de 2-3 líneas"
-    }
-  ],
+  "companyNews": [],
   "keyInsights": [
     {
-      "text": "insight basado en datos",
-      "source": "Noticia URL / LinkedIn / Website",
+      "text": "insight basado SOLO en datos proporcionados",
+      "source": "LinkedIn / Búsqueda web",
       "confidence": "high / medium / low"
     }
   ],
   "buyingSignals": [
     {
-      "text": "señal de compra",
-      "source": "Noticia URL / LinkedIn",
-      "evidence": "dato específico que respalda",
+      "text": "señal de compra basada SOLO en datos proporcionados",
+      "source": "LinkedIn / Búsqueda web",
+      "evidence": "dato específico del perfil o búsqueda",
       "confidence": "high / medium / low"
     }
   ],
-  "confidenceScore": 75,
+  "confidenceScore": 50,
   "dataQuality": "verified / partial / insufficient"
 }
 
-## BÚSQUEDAS REQUERIDAS (usar $web_search)
+## NOTICIAS
 
-1. "{nombre empresa}" website oficial
-2. "{nombre empresa}" descripción qué es
-3. "{nombre empresa}" cantidad locales sucursales
-4. "{nombre empresa}" noticias 2024 2025
-5. "{nombre persona}" LinkedIn {empresa}
-6. "{nombre empresa}" Instagram redes sociales
+- SOLO incluí noticias que aparezcan en los resultados de búsqueda web proporcionados
+- Si NO hay resultados de búsqueda web, dejá companyNews y personNews como arrays vacíos []
+- NUNCA inventes noticias ni URLs de medios
 
-## NOTAS
+## CATEGORÍA
 
-- Buscá EXACTAMENTE 3 noticias. Si no encontrás 3, completá el resto con "No verificado"
-- La categoría inferila del nombre si es obvio (ej: "Sushi2x1" → "Restaurante de Sushi")
-- Calculá confidenceScore basado en: 80-100 = muchas fuentes sólidas, 50-70 = algunas inferencias, 0-40 = pocos datos
-- dataQuality: "verified" (muchos datos con fuentes), "partial" (algunos datos), "insufficient" (muchos vacíos)
+- Inferí la categoría del nombre de empresa si es obvio:
+  - "Sushi" → "Restaurante de Sushi"
+  - "Burger" → "Hamburguesería"
+  - "Café/Coffee" → "Cafetería"
+  - Si no es obvio, poné "No verificado"
 
-## EJEMPLO DE CALIDAD ESPERADA
+## PUNTUACIÓN
 
-Ejemplo de company.description:
-"Sushi2x1 es una cadena de restaurantes de sushi con modelo de negocio basado en promociones 2x1. Fundada en 2015 en Buenos Aires, opera actualmente 15 locales propios y franquicias en Argentina y Uruguay. Especializada en sushi accesible y delivery, ha experimentado un crecimiento del 40% anual desde 2022."
-
-Ejemplo de companyNews:
-{
-  "title": "Sushi2x1 abre tres nuevos locales en Córdoba y Rosario",
-  "source": "El Cronista",
-  "url": "https://www.cronista.com/negocios/sushi2x1-expansion-cordoba-rosario-2024.html",
-  "date": "2024-03-15",
-  "summary": "La cadena de sushi anunció la apertura de tres nuevos locales en el interior del país, sumando 45 empleos directos. La inversión total fue de $2.5M."
-}
+- confidenceScore: 80-100 = muchos datos reales con fuentes, 50-70 = datos parciales, 0-40 = pocos datos
+- dataQuality: "verified" = muchos datos con fuentes reales, "partial" = algunos datos, "insufficient" = muchos vacíos
+- Si la mayoría de campos son "No verificado", el score debe ser bajo (0-40)
 `;
 
 // ── Service ──────────────────────────────────────────────────
@@ -149,8 +123,9 @@ class EnrichmentService {
             return JSON.parse(raw);
         } catch {
             // Return defaults if file is missing
+            // BUG FIX 3: Changed from 'mensaje_enviado' to 'interactuando' to match pipeline
             return {
-                autoEnrichOnStatus: 'mensaje_enviado', // Enriquecer DESPUÉS de interactuar
+                autoEnrichOnStatus: 'interactuando', // Trigger when prospecting finishes scraping
                 maxEnrichmentsPerDay: 45,
                 delayBetweenRequests: 4000,
                 model: 'moonshotai/kimi-k2',
@@ -231,22 +206,22 @@ class EnrichmentService {
 
             // 6.5. VALIDAR que los datos sean reales
             const validation = enrichmentValidator.validate(
-                enrichmentData, 
+                enrichmentData,
                 contact.currentCompany || undefined
             );
-            
+
             console.log(enrichmentValidator.generateReport(validation));
-            
+
             // 6.6. VALIDACIÓN HTTP de URLs (asíncrona, no bloqueante)
             console.log(`🔍 [Enrichment] Verificando URLs para ${contact.fullName}...`);
             const urlValidation = await enrichmentValidator.validateUrlsHttp(enrichmentData);
-            
+
             if (urlValidation.brokenUrls.length > 0) {
                 console.warn(`❌ [Enrichment] URLs rotas detectadas: ${urlValidation.brokenUrls.length}`);
                 validation.warnings.push(...urlValidation.warnings);
                 validation.score = Math.max(0, validation.score - urlValidation.brokenUrls.length * 20);
             }
-            
+
             if (!validation.isValid || urlValidation.brokenUrls.length > 0) {
                 console.warn(`⚠️ [Enrichment] Datos de baja calidad para ${contact.fullName} (score: ${validation.score})`);
                 // Guardar igual pero marcar como de baja confianza
@@ -360,7 +335,7 @@ class EnrichmentService {
 
         const company = contact.currentCompany || 'No disponible';
         const hasValidCompany = hasCompany && company !== 'No disponible';
-        
+
         const userMessage = `
 Investigá a esta persona y su empresa usando búsqueda web intensiva:
 
@@ -382,7 +357,7 @@ ${searchResults ? `════════════════════�
 ═══════════════════════════════════════
 ${searchResults.website ? `**Website encontrado:** ${searchResults.website}` : '**Website:** No encontrado'}
 ${searchResults.description ? `\n**Descripción encontrada:** ${searchResults.description.substring(0, 300)}` : ''}
-${searchResults.news.length > 0 ? `\n**Noticias encontradas:**\n${searchResults.news.map((n: any, i: number) => `${i+1}. "${n.title}" - ${n.source}\n   URL: ${n.link}\n   Resumen: ${n.snippet?.substring(0, 150)}...`).join('\n')}` : '**Noticias:** No se encontraron noticias'}
+${searchResults.news.length > 0 ? `\n**Noticias encontradas:**\n${searchResults.news.map((n: any, i: number) => `${i + 1}. "${n.title}" - ${n.source}\n   URL: ${n.link}\n   Resumen: ${n.snippet?.substring(0, 150)}...`).join('\n')}` : '**Noticias:** No se encontraron noticias'}
 ` : '**⚠️ Búsqueda web no disponible - Usar datos del perfil de LinkedIn únicamente**'}
 
 ═══════════════════════════════════════
@@ -393,41 +368,20 @@ ${icpContext.substring(0, 1000)}
 ${deenexContext ? `═══════════════════════════════════════\n📦 CONTEXTO DEL PRODUCTO (Deenex)\n═══════════════════════════════════════\n${deenexContext.substring(0, 2000)}` : ''}
 
 ═══════════════════════════════════════
-🔍 BÚSQUEDAS REQUERIDAS (USAR $web_search)
+⚠️ INSTRUCCIONES
 ═══════════════════════════════════════
 
-${hasValidCompany ? `**BÚSQUEDAS SOBRE LA EMPRESA "${company}":**
-1. Buscar "${company}" + "sitio web oficial" → para obtener website
-2. Buscar "${company}" + "descripción" + "qué es" → para descripción completa
-3. Buscar "${company}" + "cantidad de locales" + "sucursales" → para locationsCount
-4. Buscar "${company}" + "categoría" + "rubro" → para category (ej: Heladería, Cervecería)
-5. Buscar "${company}" + "noticias" + "2025" → encontrá EXACTAMENTE 3 noticias con title, source, url, date, summary
-6. Buscar "${company}" + "expansión" + "nuevos locales" → para insights de crecimiento
-7. Buscar "${company}" + "Instagram" + "redes sociales" → para socialMedia
-8. Buscar "${company}" + "delivery" + "digital" → para buying signals
+${hasValidCompany
+                ? `Organizá los datos proporcionados arriba sobre "${contact.fullName}" y "${company}" en el formato JSON solicitado.`
+                : `⚠️ NO HAY EMPRESA IDENTIFICADA — el enriquecimiento será limitado. Solo organizá los datos del perfil.`}
 
-**BÚSQUEDAS SOBRE LA PERSONA "${contact.fullName}":**
-9. Buscar "${contact.fullName}" + "LinkedIn" → verificar cargo actual
-10. Buscar "${contact.fullName}" + "${company}" + "noticias" → noticias personales` 
-: `⚠️ NO HAY EMPRESA IDENTIFICADA:
-Sin datos de empresa, el enriquecimiento será limitado.`}
-
-═══════════════════════════════════════
-⚠️ REGLAS OBLIGATORIAS
-═══════════════════════════════════════
-1. Usá los RESULTADOS DE BÚSQUEDA WEB proporcionados arriba
-2. Si no hay resultados de búsqueda, usá solo los datos del perfil de LinkedIn
-3. company.category es OBLIGATORIO - inferí del nombre si es obvio:
-   - "Sushi" → "Restaurante de Sushi"
-   - "Burger" → "Hamburguesería" 
-   - "Café/Coffee" → "Cafetería"
-   - "Helado" → "Heladería"
-   - "Cerveza" → "Cervecería"
-4. companyNews DEBE tener EXACTAMENTE 3 noticias. Usá las noticias encontradas arriba.
-5. Si no hay suficientes noticias reales, completá el resto con "No verificado"
-6. NO inventes URLs - solo usá las URLs proporcionadas en los resultados de búsqueda
-7. Indicá la fuente de cada dato: "Website: [URL]", "Noticia: [URL]", "LinkedIn", "Inferido del nombre"
-8. Respondé SOLO con el JSON, sin texto antes ni después
+**REGLAS:**
+1. SOLO usá datos del perfil de LinkedIn y los resultados de búsqueda web proporcionados arriba
+2. Si NO hay resultados de búsqueda web, dejá companyNews y personNews como arrays vacíos []
+3. NUNCA inventes URLs, noticias, ni datos que no estén en la información proporcionada
+4. Si un dato no está disponible, poné "No verificado"
+5. company.category: inferí del nombre si es obvio (ej: "Sushi" → "Restaurante de Sushi"), sino "No verificado"
+6. Respondé SOLO con el JSON, sin texto antes ni después
 `;
 
         return [
@@ -503,11 +457,10 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
             summary: 'No verificado',
         };
 
-        // Ensure companyNews has exactly 3 items
-        let companyNews = (data.companyNews || []).slice(0, 3);
-        while (companyNews.length < 3) {
-            companyNews.push({ ...emptyNewsItem });
-        }
+        // Only keep real news items — don't pad with empty/fake ones
+        let companyNews = (data.companyNews || [])
+            .filter((n: any) => n.title && n.title !== 'No verificado')
+            .slice(0, 5);
 
         // Ensure personNews exists
         const personNews = (data.personNews || []).map((n: any) => ({
@@ -521,7 +474,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
         // Normalize company data with sources
         const company = data.company || {};
         const pp = data.personProfile || {};
-        
+
         // Normalize insights with sources
         const keyInsights = (data.keyInsights || []).map((insight: any) => {
             if (typeof insight === 'string') {
@@ -533,7 +486,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
                 confidence: insight.confidence || 'low',
             };
         });
-        
+
         // Normalize buying signals with sources
         const buyingSignals = (data.buyingSignals || []).map((signal: any) => {
             if (typeof signal === 'string') {
@@ -546,7 +499,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
                 confidence: signal.confidence || 'low',
             };
         });
-        
+
         return {
             personProfile: {
                 verifiedPosition: pp.verifiedPosition || 'No verificado',
@@ -661,7 +614,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
                 md += `*Fuente nombre: ${data.company.nameSource}*\n`;
             }
             md += `\n`;
-            
+
             if (data.company.description && data.company.description !== 'No verificado') {
                 md += `### Descripción Completa\n${data.company.description}\n`;
                 if (data.company.descriptionSource && data.company.descriptionSource !== 'No verificado') {
@@ -669,7 +622,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
                 }
                 md += `\n`;
             }
-            
+
             md += `### Datos Clave\n`;
             if (data.company.category && data.company.category !== 'No verificado') {
                 md += `- **Categoría:** ${data.company.category}\n`;
@@ -695,7 +648,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
                     md += `  *Fuente: ${data.company.websiteSource}*\n`;
                 }
             }
-            
+
             if (data.company.socialMedia?.instagram || data.company.socialMedia?.twitter) {
                 md += `- **Redes Sociales:**`;
                 if (data.company.socialMedia?.instagram) md += ` Instagram ${data.company.socialMedia.instagram}`;
@@ -743,7 +696,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
                 const source = typeof insight === 'object' ? insight.source : null;
                 const confidence = typeof insight === 'object' ? insight.confidence : null;
                 const confEmoji = confidence === 'high' ? '🟢' : confidence === 'medium' ? '🟡' : '🔴';
-                
+
                 md += `${i + 1}. ${text}\n`;
                 if (source && source !== 'No verificado') {
                     md += `   ${confEmoji} *Fuente: ${source}*\n`;
@@ -761,7 +714,7 @@ Sin datos de empresa, el enriquecimiento será limitado.`}
                 const evidence = typeof signal === 'object' ? signal.evidence : null;
                 const confidence = typeof signal === 'object' ? signal.confidence : null;
                 const confEmoji = confidence === 'high' ? '🟢' : confidence === 'medium' ? '🟡' : '🔴';
-                
+
                 md += `${i + 1}. ${text}\n`;
                 if (source && source !== 'No verificado') {
                     md += `   ${confEmoji} *Fuente: ${source}*\n`;

@@ -616,6 +616,7 @@ export default function ProspectingPage() {
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>👁️</th>
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>🔗</th>
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>❤️</th>
+                                    <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>🧬</th>
                                     <th className="px-3 py-2.5 text-center font-semibold" style={{ color: '#6b7280' }}>Estado</th>
                                 </tr>
                             </thead>
@@ -648,6 +649,9 @@ export default function ProspectingPage() {
                                             <td className="px-3 py-2.5 text-center">{STEP_ICONS[profile.steps.visit as StepStatus] || '🕐'}</td>
                                             <td className="px-3 py-2.5 text-center">{STEP_ICONS[profile.steps.connect as StepStatus] || '🕐'}</td>
                                             <td className="px-3 py-2.5 text-center">{STEP_ICONS[profile.steps.like as StepStatus] || '🕐'}</td>
+                                            <td className="px-3 py-2.5 text-center">
+                                                <EnrichmentBadge status={profile.status} />
+                                            </td>
                                             <td className="px-3 py-2.5 text-center">
                                                 <StatusBadge status={profile.status} />
                                             </td>
@@ -703,4 +707,21 @@ function StatusBadge({ status }: { status: string }) {
             {c.text}
         </span>
     );
+}
+
+// ── Enrichment Badge Component ───────────────────────────────
+
+function EnrichmentBadge({ status }: { status: string }) {
+    // Mismo formato que STEP_ICONS - solo emoji simple
+    const config: Record<string, string> = {
+        pending: '🕐',
+        visiting: '🕐',
+        connected: '🕐',
+        liked: '🕐',
+        done: '✅',
+        error: '❌',
+        paused: '⏸️',
+    };
+
+    return <span title="Enriquecimiento">{config[status] || '🕐'}</span>;
 }

@@ -18,6 +18,13 @@ import { captchaHandler } from './linkedin/captcha-handler.service';
 import { rateLimitHandler } from './linkedin/rate-limit-handler.service';
 import { enrichmentService } from './enrichment.service';
 
+// Session Manager — encrypted cookie persistence
+import { sessionManager, SessionExpiredError } from './linkedin/session-manager.service';
+import { LinkedInAccount, type ILinkedInAccount } from '../models/linkedin-account.model';
+
+// Circuit Breaker — protects accounts from repeated failures
+import { circuitBreaker } from './linkedin/circuit-breaker.service';
+
 // Apply stealth plugin — patches 10+ fingerprints
 puppeteer.use(StealthPlugin());
 
@@ -76,8 +83,9 @@ type ServiceStatus = 'disconnected' | 'browser-open' | 'logged-in';
 
 // ── Constants ────────────────────────────────────────────────
 
+// SESSION_DIR is kept for screenshots and logs only — NOT for cookies.
+// Cookies are stored encrypted in MongoDB via SessionManager.
 const SESSION_DIR = path.join(__dirname, '../../linkedin-session');
-const COOKIES_FILE = path.join(SESSION_DIR, 'cookies.json');
 
 // Delay ranges (milliseconds)
 const DELAYS = {
@@ -107,11 +115,15 @@ class LinkedInService extends EventEmitter {
     public isBusy = false; // Legacy flag - now uses operationManager
     private lastAcceptedCheck: Date | null = null;
     private pauseResolve: (() => void) | null = null;
-    
+
     // NEW: Enhanced services
     private retryService = RetryService.forNavigation();
     private currentBatchId: string | null = null;
     private accountEmail: string = ''; // Set during login
+
+    // Session Manager: active account for this workspace
+    private activeAccount: ILinkedInAccount | null = null;
+    private readonly workspaceId: string = process.env.LINKEDIN_WORKSPACE_ID || 'default';
 
     // ── Helpers ──────────────────────────────────────────────
 
@@ -278,8 +290,9 @@ class LinkedInService extends EventEmitter {
                 const loggedIn = await this.checkLoggedIn();
                 if (loggedIn) {
                     this.status = 'logged-in';
+                    // Save cookies via SessionManager (encrypted to MongoDB)
                     await this.saveCookies();
-                    console.log('✅ LinkedIn login detected — cookies saved');
+                    console.log('✅ LinkedIn login detected — cookies saved (encrypted)');
                     clearInterval(checkInterval);
                 }
             } catch {
@@ -288,37 +301,66 @@ class LinkedInService extends EventEmitter {
         }, 3000);
     }
 
+    /**
+     * Saves cookies encrypted to MongoDB via SessionManager.
+     * Requires an active account to be set.
+     */
     async saveCookies(): Promise<void> {
         if (!this.page) return;
 
-        try {
-            const cookies = await this.page.cookies();
-            if (!fs.existsSync(SESSION_DIR)) {
-                fs.mkdirSync(SESSION_DIR, { recursive: true });
+        if (!this.activeAccount) {
+            // No account configured yet — create a default one on first login
+            try {
+                this.activeAccount = await sessionManager.createAccount(
+                    this.workspaceId,
+                    'Default Account'
+                );
+                await sessionManager.setActiveAccount(
+                    this.workspaceId,
+                    (this.activeAccount._id as any).toString()
+                );
+            } catch (err: any) {
+                // Account may already exist (e.g. duplicate label) — try to load it
+                const existing = await sessionManager.getActiveAccount(this.workspaceId);
+                if (existing) {
+                    this.activeAccount = existing;
+                } else {
+                    console.error('[LinkedInService] ❌ Could not create/find account for cookie save:', err.message);
+                    return;
+                }
             }
-            fs.writeFileSync(COOKIES_FILE, JSON.stringify(cookies, null, 2));
-            console.log(`💾 Cookies saved (${cookies.length} cookies)`);
+        }
+
+        try {
+            await sessionManager.onLoginSuccess(this.page, this.activeAccount);
         } catch (err) {
-            console.error('Error saving cookies:', err);
+            console.error('[LinkedInService] ❌ Error saving cookies via SessionManager:', err);
         }
     }
 
+    /**
+     * Loads and injects cookies from MongoDB via SessionManager.
+     * Returns true if cookies were loaded and injected successfully.
+     */
     async loadCookies(): Promise<boolean> {
         if (!this.page) return false;
 
         try {
-            if (!fs.existsSync(COOKIES_FILE)) return false;
+            // Get the active account for this workspace
+            this.activeAccount = await sessionManager.getActiveAccount(this.workspaceId);
 
-            const raw = fs.readFileSync(COOKIES_FILE, 'utf-8');
-            const cookies = JSON.parse(raw);
+            if (!this.activeAccount) {
+                console.log('[LinkedInService] ℹ️ No active account found — manual login required');
+                return false;
+            }
 
-            if (!Array.isArray(cookies) || cookies.length === 0) return false;
-
-            await this.page.setCookie(...cookies);
-            console.log(`🍪 Loaded ${cookies.length} cookies from disk`);
-            return true;
+            const restored = await sessionManager.restoreSession(this.page, this.activeAccount);
+            if (!restored) {
+                console.log('[LinkedInService] ℹ️ No stored cookies for active account — manual login required');
+            }
+            return restored;
         } catch (err) {
-            console.error('Error loading cookies:', err);
+            console.error('[LinkedInService] ❌ Error loading cookies via SessionManager:', err);
             return false;
         }
     }
@@ -333,6 +375,14 @@ class LinkedInService extends EventEmitter {
             profilesDone: this.profiles.filter(p => p.status === 'done').length,
             lastAcceptedCheck: this.lastAcceptedCheck?.toISOString() || null,
         };
+    }
+
+    /**
+     * Returns the active Puppeteer page, or null if the browser is not open.
+     * Used by the accounts routes for account switching.
+     */
+    getPage(): import('puppeteer').Page | null {
+        return this.page;
     }
 
     getProgress(): { profiles: ProfileProgress[]; current: number; total: number; status: string } {
@@ -364,6 +414,35 @@ class LinkedInService extends EventEmitter {
             operationManager.release();
             console.error('❌ Prospecting already running');
             return false;
+        }
+
+        // Phase 2: Session pre-check before starting a long operation
+        if (this.activeAccount) {
+            // Check circuit breaker first
+            if (!circuitBreaker.canProceed((this.activeAccount._id as any).toString())) {
+                operationManager.release();
+                const status = circuitBreaker.getStatus((this.activeAccount._id as any).toString());
+                console.error(`❌ Circuit breaker OPEN for account — cooldown: ${Math.round((status.cooldownRemainingMs ?? 0) / 60000)}min`);
+                this.emit('circuit-open', {
+                    accountId: (this.activeAccount._id as any).toString(),
+                    cooldownRemainingMs: status.cooldownRemainingMs,
+                    reason: status.lastFailureReason,
+                });
+                return false;
+            }
+
+            try {
+                // Fast pre-check (status + expiry) — no network call
+                await sessionManager.sessionPreCheck(this.activeAccount, this.page, false);
+            } catch (err) {
+                operationManager.release();
+                console.error('❌ Session pre-check failed:', (err as Error).message);
+                this.emit('session-expired', {
+                    accountId: (this.activeAccount._id as any).toString(),
+                    message: 'Session invalid — please re-authenticate before starting',
+                });
+                return false;
+            }
         }
 
         // Parse and validate URLs
@@ -438,7 +517,7 @@ class LinkedInService extends EventEmitter {
             // Always release the lock when done
             operationManager.release();
             // Clear saved state on completion
-            statePersistence.clear().catch(() => {});
+            statePersistence.clear().catch(() => { });
         });
 
         return true;
@@ -450,8 +529,8 @@ class LinkedInService extends EventEmitter {
 
         const persistedProfiles: PersistedProfileProgress[] = this.profiles.map(p => ({
             url: p.url,
-            status: p.status === 'done' ? 'completed' : 
-                    p.status === 'error' ? 'failed' : 
+            status: p.status === 'done' ? 'completed' :
+                p.status === 'error' ? 'failed' :
                     p.status === 'pending' ? 'pending' : 'processing',
             attempts: p.status === 'error' ? 1 : 0,
             lastError: p.error,
@@ -532,10 +611,10 @@ class LinkedInService extends EventEmitter {
             console.log(`\n🔄 Retrying ${failedProfiles.length} failed profiles...`);
             for (const failedProfile of failedProfiles) {
                 if (this.shouldStop) break;
-                
+
                 const index = failedProfile.index;
                 console.log(`  🔄 Retrying profile ${index + 1}: ${failedProfile.url}`);
-                
+
                 try {
                     // Reset status
                     this.updateProfile(index, {
@@ -543,7 +622,7 @@ class LinkedInService extends EventEmitter {
                         error: undefined,
                     });
                     await this.processProfile(index, options);
-                    
+
                     // Delay between retries
                     await this.randomDelay(DELAYS.betweenProfiles);
                 } catch (err: any) {
@@ -579,6 +658,14 @@ class LinkedInService extends EventEmitter {
             skipped: this.profiles.length - done - errors,
             health: healthMonitor.getMetrics(),
         });
+
+        // Record success in circuit breaker (if no critical errors)
+        if (this.activeAccount && errors < this.profiles.length) {
+            await circuitBreaker.recordSuccess(
+                (this.activeAccount._id as any).toString(),
+                this.workspaceId
+            );
+        }
     }
 
     private async processProfile(index: number, options: ProspectingOptions): Promise<void> {
@@ -751,16 +838,62 @@ class LinkedInService extends EventEmitter {
                 logger.log(`  ⚠️ Captcha check error: ${captchaErr.message?.substring(0, 60)}`);
             }
 
-            // Check for login redirect
+            // Check for login redirect — structured re-auth flow
             if (page.url().includes('/login')) {
                 logger.log('  ❌ Redirected to login page — session expired');
                 logger.logResult(false, 'Session expired');
                 this.status = 'browser-open';
                 this.isPaused = true;
-                this.emit('session-expired', { message: 'Session expired — please login again' });
-                await this.checkPause();
-                logger.close();
-                return;
+
+                const accountId = this.activeAccount
+                    ? (this.activeAccount._id as any).toString()
+                    : null;
+
+                // Record failure in circuit breaker
+                if (accountId && this.activeAccount) {
+                    await circuitBreaker.recordFailure(
+                        accountId,
+                        this.workspaceId,
+                        'Redirected to login — session expired'
+                    );
+                    await sessionManager.markReauthRequired(
+                        this.activeAccount,
+                        'Redirected to login page'
+                    );
+                }
+
+                // Emit structured event to frontend
+                this.emit('session-expired', {
+                    accountId,
+                    message: 'Session expired — please login again in the browser',
+                    requiresReauth: true,
+                });
+
+                // Wait for re-auth (polls DB until account becomes active again)
+                if (accountId) {
+                    try {
+                        logger.log('  ⏳ Waiting for re-authentication (up to 10 minutes)...');
+                        const refreshedAccount = await sessionManager.waitForReauth(
+                            accountId,
+                            this.workspaceId,
+                            10 * 60 * 1000 // 10 minutes
+                        );
+                        this.activeAccount = refreshedAccount;
+                        this.status = 'logged-in';
+                        this.isPaused = false;
+                        circuitBreaker.reset(accountId);
+                        logger.log('  ✅ Re-auth complete — resuming operation');
+                        // Don't return — let the profile retry
+                    } catch (reauthErr: any) {
+                        logger.log(`  ❌ Re-auth timeout: ${reauthErr.message}`);
+                        logger.close();
+                        return;
+                    }
+                } else {
+                    await this.checkPause();
+                    logger.close();
+                    return;
+                }
             }
 
             // 📸 Screenshot after page load
@@ -853,16 +986,16 @@ class LinkedInService extends EventEmitter {
                     steps: { ...this.profiles[index].steps, like: liked ? 'done' : 'skipped' },
                 });
                 logger.log(`  ${liked ? '✅ Post liked' : '⏭️ No post to like'}`);
-
-                if (liked) {
-                    // ── CRM: Mark as 'interactuando' after successful like ──
-                    logger.log(`  🔄 CRM: → interactuando (liked post)`);
-                    await this.updateCrmStatus(normalizedUrl, 'interactuando');
-                }
             } catch (err: any) {
                 logger.log(`  ⚠️ Like error: ${err.message?.substring(0, 60)}`);
                 this.updateProfile(index, { steps: { ...this.profiles[index].steps, like: 'error' } });
             }
+
+            // ── CRM: ALWAYS mark as 'interactuando' after like attempt ──
+            // Connection was sent and interaction attempted — ready for enrichment
+            // This runs regardless of whether a post was liked or not
+            logger.log(`  🔄 CRM: → interactuando`);
+            await this.updateCrmStatus(normalizedUrl, 'interactuando');
 
             // ── Step 5: Navigate back to profile & Scrape full data ──
             await this.checkPause();
@@ -912,23 +1045,23 @@ class LinkedInService extends EventEmitter {
                     );
                     const savedFields = Object.keys(setData).filter(k => !['profileUrl', 'prospectingBatchId'].includes(k));
                     logger.log(`  💾 CRM: Saved ${savedFields.length} fields for: ${scraped.fullName || normalizedUrl}`);
-                    
-                    // ── TRIGGER: Auto-enrichment AFTER scraping is complete ──
-                    // Only trigger if we have meaningful data (headline, position, or company)
-                    if (scraped.headline || scraped.currentPosition || scraped.currentCompany) {
-                        try {
-                            const contact = await LinkedInContact.findOne({ profileUrl: normalizedUrl });
-                            if (contact && contact.status === 'interactuando') {
-                                logger.log(`  🧬 Triggering auto-enrichment for ${contact.fullName}...`);
-                                enrichmentService.triggerAutoEnrichment(contact._id.toString(), 'interactuando')
-                                    .catch(err => logger.log(`  ⚠️ Auto-enrichment error: ${err.message?.substring(0, 60)}`));
-                            }
-                        } catch (enrichTriggerErr: any) {
-                            logger.log(`  ⚠️ Failed to trigger enrichment: ${enrichTriggerErr.message?.substring(0, 60)}`);
+
+                    // ── TRIGGER: Auto-enrichment AFTER scraping ──
+                    // Trigger enrichment if we got ANY useful data (even just a name)
+                    try {
+                        const contact = await LinkedInContact.findOne({ profileUrl: normalizedUrl });
+                        if (contact && contact.fullName) {
+                            logger.log(`  🧬 Triggering auto-enrichment for ${contact.fullName}...`);
+                            enrichmentService.triggerAutoEnrichment(contact._id.toString(), 'interactuando')
+                                .catch(err => logger.log(`  ⚠️ Auto-enrichment error: ${err.message?.substring(0, 60)}`));
+                        } else {
+                            logger.log(`  ⚠️ No contact found or no name — skipping enrichment`);
                         }
+                    } catch (enrichTriggerErr: any) {
+                        logger.log(`  ⚠️ Failed to trigger enrichment: ${enrichTriggerErr.message?.substring(0, 60)}`);
                     }
                 } else {
-                    // Total failure — try fallback name from h1
+                    // Scrape returned null — try fallback name from h1
                     const fallbackName = this.profiles[index].name;
                     if (fallbackName && fallbackName !== profile.url) {
                         await LinkedInContact.updateOne(
@@ -939,17 +1072,28 @@ class LinkedInService extends EventEmitter {
                     } else {
                         logger.log(`  ⚠️ CRM: Could not scrape any profile data`);
                     }
+
+                    // Still try enrichment even with minimal data
+                    try {
+                        const contact = await LinkedInContact.findOne({ profileUrl: normalizedUrl });
+                        if (contact && contact.fullName) {
+                            logger.log(`  🧬 Triggering enrichment (minimal data) for ${contact.fullName}...`);
+                            enrichmentService.triggerAutoEnrichment(contact._id.toString(), 'interactuando')
+                                .catch(err => logger.log(`  ⚠️ Auto-enrichment error: ${err.message?.substring(0, 60)}`));
+                        }
+                    } catch (enrichTriggerErr: any) {
+                        logger.log(`  ⚠️ Failed to trigger enrichment: ${enrichTriggerErr.message?.substring(0, 60)}`);
+                    }
                 }
             } catch (crmErr: any) {
                 logger.log(`  ⚠️ CRM scrape/save error: ${crmErr.message?.substring(0, 80)}`);
                 // Non-critical — continue
             }
 
-            // ── Final status: interactuando (scraping done, enrichment will handle next) ──
-            // The enrichment service will automatically pick up contacts in 'interactuando' status
-            // and move them through: enriqueciendo → esperando_aceptacion
+            // ── Final: status already set to 'interactuando' above ──
+            // The enrichment service will automatically pick up contacts and
+            // move them through: enriqueciendo → esperando_aceptacion
             logger.log(`  ✅ CRM: Pipeline complete for this profile`);
-            logger.log(`     → Status: interactuando (waiting for auto-enrichment)`);
 
             // Mark as done
             this.updateProfile(index, {
@@ -985,6 +1129,52 @@ class LinkedInService extends EventEmitter {
         // Scroll to top — action buttons are in the profile header
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
         await this.delay(this.getRandomDelay(800, 1500));
+
+        // ── EARLY CHECK: Detect "Pendiente" / "Pending" status ──
+        logger.log('  🔍 Early Check: Scanning for "Pendiente" / "Pending" status...');
+
+        const pendingStatus = await page.evaluate(() => {
+            const buttons = document.querySelectorAll('button');
+            const debugInfo: string[] = [];
+
+            for (const btn of buttons) {
+                const text = (btn.textContent || '').trim();
+                const textLower = text.toLowerCase();
+                const ariaLabel = (btn.getAttribute('aria-label') || '');
+                const ariaLower = ariaLabel.toLowerCase();
+                const rect = btn.getBoundingClientRect();
+
+                // Log all buttons in range for debugging
+                if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < 600) {
+                    debugInfo.push(`Button: text="${text.substring(0, 30)}" aria="${ariaLabel.substring(0, 40)}" top=${Math.round(rect.top)}`);
+
+                    // Check for "Pendiente" or "Pending" text
+                    if (textLower === 'pendiente' || textLower === 'pending') {
+                        return { found: true, text: text, reason: 'button_text', debug: debugInfo };
+                    }
+                    // Check aria-label which often contains full status
+                    if (ariaLower.includes('pendiente') || ariaLower.includes('pending')) {
+                        return { found: true, text: ariaLabel.substring(0, 80), reason: 'aria_label', debug: debugInfo };
+                    }
+                }
+            }
+            return { found: false, debug: debugInfo.slice(0, 10) }; // Return first 10 buttons for debugging
+        });
+
+        // Log debug info
+        if (pendingStatus.debug) {
+            logger.log(`  🔍 Early Check Debug: Found ${pendingStatus.debug.length} buttons in range`);
+            pendingStatus.debug.forEach((info: string, i: number) => {
+                logger.log(`     [${i}] ${info}`);
+            });
+        }
+
+        if (pendingStatus.found) {
+            logger.log(`  ℹ️ Connection already pending — skipping (${pendingStatus.reason}: "${pendingStatus.text}")`);
+            return false;
+        } else {
+            logger.log(`  ✅ Early Check: No pending status found — proceeding with connection`);
+        }
 
         // Wait for profile action buttons to be visible in the DOM
         try {
@@ -1088,7 +1278,7 @@ class LinkedInService extends EventEmitter {
         // ══════════════════════════════════════════════════════════
         // Strategy 1: Direct <button> OR <a> with "Conectar"/"Connect" (top < 400)
         // For profiles where Connect is a primary action button or link.
-        // IMPORTANT: Exclude sidebar suggestion buttons.
+        // IMPORTANT: Exclude sidebar suggestion buttons and navigation links.
         // ══════════════════════════════════════════════════════════
         if (!connectEl) {
             logger.log('  🔎 Strategy 1: Looking for direct Connect <button> or <a>...');
@@ -1100,8 +1290,21 @@ class LinkedInService extends EventEmitter {
                     const text = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
                     const rect = el.getBoundingClientRect();
                     const tag = el.tagName.toLowerCase();
+                    const href = (el.getAttribute('href') || '').toLowerCase();
 
                     if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < 400) {
+                        // SKIP: Navigation links (Campaign Manager, Ads, etc.)
+                        if (href.includes('campaignmanager') || href.includes('publicidad') ||
+                            href.includes('/ads/') || href.includes('linkedin.com/ads')) {
+                            continue;
+                        }
+
+                        // SKIP: Links that open external pages
+                        if (href && !href.includes('/in/') && !href.includes('custom-invite') &&
+                            !href.startsWith('#') && href.length > 0) {
+                            continue;
+                        }
+
                         // SKIP suggestion card buttons — they say "Invita a [Other Person] a conectar"
                         // But DON'T skip the profile's own "Invita a [Profile Name] a conectar" link
                         // Distinguish: sidebar suggestions are typically at top > 350 or in the right panel
@@ -1171,7 +1374,17 @@ class LinkedInService extends EventEmitter {
             logger.log(`  🔍 Found ${moreButtonPositions.length} Más/More buttons: ${JSON.stringify(moreButtonPositions)}`);
 
             // Try each Más button until we find one with "Conectar" in its dropdown
+            // TIMEOUT: Max 30 seconds total for all dropdown attempts to avoid hanging
+            const strategy2StartTime = Date.now();
+            const STRATEGY2_TIMEOUT_MS = 30000; // 30 seconds max
+
             for (const morePos of moreButtonPositions) {
+                // Check timeout
+                if (Date.now() - strategy2StartTime > STRATEGY2_TIMEOUT_MS) {
+                    logger.log(`  ⏱️ Strategy 2 timeout after ${Math.round((Date.now() - strategy2StartTime) / 1000)}s — stopping dropdown attempts`);
+                    break;
+                }
+
                 logger.log(`  🔄 Trying Más button at top=${morePos.top}...`);
 
                 // Get this specific button by its index
@@ -1192,8 +1405,13 @@ class LinkedInService extends EventEmitter {
                 await page.evaluate((el: Element) => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), moreEl);
                 await this.delay(this.getRandomDelay(300, 600));
 
-                await this.humanClick(page, moreEl);
-                await this.delay(this.getRandomDelay(1500, 3000));
+                try {
+                    await this.humanClick(page, moreEl);
+                    await this.delay(this.getRandomDelay(1500, 3000));
+                } catch (clickErr: any) {
+                    logger.log(`  ⚠️ Error clicking Más button: ${clickErr.message?.substring(0, 60)}`);
+                    continue;
+                }
 
                 // Debug: log dropdown items (broad search — LinkedIn uses obfuscated classes)
                 try {
@@ -1404,6 +1622,29 @@ class LinkedInService extends EventEmitter {
             return false;
         }
 
+        // ── VALIDATE: Ensure element is actually a connect button ──
+        const isValidConnectEl = await page.evaluate((el: Element) => {
+            const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+            const text = (el.textContent || '').trim().toLowerCase();
+            const href = (el.getAttribute('href') || '').toLowerCase();
+            const tag = el.tagName.toLowerCase();
+
+            // Must be conectar/connect
+            const isConnectText = text === 'conectar' || text === 'connect' ||
+                ariaLabel.includes('conectar') || ariaLabel.includes('connect');
+
+            // Must NOT be campaign manager or ads
+            const isValidHref = !href.includes('campaignmanager') && !href.includes('publicidad') &&
+                !href.includes('/ads/');
+
+            return isConnectText && isValidHref;
+        }, connectEl);
+
+        if (!isValidConnectEl) {
+            logger.log('  ❌ Element validation failed — not a valid Connect button');
+            return false;
+        }
+
         // ── Scroll element into view before clicking ──
         logger.log(`  📌 Scrolling connect element into view (strategy: ${usedStrategy})...`);
         await page.evaluate((el: Element) => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), connectEl);
@@ -1541,11 +1782,11 @@ class LinkedInService extends EventEmitter {
 
                     const profileName = this.profiles[this.currentIndex]?.name || '';
                     const firstName = profileName.split(' ')[0] || '';
-                    
+
                     // Get scraped data for this profile if available
                     const currentProfile = this.profiles[this.currentIndex];
                     const scraped = await this.scrapeProfileData(page).catch(() => null);
-                    
+
                     // Extended variable substitution
                     const variables: Record<string, string> = {
                         nombre: firstName,
@@ -1560,7 +1801,7 @@ class LinkedInService extends EventEmitter {
                         ubicacion: scraped?.location || '',
                         location: scraped?.location || '',
                     };
-                    
+
                     let personalizedNote = note;
                     for (const [key, value] of Object.entries(variables)) {
                         const regex = new RegExp(`\\{${key}\\}`, 'gi');
@@ -1569,7 +1810,7 @@ class LinkedInService extends EventEmitter {
 
                     await page.keyboard.type(personalizedNote, { delay: this.getRandomDelay(30, 80) });
                     await this.delay(this.getRandomDelay(500, 1000));
-                    logger.log(`  ✅ Note typed (${Object.entries(variables).filter(([k,v]) => v).length} variables substituted)`);
+                    logger.log(`  ✅ Note typed (${Object.entries(variables).filter(([k, v]) => v).length} variables substituted)`);
                 }
             }
         }
@@ -1728,15 +1969,15 @@ class LinkedInService extends EventEmitter {
         try {
             // NEW: Use the robust ConnectionVerifier
             logger.log('  🌐 Reloading profile for verification (using multi-method verifier)...');
-            
+
             const verification = await connectionVerifier.verify(page, profileUrl, 2);
-            
+
             // 📸 Screenshot during verification
             await logger.screenshot(page, 'verification');
             await logger.logPageState(page, 'verification');
 
             logger.log(`  🔍 Verification result: connected=${verification.connected}, confidence=${verification.confidence}, method=${verification.method}`);
-            
+
             if (verification.evidence.length > 0) {
                 for (const evidence of verification.evidence.slice(0, 3)) {
                     logger.log(`     → ${evidence}`);
@@ -1753,7 +1994,7 @@ class LinkedInService extends EventEmitter {
             } else if (!verification.connected && verification.confidence === 'medium') {
                 return 'uncertain'; // Medium confidence failure is uncertain
             }
-            
+
             return 'uncertain';
         } catch (err: any) {
             logger.log(`  ⚠️ Verification error: ${err.message?.substring(0, 80)}`);
@@ -1764,8 +2005,6 @@ class LinkedInService extends EventEmitter {
     // ── Like Latest Post ─────────────────────────────────────
 
     private async likeLatestPost(page: Page, profileUrl: string, logger?: LinkedInLogger): Promise<boolean> {
-
-
         // Navigate to recent activity/posts
         const postsUrl = profileUrl.replace(/\/$/, '') + '/recent-activity/all/';
         try {
@@ -1778,27 +2017,33 @@ class LinkedInService extends EventEmitter {
         await this.humanScroll(page);
 
         // Find the first like/reaction button that's not already pressed
-        const liked = await page.evaluate(() => {
-            // LinkedIn reaction buttons have aria-label containing "React Like" or "Recomendar"
-            const buttons = document.querySelectorAll(
-                'button[aria-label*="Like" i], ' +
-                'button[aria-label*="React" i], ' +
-                'button[aria-label*="Recomendar" i], ' +
-                'button[aria-label*="Me gusta" i]'
-            );
+        // NOTE: Using page.evaluate with simple logic to avoid __name issues with tsx
+        const liked = await page.evaluate(function () {
+            const result = { found: false, top: 0 };
+            const buttons = document.querySelectorAll('button');
 
-            for (const btn of buttons) {
+            for (let i = 0; i < buttons.length; i++) {
+                const btn = buttons[i];
+                const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
                 const pressed = btn.getAttribute('aria-pressed');
-                if (pressed === 'true') continue; // Already liked
+
+                // Check for like/react buttons (case insensitive via toLowerCase)
+                const isLikeBtn = ariaLabel.indexOf('like') !== -1 ||
+                    ariaLabel.indexOf('react') !== -1 ||
+                    ariaLabel.indexOf('recomendar') !== -1 ||
+                    ariaLabel.indexOf('me gusta') !== -1;
+
+                if (!isLikeBtn || pressed === 'true') continue;
 
                 const rect = btn.getBoundingClientRect();
                 if (rect.width > 0 && rect.height > 0) {
-                    // Scroll it into view and click
                     btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    return { found: true, top: rect.top };
+                    result.found = true;
+                    result.top = rect.top;
+                    return result;
                 }
             }
-            return { found: false };
+            return result;
         });
 
         if (!liked.found) {
@@ -1809,13 +2054,23 @@ class LinkedInService extends EventEmitter {
         // Wait for scroll to settle, then find and click the button
         await this.delay(this.getRandomDelay(600, 1200));
 
-        const likeBtn = await page.$('button[aria-label*="Like" i][aria-pressed="false"], button[aria-label*="React" i][aria-pressed="false"], button[aria-label*="Recomendar" i][aria-pressed="false"], button[aria-label*="Me gusta" i][aria-pressed="false"]');
-
+        // Find like button using Puppeteer selector
+        const likeBtn = await page.$('button[aria-pressed="false"]');
         if (likeBtn) {
-            await this.humanClick(page, likeBtn);
-            (logger || console).log('  ✅ Liked latest post' as any);
-            await this.randomDelay(DELAYS.afterLike);
-            return true;
+            const isLike = await page.evaluate(function (el) {
+                const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                return aria.indexOf('like') !== -1 ||
+                    aria.indexOf('react') !== -1 ||
+                    aria.indexOf('recomendar') !== -1 ||
+                    aria.indexOf('me gusta') !== -1;
+            }, likeBtn);
+
+            if (isLike) {
+                await this.humanClick(page, likeBtn);
+                (logger || console).log('  ✅ Liked latest post' as any);
+                await this.randomDelay(DELAYS.afterLike);
+                return true;
+            }
         }
 
         (logger || console).log('  ⏭️ No posts to like' as any);
@@ -1954,7 +2209,7 @@ class LinkedInService extends EventEmitter {
             });
             deletedCount = deleteResult.deletedCount || 0;
             console.log(`🗑️ Eliminados ${deletedCount} contactos pendientes`);
-            
+
             // También limpiar el array de profiles interno
             this.profiles = [];
             this.currentIndex = 0;
@@ -2041,7 +2296,6 @@ class LinkedInService extends EventEmitter {
             console.log(`  📸 CRM: Page title: "${pageTitle}"`);
 
             // Wait for the profile to be fully rendered
-            // Try multiple selectors — LinkedIn DOM varies
             let foundMainElement = false;
             const selectors = ['h1', '.text-heading-xlarge', '.pv-text-details__left-panel', '.scaffold-layout__main'];
             for (const sel of selectors) {
@@ -2061,490 +2315,292 @@ class LinkedInService extends EventEmitter {
             // Small extra wait for lazy-loaded images
             await new Promise(r => setTimeout(r, 1500));
 
-            const data = await page.evaluate(() => {
+            // NOTE: Inline all code to avoid __name issues with tsx/esbuild
+            // Do NOT declare any functions inside page.evaluate - inline everything
+            const data = await page.evaluate(function () {
                 const result: any = { _debug: {} };
 
                 // ── Name (multiple fallbacks) ──
                 try {
-                    // Try LinkedIn-specific class first (most reliable)
-                    const nameEl =
-                        document.querySelector('.text-heading-xlarge') ||
-                        document.querySelector('h1.text-heading-xlarge') ||
-                        document.querySelector('h1') ||
-                        document.querySelector('[data-anonymize="person-name"]');
-                    result.fullName = nameEl?.textContent?.trim() || '';
-                    result._debug.nameSelector = nameEl ? (nameEl.tagName + '.' + (nameEl.className || '').split(' ')[0]) : 'none';
-
-                    // Fallback: look for div with role="button" containing the name (profile header)
-                    if (!result.fullName) {
-                        const nameButtons = document.querySelectorAll('div[role="button"]');
-                        for (const btn of nameButtons) {
-                            const rect = btn.getBoundingClientRect();
-                            const text = (btn.textContent || '').trim();
-                            // Profile name is usually top 300-400px, short text
-                            if (rect.top > 300 && rect.top < 450 && text.length > 2 && text.length < 60 && text.includes(' ')) {
-                                result.fullName = text;
-                                result._debug.nameSelector = 'div-role-button';
-                                break;
-                            }
-                        }
+                    const nameSelectors = ['.text-heading-xlarge', 'h1.text-heading-xlarge', 'h1', '[data-anonymize="person-name"]'];
+                    let nameEl: Element | null = null;
+                    for (let i = 0; i < nameSelectors.length; i++) {
+                        nameEl = document.querySelector(nameSelectors[i]);
+                        if (nameEl) break;
                     }
-
-                    // Fallback: try aria-label on profile section
-                    if (!result.fullName) {
-                        const profileSection = document.querySelector('section.pv-top-card, .scaffold-layout__main');
-                        const ariaName = profileSection?.querySelector('[aria-label]');
-                        if (ariaName) {
-                            const label = ariaName.getAttribute('aria-label') || '';
-                            if (label && label.length < 80) {
-                                result.fullName = label;
-                                result._debug.nameSelector = 'aria-label';
-                            }
-                        }
-                    }
+                    // Inline getText logic
+                    result.fullName = nameEl ? (nameEl.textContent || '').trim() : '';
+                    result._debug.nameSelector = nameEl ? nameEl.tagName : 'none';
 
                     // Fallback: try title tag
                     if (!result.fullName) {
                         const titleText = document.title || '';
-                        // LinkedIn titles: "Name | LinkedIn"
-                        if (titleText.includes('|')) {
-                            result.fullName = titleText.split('|')[0].trim();
+                        const pipeIdx = titleText.indexOf('|');
+                        if (pipeIdx > 0) {
+                            result.fullName = titleText.substring(0, pipeIdx).trim();
                             result._debug.nameSelector = 'title-tag';
                         }
                     }
 
-                    const parts = (result.fullName || '').split(' ');
+                    const parts = result.fullName.split(' ');
                     result.firstName = parts[0] || '';
                     result.lastName = parts.slice(1).join(' ') || '';
-                } catch { /* skip */ }
+                } catch (e) { /* skip */ }
 
-                // ── Headline (multiple fallbacks) ──
+                // ── Headline ──
                 try {
-                    // Strategy 1: Try LinkedIn-specific selectors
-                    const headlineSelectors = [
-                        '.text-body-medium.break-words',
-                        'div.text-body-medium',
-                        '[data-generated-suggestion-target]',
-                        '.pv-text-details__left-panel .text-body-medium',
-                        '.pv-top-card .text-body-medium',
-                        'h2.text-body-medium',
-                        '[class*="headline"]'
-                    ];
-                    
-                    let headline = null;
-                    for (const sel of headlineSelectors) {
-                        headline = document.querySelector(sel);
-                        if (headline?.textContent?.trim()) {
-                            result.headline = headline.textContent.trim();
+                    const headlineSelectors = ['.text-body-medium.break-words', 'div.text-body-medium', '[data-generated-suggestion-target]'];
+                    for (let i = 0; i < headlineSelectors.length; i++) {
+                        const el = document.querySelector(headlineSelectors[i]);
+                        if (el) {
+                            result.headline = (el.textContent || '').trim();
                             break;
                         }
                     }
-                    
-                    // Strategy 2: Search for text containing "|" pipe separator
-                    // Modern LinkedIn uses obfuscated classes, so search by content pattern
-                    if (!result.headline) {
-                        const allElements = document.querySelectorAll('div, span, h2, h3');
-                        for (const el of Array.from(allElements)) {
-                            const text = el.textContent?.trim();
-                            // Look for text with pattern containing "|"
-                            // Must have content before and after the pipe
-                            if (text && 
-                                text.length >= 20 && 
-                                text.length <= 150 &&
-                                text.includes('|') &&
-                                !text.includes('seguidores') &&
-                                !text.includes('contactos') &&
-                                !text.includes('en común') &&
-                                !text.includes('LinkedIn') &&  // Exclude page title artifacts
-                                text.split('|')[0].trim().length > 5) {  // Must have content before pipe
-                                result.headline = text;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // CLEANUP: Remove name from headline if it's prepended
-                    // LinkedIn sometimes shows "NameTitle at Company" without space
-                    if (result.headline && result.fullName) {
-                        // Remove name if it's at the start (with or without space)
-                        const nameVariants = [
-                            result.fullName,
-                            result.fullName.replace(/\s+/g, '')
-                        ];
-                        for (const nameVar of nameVariants) {
-                            if (result.headline.toLowerCase().startsWith(nameVar.toLowerCase())) {
-                                result.headline = result.headline.substring(nameVar.length).trim();
-                                break;
-                            }
-                        }
-                        
-                        // Also clean up common artifacts
-                        result.headline = result.headline
-                            .replace(/^[\s•·–—-]+/, '') // Remove leading separators
-                            .replace(/Enviar mensaje.*$/i, '') // Remove UI artifacts
-                            .replace(/Seguir.*$/i, '')
-                            .trim();
-                    }
-                    
-                    // Validate: reject invalid headlines
-                    if (result.headline) {
-                        const invalidPatterns = [
-                            /^\|?\s*LinkedIn$/i,  // Just "| LinkedIn"
-                            /^\s*\|\s*$/,           // Just "|"
-                            /seguidores/i,
-                            /contactos/i
-                        ];
-                        if (invalidPatterns.some(p => p.test(result.headline))) {
-                            result._debug.headlineRejected = result.headline;
-                            result.headline = '';
-                        }
-                    }
-                    
-                    result._debug.headline = !!result.headline;
-                } catch { /* skip */ }
+                } catch (e) { /* skip */ }
 
-                // ── Location (multiple fallbacks) ──
+                // ── Location ──
                 try {
-                    const loc =
-                        document.querySelector('.text-body-small.inline.t-black--light.break-words') ||
-                        document.querySelector('.pv-text-details__left-panel .text-body-small') ||
-                        document.querySelector('span.text-body-small.inline.t-black--light');
-                    result.location = loc?.textContent?.trim() || '';
-                    result._debug.location = !!result.location;
-                } catch { /* skip */ }
+                    const locSelectors = ['.text-body-small.inline.t-black--light.break-words', '.pv-text-details__left-panel .text-body-small'];
+                    for (let i = 0; i < locSelectors.length; i++) {
+                        const el = document.querySelector(locSelectors[i]);
+                        if (el) {
+                            result.location = (el.textContent || '').trim();
+                            break;
+                        }
+                    }
+                } catch (e) { /* skip */ }
 
-                // ── Profile Photo (robust detection) ──
+                // ── Profile Photo ──
                 try {
-                    // Strategy 1: Look for profile-displayphoto in src
-                    // But prioritize images that are likely the profile photo (not user's own photo)
-                    const allImgs = document.querySelectorAll('img');
-                    let photoUrl = '';
-                    
-                    // First, try to find the largest profile photo image
-                    // The main profile photo is usually larger than thumbnails
-                    let largestPhoto = { src: '', size: 0 };
-                    
-                    for (const img of Array.from(allImgs)) {
-                        const src = img.src || '';
-                        if (src.includes('profile-displayphoto') || src.includes('profile-framedphoto')) {
-                            // Calculate size (width * height, or use 100 as default if not loaded)
-                            const size = (img.width || 100) * (img.height || 100);
-                            if (size > largestPhoto.size) {
-                                largestPhoto = { src, size };
-                            }
+                    const imgs = document.querySelectorAll('img');
+                    for (let i = 0; i < imgs.length; i++) {
+                        const src = imgs[i].src || '';
+                        if (src.indexOf('profile-displayphoto') !== -1 || src.indexOf('profile-framedphoto') !== -1) {
+                            result.profilePhotoUrl = src;
+                            break;
                         }
                     }
-                    
-                    photoUrl = largestPhoto.src;
-                    
-                    // Strategy 2: Try specific selectors
-                    if (!photoUrl) {
-                        const selectors = [
-                            'button[aria-label*="photo"] img',
-                            'img[class*="profile-photo" i]',
-                            'img[class*="EntityPhoto" i]',
-                            'img.pv-top-card-profile-picture__image',
-                            '.pv-top-card__photo img',
-                            '.pv-top-card img'
-                        ];
-                        for (const sel of selectors) {
-                            const el = document.querySelector(sel) as HTMLImageElement;
-                            if (el?.src && (el.src.includes('licdn.com') || el.src.includes('linkedin'))) {
-                                photoUrl = el.src;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // Strategy 3: Look for any LinkedIn image with person's name in alt
-                    if (!photoUrl && result.fullName) {
-                        const nameForAlt = result.fullName.toLowerCase();
-                        for (const img of Array.from(allImgs)) {
-                            const imgEl = img as HTMLImageElement;
-                            const alt = (img.getAttribute('alt') || '').toLowerCase();
-                            const src = imgEl.src || '';
-                            if (alt.includes(nameForAlt) && src.includes('licdn.com')) {
-                                photoUrl = src;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // Strategy 4: Find largest image in top card area
-                    if (!photoUrl) {
-                        const topCard = document.querySelector('.pv-top-card, .scaffold-layout__main section, [class*="top-card"]');
-                        if (topCard) {
-                            let largestImg = null;
-                            let largestSize = 0;
-                            for (const img of Array.from(topCard.querySelectorAll('img'))) {
-                                const imgEl = img as HTMLImageElement;
-                                const src = imgEl.src || '';
-                                if (src.includes('licdn.com') || src.includes('media.licdn')) {
-                                    const size = (imgEl.width || 0) * (imgEl.height || 0);
-                                    if (size > largestSize) {
-                                        largestSize = size;
-                                        largestImg = imgEl;
-                                    }
-                                }
-                            }
-                            if (largestImg) {
-                                photoUrl = largestImg.src;
+                } catch (e) { /* skip */ }
+
+                // ── Current Company + Position ──
+                // BUG FIX 2: Use better selectors and validation to avoid "People also viewed" contamination
+                try {
+                    // Helper to validate company name - reject sidebar/related profile data
+                    const isValidCompany = (name: string): boolean => {
+                        if (!name || name.length < 2) return false;
+                        const lower = name.toLowerCase();
+                        // Reject if contains sidebar/related profile markers
+                        const invalidMarkers = ['seguidores', 'trabaja aquí', 'trabajan aquí', 'seguir', 'followers', 'works here'];
+                        if (invalidMarkers.some(marker => lower.includes(marker))) return false;
+                        // Reject if looks like a follower count (numbers with dots/commas followed by seguidores/followers)
+                        if (/\d{3,}[.,]?\d*\s*(seguidores|followers)/i.test(name)) return false;
+                        // Reject if too long (sidebar text is often concatenated)
+                        if (name.length > 100) return false;
+                        return true;
+                    };
+
+                    // Strategy 1: Try to get company from top card (pv-top-card section)
+                    const mainContainer = document.querySelector('.scaffold-layout__main, main, .pv-top-card');
+
+                    if (mainContainer) {
+                        // Look for company link in the main profile area (first 500px of page)
+                        const companyLink = mainContainer.querySelector(
+                            '.pv-top-card__experience a[href*="/company/"], ' +
+                            '.pv-text-details__right-panel a[href*="/company/"], ' +
+                            '.inline-show-more-text--is-collapsed a[href*="/company/"], ' +
+                            'a[href*="/company/"][data-field="experience_company_logo"]'
+                        );
+
+                        if (companyLink) {
+                            const companyText = (companyLink.textContent || '').trim();
+                            // Only use if it's within first 500px (top card area)
+                            const rect = companyLink.getBoundingClientRect();
+                            if (rect.top < 500 && isValidCompany(companyText)) {
+                                result.currentCompany = companyText;
+                                result._debug.companySource = 'top-card-link';
                             }
                         }
                     }
 
-                    result.profilePhotoUrl = photoUrl;
-                    result._debug.photo = !!photoUrl;
-                } catch { /* skip */ }
-
-                // ── Banner ──
-                try {
-                    const banner =
-                        document.querySelector('.profile-background-image img') ||
-                        document.querySelector('.pv-top-card__bg-photo img') ||
-                        document.querySelector('img[class*="profile-background"]');
-                    result.bannerUrl = (banner as HTMLImageElement)?.src || '';
-                } catch { /* skip */ }
-
-                // ── Connection degree ──
-                try {
-                    const degree =
-                        document.querySelector('.dist-value') ||
-                        document.querySelector('.pv-text-details__separator + span') ||
-                        document.querySelector('span.text-body-small:not(.break-words)');
-                    const degreeText = degree?.textContent?.trim() || '';
-                    // Only keep if it looks like "1°", "2°", "3°"
-                    if (degreeText.match(/^\d[°º]?$/)) {
-                        result.connectionDegree = degreeText;
-                    }
-                } catch { /* skip */ }
-
-                // ── Connections/Followers count ──
-                try {
-                    const connectionsLink = document.querySelector('a[href*="connections"], a[href*="/detail/connections"]');
-                    if (connectionsLink) {
-                        const connText = connectionsLink.textContent?.trim() || '';
-                        result.connectionsCount = connText;
-                    } else {
-                        const spanBold = document.querySelector('li.text-body-small span.t-bold');
-                        result.connectionsCount = spanBold?.textContent?.trim() || '';
-                    }
-                } catch { /* skip */ }
-
-                // ── About / Summary ──
-                try {
-                    const aboutSection =
-                        document.querySelector('#about ~ .display-flex .inline-show-more-text') ||
-                        document.querySelector('#about ~ div .pv-shared-text-with-see-more span[aria-hidden="true"]') ||
-                        document.querySelector('#about + .pvs-list__outer-container span[aria-hidden="true"]') ||
-                        document.querySelector('section:has(#about) .inline-show-more-text span[aria-hidden="true"]');
-                    result.about = aboutSection?.textContent?.trim()?.substring(0, 2000) || '';
-                    result._debug.about = !!result.about;
-                } catch { /* skip */ }
-
-                // ── Current Company + Position (from top card area) ──
-                try {
-                    // Method 1: Top card buttons/links near company (multilingual)
-                    const companyBtn = document.querySelector(
-                        'button[aria-label*="empresa actual"], a[aria-label*="empresa actual"], ' +
-                        'button[aria-label*="current company"], a[aria-label*="current company"], ' +
-                        'button[aria-label*="Current company"], a[aria-label*="Current company"], ' +
-                        'a[href*="company"], a[href*="/company/"]'
-                    );
-                    if (companyBtn) {
-                        result.currentCompany = companyBtn.textContent?.trim() || '';
-                    }
-
-                    // Method 2: Experience section first item (most reliable for position)
-                    if (!result.currentPosition || !result.currentCompany) {
-                        // Try different selectors for experience section
-                        const expSelectors = [
-                            '#experience ~ .pvs-list__outer-container .pvs-list__paged-list-item',
-                            'section:has(#experience) .pvs-list__paged-list-item',
-                            '#experience-section .pvs-list__paged-list-item',
-                            '[data-section="experience"] .pvs-list__paged-list-item',
-                            'section:has(h2:contains("Experience")) .pvs-list__paged-list-item',
-                            'section:has(h2:contains("Experiencia")) .pvs-list__paged-list-item'
-                        ];
-                        
-                        let expItems: NodeListOf<Element> | null = null;
-                        for (const sel of expSelectors) {
-                            try {
-                                expItems = document.querySelectorAll(sel);
-                                if (expItems && expItems.length > 0) break;
-                            } catch { /* invalid selector, try next */ }
-                        }
-                        
-                        if (expItems && expItems.length > 0) {
-                            const first = expItems[0];
-                            // Try to get position from various elements
-                            const positionEl = 
-                                first.querySelector('.mr1 .t-bold, .t-bold, span[aria-hidden="true"]') ||
-                                first.querySelector('div[data-test-id="experience-title"]');
-                            if (positionEl && !result.currentPosition) {
-                                result.currentPosition = positionEl.textContent?.trim() || '';
-                            }
-                            
-                            // Try to get company from various elements
-                            const companyEl = 
-                                first.querySelector('.t-14.t-normal, span[class*="company"], a[href*="company"]') ||
-                                first.querySelector('div[data-test-id="experience-company"]');
-                            if (companyEl && !result.currentCompany) {
-                                result.currentCompany = companyEl.textContent?.trim() || '';
-                            }
-                            
-                            // Fallback: get all spans and use first two
-                            if ((!result.currentPosition || !result.currentCompany)) {
-                                const spans = first.querySelectorAll('span[aria-hidden="true"], .visually-hidden');
-                                const texts: string[] = [];
-                                spans.forEach(s => {
-                                    const text = s.textContent?.trim() || '';
-                                    if (text && text.length > 2 && !texts.includes(text)) {
-                                        texts.push(text);
-                                    }
-                                });
-                                if (texts.length >= 2) {
-                                    if (!result.currentPosition) result.currentPosition = texts[0];
-                                    if (!result.currentCompany) result.currentCompany = texts[1];
-                                } else if (texts.length === 1 && !result.currentPosition) {
-                                    result.currentPosition = texts[0];
-                                }
+                    // Strategy 2: Parse from headline (only if still no company)
+                    if (!result.currentCompany && result.headline) {
+                        // Look for "at" or "en" pattern
+                        const atMatch = result.headline.match(/(.+?)\s+(at|en|@)\s+(.+?)(\s+[|·]\s+|$)/i);
+                        if (atMatch) {
+                            const position = atMatch[1].trim();
+                            const company = atMatch[3].trim();
+                            if (isValidCompany(company)) {
+                                result.currentPosition = position;
+                                result.currentCompany = company;
+                                result._debug.companySource = 'headline';
                             }
                         }
                     }
 
-                    // Method 3: From the top card detail links
+                    // Strategy 3: Try experience section (first item)
                     if (!result.currentCompany) {
-                        const detailSelectors = [
-                            '.pv-text-details__right-panel li',
-                            '.pv-text-details__right-panel-item-text',
-                            '.pv-top-card__list-container li',
-                            '[class*="top-card"] a[href*="company"]',
-                            '.text-body-medium a[href*="company"]'
-                        ];
-                        for (const sel of detailSelectors) {
-                            const links = document.querySelectorAll(sel);
-                            for (const link of Array.from(links)) {
-                                const text = link.textContent?.trim() || '';
-                                if (text && text.length < 100 && text.length > 2) {
-                                    result.currentCompany = text;
+                        const expSection = document.querySelector('#experience, .experience-section');
+                        if (expSection) {
+                            const firstExp = expSection.querySelector('li.artdeco-list__item, .experience-item, [data-view-name="profile-component-entity"]');
+                            if (firstExp) {
+                                const companyNameEl = firstExp.querySelector('span.t-14.t-normal, .t-14.t-normal, a[href*="/company/"] span');
+                                if (companyNameEl) {
+                                    const companyText = (companyNameEl.textContent || '').trim();
+                                    if (isValidCompany(companyText)) {
+                                        result.currentCompany = companyText;
+                                        result._debug.companySource = 'experience-section';
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Strategy 4: Broad scan — find any /company/ link near the top of page
+                    if (!result.currentCompany) {
+                        const allCompanyLinks = document.querySelectorAll('a[href*="/company/"]');
+                        for (let i = 0; i < allCompanyLinks.length; i++) {
+                            const link = allCompanyLinks[i] as HTMLAnchorElement;
+                            const rect = link.getBoundingClientRect();
+                            // Only consider links in the top 600px (profile card area)
+                            if (rect.top > 0 && rect.top < 600) {
+                                const linkText = (link.textContent || '').trim();
+                                if (linkText && isValidCompany(linkText) && linkText.length > 2) {
+                                    result.currentCompany = linkText;
+                                    result._debug.companySource = 'broad-company-link';
                                     break;
                                 }
                             }
-                            if (result.currentCompany) break;
                         }
                     }
 
-                    // Method 4: Try to extract from headline if still missing company/position
-                    if ((!result.currentCompany || !result.currentPosition) && result.headline) {
-                        // Format 1: "Position at Company | Rest" (English)
-                        // Format 2: "Cargo: Empresa | Resto" (Spanish with colon)
-                        
-                        const pipeIndex = result.headline.indexOf('|');
-                        const colonIndex = result.headline.indexOf(':');
-                        
-                        if (colonIndex > 0 && (pipeIndex === -1 || colonIndex < pipeIndex)) {
-                            // Format: "Cargo: Empresa | Resto"
-                            if (!result.currentPosition) {
-                                result.currentPosition = result.headline.substring(0, colonIndex).trim();
+                    // Strategy 5: Parse company from visible role text near name  
+                    // LinkedIn profile cards often have "Role at Company" or "Role en Company" text
+                    if (!result.currentCompany) {
+                        const allDivs = document.querySelectorAll('div[role="button"], div[data-generated-suggestion-target]');
+                        for (let i = 0; i < allDivs.length; i++) {
+                            const div = allDivs[i] as HTMLElement;
+                            const rect = div.getBoundingClientRect();
+                            if (rect.top > 100 && rect.top < 600) {
+                                const text = (div.textContent || '').trim();
+                                // Match "Something de/en/at Company"
+                                const roleMatch = text.match(/^(.+?)\s+(?:de|en|at)\s+(.+?)$/i);
+                                if (roleMatch && roleMatch[2] && isValidCompany(roleMatch[2])) {
+                                    if (!result.currentPosition) result.currentPosition = roleMatch[1].trim();
+                                    result.currentCompany = roleMatch[2].trim();
+                                    result._debug.companySource = 'role-text-div';
+                                    break;
+                                }
                             }
+                        }
+                    }
+                } catch (e) { /* skip */ }
+
+                // ── Headline fallback: construct from position + company ──
+                if (!result.headline && result.currentPosition && result.currentCompany) {
+                    result.headline = `${result.currentPosition} en ${result.currentCompany}`;
+                    result._debug.headline = 'constructed';
+                }
+
+                // ── About ──
+                try {
+                    const aboutEl = document.querySelector('#about ~ div .inline-show-more-text, #about + div .inline-show-more-text');
+                    if (aboutEl) {
+                        const aboutText = (aboutEl.textContent || '').trim();
+                        result.about = aboutText.substring(0, 2000);
+                    }
+                } catch (e) { /* skip */ }
+                // ── LAST RESORT: Direct scan for company and headline ──
+                // If CSS class-based selectors failed, scan the DOM directly
+                // without depending on finding the name element first
+                try {
+                    const fallbackDebug: string[] = [];
+
+                    // 1. Company: Find any /company/ link in the top 500px of the main area
+                    if (!result.currentCompany) {
+                        const companyLinks = document.querySelectorAll('a[href*="/company/"]');
+                        for (let i = 0; i < companyLinks.length; i++) {
+                            const link = companyLinks[i] as HTMLAnchorElement;
+                            const text = (link.textContent || '').trim();
+                            const rect = link.getBoundingClientRect();
+                            fallbackDebug.push(`company-link[${i}]: "${text.substring(0, 40)}" top=${Math.round(rect.top)} left=${Math.round(rect.left)}`);
+                            // Only take company links in the main profile area (not sidebar ads)
+                            if (text && text.length > 2 && text.length < 80 && rect.left < 950 && rect.top > 100 && rect.top < 500) {
+                                result.currentCompany = text;
+                                result._debug.companySource = 'direct-company-link';
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. Headline: Scan all leaf text elements between y=350-430
+                    //    (this is where LinkedIn renders the headline below the name)
+                    if (!result.headline) {
+                        const allEls = document.querySelectorAll('span, div, p, h2');
+                        const candidates: { text: string; top: number; tag: string }[] = [];
+
+                        for (let i = 0; i < allEls.length; i++) {
+                            const el = allEls[i] as HTMLElement;
+                            const rect = el.getBoundingClientRect();
+                            // Headline is typically: 350-430px from top, left-aligned (< 700px), leaf-ish
+                            if (rect.top > 340 && rect.top < 430 && rect.left < 700 && rect.left > 50) {
+                                const t = el.innerText?.trim() || '';
+                                if (t && t.length > 10 && t.length < 200 && el.children.length < 2) {
+                                    // Skip name, navigation, or button text
+                                    if (t.includes('contacto') || t.includes('en común') || t.includes('Información') ||
+                                        t.includes('Enviar') || t.includes('Pendiente') || t.includes('Conectar') ||
+                                        t.includes('Buscar') || t === result.fullName) continue;
+                                    candidates.push({ text: t, top: rect.top, tag: el.tagName });
+                                }
+                            }
+                        }
+
+                        if (candidates.length > 0) {
+                            // Sort by top position, take the first one
+                            candidates.sort((a, b) => a.top - b.top);
+                            result.headline = candidates[0].text.replace(/\s*·\s*\d+°?\s*$/, '').trim();
+                            result._debug.headline = 'direct-scan';
+                            fallbackDebug.push(`headline: "${result.headline}" from ${candidates[0].tag} at y=${Math.round(candidates[0].top)}`);
+                        }
+                    }
+
+                    // 3. Location: Scan text between y=400-460
+                    if (!result.location) {
+                        const allEls = document.querySelectorAll('span, div, p');
+                        for (let i = 0; i < allEls.length; i++) {
+                            const el = allEls[i] as HTMLElement;
+                            const rect = el.getBoundingClientRect();
+                            if (rect.top > 390 && rect.top < 460 && rect.left < 600 && rect.left > 50) {
+                                const t = el.innerText?.trim() || '';
+                                if (t && t.length > 5 && t.length < 60 && el.children.length < 2 &&
+                                    !t.includes('contacto') && !t.includes('en común') && t !== result.headline) {
+                                    // Location often contains city names or "y alrededores"
+                                    if (t.includes('alrededores') || t.includes('Aires') || t.includes('Capital') ||
+                                        t.includes('Argentina') || t.includes('México') || t.includes('España') ||
+                                        t.includes('Colombia') || t.match(/^[A-ZÁÉÍÓÚ]/) || t.includes(',')) {
+                                        result.location = t;
+                                        result._debug.location = 'direct-scan';
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. Parse position from headline  
+                    if (result.headline && !result.currentPosition) {
+                        const parts = result.headline.match(/^(.+?)\s+(?:de|en|at)\s+(.+)/i);
+                        if (parts) {
+                            result.currentPosition = parts[1].trim();
                             if (!result.currentCompany) {
-                                const afterColon = result.headline.substring(colonIndex + 1).trim();
-                                const afterPipe = afterColon.indexOf('|');
-                                result.currentCompany = afterPipe > 0 
-                                    ? afterColon.substring(0, afterPipe).trim()
-                                    : afterColon.trim();
-                            }
-                        } else {
-                            // Format: "Position at Company | Rest" or "Position @ Company"
-                            const atMatch = result.headline.match(/(.+?)\s+(at|en|@)\s+(.+?)(\s+[|·]\s+|$)/i);
-                            if (atMatch) {
-                                if (!result.currentPosition) result.currentPosition = atMatch[1].trim();
-                                if (!result.currentCompany) result.currentCompany = atMatch[3].trim();
+                                result.currentCompany = parts[2].trim();
+                                result._debug.companySource = 'headline-parse';
                             }
                         }
                     }
 
-                    result._debug.company = !!result.currentCompany;
-                    result._debug.position = !!result.currentPosition;
-                } catch { /* skip */ }
-
-                // ── Company Logo ──
-                try {
-                    const expSection = document.querySelector('#experience');
-                    if (expSection) {
-                        const logoImg = expSection.closest('section')?.querySelector('img');
-                        result.companyLogoUrl = (logoImg as HTMLImageElement)?.src || '';
-                    }
-                } catch { /* skip */ }
-
-                // ── Experience (last 3) ──
-                result.experience = [];
-                try {
-                    const expSection = document.querySelector('#experience');
-                    if (expSection) {
-                        const section = expSection.closest('section');
-                        const items = section?.querySelectorAll(':scope > .pvs-list__outer-container .pvs-list__paged-list-item') ||
-                            section?.querySelectorAll('.pvs-list__paged-list-item') || [];
-                        const maxItems = Math.min(items.length, 3);
-                        for (let i = 0; i < maxItems; i++) {
-                            const item = items[i];
-                            const spans = item.querySelectorAll('span[aria-hidden="true"]');
-                            const logo = item.querySelector('img');
-                            if (spans.length >= 2) {
-                                result.experience.push({
-                                    position: spans[0]?.textContent?.trim() || 'Unknown',
-                                    company: spans[1]?.textContent?.trim() || 'Unknown',
-                                    duration: spans[3]?.textContent?.trim() || '',
-                                    logoUrl: (logo as HTMLImageElement)?.src || '',
-                                });
-                            }
-                        }
-                    }
-                    result._debug.experience = result.experience.length;
-                } catch { /* skip */ }
-
-                // ── Education (last 2) ──
-                result.education = [];
-                try {
-                    const eduSection = document.querySelector('#education');
-                    if (eduSection) {
-                        const section = eduSection.closest('section');
-                        const items = section?.querySelectorAll(':scope > .pvs-list__outer-container .pvs-list__paged-list-item') ||
-                            section?.querySelectorAll('.pvs-list__paged-list-item') || [];
-                        const maxItems = Math.min(items.length, 2);
-                        for (let i = 0; i < maxItems; i++) {
-                            const item = items[i];
-                            const spans = item.querySelectorAll('span[aria-hidden="true"]');
-                            if (spans.length >= 1) {
-                                result.education.push({
-                                    institution: spans[0]?.textContent?.trim() || 'Unknown',
-                                    degree: spans[1]?.textContent?.trim() || '',
-                                    years: spans[2]?.textContent?.trim() || '',
-                                });
-                            }
-                        }
-                    }
-                    result._debug.education = result.education.length;
-                } catch { /* skip */ }
-
-                // ── Skills (top 5) ──
-                result.skills = [];
-                try {
-                    const skillsSection = document.querySelector('#skills');
-                    if (skillsSection) {
-                        const section = skillsSection.closest('section');
-                        const items = section?.querySelectorAll('.pvs-list__paged-list-item span[aria-hidden="true"]') || [];
-                        const maxItems = Math.min(items.length, 5);
-                        for (let i = 0; i < maxItems; i++) {
-                            const text = items[i]?.textContent?.trim();
-                            if (text && !result.skills.includes(text)) {
-                                result.skills.push(text);
-                            }
-                        }
-                    }
-                    result._debug.skills = result.skills.length;
-                } catch { /* skip */ }
+                    result._debug.fallbackLog = fallbackDebug.join(' | ');
+                } catch (e) { /* fallback failed, not critical */ }
 
                 return result;
             });
@@ -2552,7 +2608,8 @@ class LinkedInService extends EventEmitter {
             // Extract and log debug info
             const debug = data?._debug || {};
             delete data?._debug;
-            console.log(`  🔍 CRM Scrape debug: name=${debug.nameSelector || 'none'}, headline=${debug.headline}, location=${debug.location}, photo=${debug.photo}, position=${debug.position}, company=${debug.company}, about=${debug.about}, exp=${debug.experience}, edu=${debug.education}, skills=${debug.skills}`);
+            console.log(`  🔍 CRM Scrape debug: name=${debug.nameSelector || 'none'}, headline=${debug.headline}, location=${debug.location}, photo=${debug.photo}, position=${debug.position}, company=${debug.companySource}, about=${debug.about}, exp=${debug.experience}, edu=${debug.education}, skills=${debug.skills}`);
+            if (debug.fallbackLog) console.log(`  🔍 CRM Fallback: ${debug.fallbackLog}`);
 
             if (!data) {
                 console.log('  ⚠️ CRM: page.evaluate returned null');
@@ -2579,7 +2636,7 @@ class LinkedInService extends EventEmitter {
             const fields = ['fullName', 'headline', 'location', 'profilePhotoUrl', 'currentCompany', 'currentPosition', 'about'];
             const found = fields.filter(f => data[f]);
             console.log(`  📊 CRM: Scraped ${found.length}/${fields.length} fields: [${found.join(', ')}]`);
-            
+
             // Log actual values for debugging
             if (data.currentPosition) console.log(`     → Position: ${data.currentPosition.substring(0, 50)}`);
             if (data.currentCompany) console.log(`     → Company: ${data.currentCompany.substring(0, 50)}`);
@@ -2601,10 +2658,26 @@ class LinkedInService extends EventEmitter {
             const current = operationManager.getCurrent();
             throw new Error(`Cannot check accepted — operation '${current}' in progress`);
         }
-        
+
         if (!this.page || this.status !== 'logged-in') {
             operationManager.release();
             throw new Error('Browser not open or not logged in');
+        }
+
+        // Phase 4: Session pre-check + circuit breaker guard
+        if (this.activeAccount) {
+            const accountId = (this.activeAccount._id as any).toString();
+            if (!circuitBreaker.canProceed(accountId)) {
+                operationManager.release();
+                const status = circuitBreaker.getStatus(accountId);
+                throw new Error(`Circuit breaker OPEN — cooldown: ${Math.round((status.cooldownRemainingMs ?? 0) / 60000)}min`);
+            }
+            try {
+                await sessionManager.sessionPreCheck(this.activeAccount, this.page, false);
+            } catch (err) {
+                operationManager.release();
+                throw new Error(`Session pre-check failed: ${(err as Error).message}`);
+            }
         }
 
         this.isBusy = true;
@@ -2859,6 +2932,14 @@ class LinkedInService extends EventEmitter {
 
             this.lastAcceptedCheck = new Date();
             console.log(`\n🔄 CRM: Check complete — ${pendingContacts.length} contacts checked, ${updated} updated to aceptado`);
+
+            // Record success in circuit breaker
+            if (this.activeAccount) {
+                await circuitBreaker.recordSuccess(
+                    (this.activeAccount._id as any).toString(),
+                    this.workspaceId
+                );
+            }
 
             return { found: pendingContacts.length, updated };
         } finally {
