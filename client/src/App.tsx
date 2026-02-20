@@ -2,8 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import WhatsAppTab from './components/whatsapp/WhatsAppTab'
 import ResumidorTab from './components/resumidor/ResumidorTab'
+import TeamPermissions from './components/team/TeamPermissions'
 
 import { API_BASE } from './config';
+import api from './lib/axios';
+import { useAuth } from './contexts/AuthContext';
+import { LogOut, User as UserIcon } from 'lucide-react';
 
 const API_URL = `${API_BASE}/api`;
 
@@ -16,7 +20,7 @@ interface Transcription {
 
 function App() {
     const navigate = useNavigate()
-    const [activeTab, setActiveTab] = useState<'dictate' | 'transcribe' | 'history' | 'whatsapp' | 'resumidor'>('dictate')
+    const [activeTab, setActiveTab] = useState<'dictate' | 'transcribe' | 'history' | 'whatsapp' | 'resumidor' | 'team'>('dictate')
     const [isRecording, setIsRecording] = useState(false)
     const [transcript, setTranscript] = useState('')
     const [error, setError] = useState<string | null>(null)
@@ -26,6 +30,9 @@ function App() {
     const [isTranscribing, setIsTranscribing] = useState(false)
     const [transcribeResult, setTranscribeResult] = useState('')
     const [searchTerm, setSearchTerm] = useState('')
+
+    const { user, logout } = useAuth()
+
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const chunksRef = useRef<Blob[]>([])
     const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -42,10 +49,8 @@ function App() {
         setIsLoadingHistory(true)
         setError(null)
         try {
-            const res = await fetch(`${API_URL}/history`)
-            if (!res.ok) throw new Error('Error loading history')
-            const data = await res.json()
-            setHistory(data)
+            const res = await api.get('/history')
+            setHistory(res.data)
         } catch (err) {
             console.error(err)
             setError('Error al cargar el historial')
@@ -56,10 +61,7 @@ function App() {
 
     const deleteHistoryItem = async (id: number) => {
         try {
-            const res = await fetch(`${API_URL}/history/${id}`, {
-                method: 'DELETE'
-            })
-            if (!res.ok) throw new Error('Error deleting item')
+            await api.delete(`/history/${id}`)
             setHistory(prev => prev.filter(item => item.id !== id))
         } catch (err) {
             console.error(err)
@@ -122,15 +124,11 @@ function App() {
             const formData = new FormData()
             formData.append('audio', audioBlob, 'recording.webm')
 
-            const res = await fetch(`${API_URL}/transcribe/blob`, {
-                method: 'POST',
-                body: formData
+            const res = await api.post('/transcribe/blob', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             })
 
-            if (!res.ok) throw new Error('Error transcribing')
-
-            const data = await res.json()
-            setTranscript(data.text || 'No se detectó texto')
+            setTranscript(res.data.text || 'No se detectó texto')
         } catch (err) {
             console.error('Transcription error:', err)
             setError('Error al transcribir. Intenta de nuevo.')
@@ -177,15 +175,11 @@ function App() {
                 formData.append('files', file)
             })
 
-            const res = await fetch(`${API_URL}/transcribe/file`, {
-                method: 'POST',
-                body: formData
+            const res = await api.post('/transcribe/file', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             })
 
-            if (!res.ok) throw new Error('Error transcribing')
-
-            const data = await res.json()
-            const texts = data.map((item: any) => item.text).join('\n\n')
+            const texts = res.data.map((item: any) => item.text).join('\n\n')
             setTranscribeResult(texts || 'No se detectó texto')
         } catch (err) {
             console.error('Transcription error:', err)
@@ -254,11 +248,29 @@ function App() {
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
             {/* Header */}
             <div className="bg-white border-b border-slate-200 px-6 py-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center">
-                        <span className="text-white text-xl">🎙️</span>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center">
+                            <span className="text-white text-xl">🎙️</span>
+                        </div>
+                        <h1 className="text-xl font-semibold text-slate-800">VoiceCommand</h1>
                     </div>
-                    <h1 className="text-xl font-semibold text-slate-800">VoiceCommand</h1>
+
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
+                            <div className="w-6 h-6 bg-violet-100 rounded-full flex items-center justify-center">
+                                <UserIcon className="w-4 h-4 text-violet-600" />
+                            </div>
+                            <span className="text-sm font-medium text-slate-700">{user?.email}</span>
+                        </div>
+                        <button
+                            onClick={logout}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors group"
+                            title="Cerrar sesión"
+                        >
+                            <LogOut className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -310,6 +322,20 @@ function App() {
                     >
                         📊 Resumidor
                     </button>
+
+                    {/* Admin Only Tab */}
+                    {(user as any)?.role === 'admin' && (
+                        <button
+                            onClick={() => setActiveTab('team')}
+                            className={`py-4 px-2 border-b-2 transition-colors ${activeTab === 'team'
+                                ? 'border-violet-600 text-violet-600'
+                                : 'border-transparent text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            🛡️ Equipo
+                        </button>
+                    )}
+
                     <button
                         onClick={() => navigate('/linkedin')}
                         className="py-4 px-2 border-b-2 transition-colors border-transparent text-slate-500 hover:text-violet-600 hover:border-violet-300"
@@ -523,6 +549,10 @@ function App() {
 
                 {activeTab === 'resumidor' && (
                     <ResumidorTab />
+                )}
+
+                {activeTab === 'team' && (
+                    <TeamPermissions />
                 )}
             </div>
 

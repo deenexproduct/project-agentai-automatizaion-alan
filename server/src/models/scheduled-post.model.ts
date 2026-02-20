@@ -66,7 +66,7 @@ export interface IEngagementMetrics {
 
 export interface IScheduledPost extends Document {
     accountId: Types.ObjectId;
-    workspaceId: string;
+    userId: string;
     content: string;
     hashtags: string[];
     mediaUrls: string[];
@@ -89,9 +89,9 @@ export interface IScheduledPostModel extends Model<IScheduledPost> {
     findPendingForAccount(accountId: Types.ObjectId): Promise<IScheduledPost[]>;
 
     /**
-     * Find draft posts for a workspace (awaiting CEO approval).
+     * Find draft posts for a user (awaiting CEO approval).
      */
-    findDraftsForWorkspace(workspaceId: string): Promise<IScheduledPost[]>;
+    findDraftsForUser(userId: string): Promise<IScheduledPost[]>;
 }
 
 // ── Sub-Schemas ───────────────────────────────────────────────
@@ -152,7 +152,7 @@ const ScheduledPostSchema = new Schema<IScheduledPost>(
             required: true,
             index: true,
         },
-        workspaceId: {
+        userId: {
             type: String,
             required: true,
             index: true,
@@ -219,7 +219,7 @@ const ScheduledPostSchema = new Schema<IScheduledPost>(
 ScheduledPostSchema.index({ accountId: 1, status: 1, scheduledAt: 1 });
 
 // Workspace drafts
-ScheduledPostSchema.index({ workspaceId: 1, status: 1, createdAt: -1 });
+ScheduledPostSchema.index({ userId: 1, status: 1, createdAt: -1 });
 
 // Analytics by pilar
 ScheduledPostSchema.index({ 'aiMetadata.pilar': 1, status: 1 });
@@ -248,11 +248,11 @@ ScheduledPostSchema.statics.findPendingForAccount = async function (
         .exec();
 };
 
-ScheduledPostSchema.statics.findDraftsForWorkspace = async function (
-    workspaceId: string
+ScheduledPostSchema.statics.findDraftsForUser = async function (
+    userId: string
 ): Promise<IScheduledPost[]> {
     return this.find({
-        workspaceId,
+        userId,
         status: 'draft',
     })
         .sort({ createdAt: -1 })

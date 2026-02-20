@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft, Sparkles } from 'lucide-react';
+import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft, Sparkles, MessageCircle } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
 import CRMPage from './CRMPage';
 import ConfigPage from './ConfigPage';
 import PublicacionesPage from './PublicacionesPage';
+import WhatsAppPage from './WhatsAppPage';
 
-type SidebarTab = 'crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config';
+type SidebarTab = 'crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp';
 
 interface SidebarItem {
     id: SidebarTab;
@@ -15,7 +16,7 @@ interface SidebarItem {
     disabled?: boolean;
 }
 
-const sidebarItems: SidebarItem[] = [
+const linkedInItems: SidebarItem[] = [
     { id: 'crm', Icon: BarChart3, label: 'CRM' },
     { id: 'publicaciones', Icon: Sparkles, label: 'Publicaciones' },
     { id: 'prospecting', Icon: Target, label: 'Prospecting' },
@@ -23,6 +24,8 @@ const sidebarItems: SidebarItem[] = [
     { id: 'requests', Icon: Users, label: 'Solicitudes', disabled: true },
     { id: 'config', Icon: Settings, label: 'Configuración' },
 ];
+
+const whatsappItem: SidebarItem = { id: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp' };
 
 export default function LinkedInApp() {
     const [activeTab, setActiveTab] = useState<SidebarTab>('crm');
@@ -51,8 +54,8 @@ export default function LinkedInApp() {
                         <span className="text-white text-lg font-bold">in</span>
                     </div>
 
-                    {/* Nav Items */}
-                    {sidebarItems.map((item) => (
+                    {/* LinkedIn Nav Items */}
+                    {linkedInItems.map((item) => (
                         <SidebarButton
                             key={item.id}
                             Icon={item.Icon}
@@ -62,6 +65,18 @@ export default function LinkedInApp() {
                             onClick={() => !item.disabled && setActiveTab(item.id)}
                         />
                     ))}
+
+                    {/* Separator */}
+                    <div className="w-8 my-2" style={{ height: 1, background: 'rgba(255,255,255,0.12)' }} />
+
+                    {/* WhatsApp */}
+                    <SidebarButton
+                        Icon={whatsappItem.Icon}
+                        label={whatsappItem.label}
+                        active={activeTab === 'whatsapp'}
+                        onClick={() => setActiveTab('whatsapp')}
+                        accentColor="#25D366"
+                    />
                 </div>
 
                 {/* Bottom: Back button */}
@@ -95,19 +110,20 @@ export default function LinkedInApp() {
                                 WebkitTextFillColor: 'transparent',
                             }}
                         >
-                            LinkedIn Automation
+                            {activeTab === 'whatsapp' ? 'WhatsApp Scheduler' : 'LinkedIn Automation'}
                         </h1>
                         <span className="text-xs px-2 py-1 rounded-full font-medium"
                             style={{
-                                background: 'rgba(124, 58, 237, 0.1)',
-                                color: '#7c3aed',
+                                background: activeTab === 'whatsapp' ? 'rgba(37, 211, 102, 0.1)' : 'rgba(124, 58, 237, 0.1)',
+                                color: activeTab === 'whatsapp' ? '#25D366' : '#7c3aed',
                             }}
                         >
                             {activeTab === 'crm' ? 'CRM Pipeline' :
                                 activeTab === 'publicaciones' ? 'Publicaciones AI' :
                                     activeTab === 'prospecting' ? 'Prospecting' :
                                         activeTab === 'comments' ? 'Comentarios' :
-                                            activeTab === 'requests' ? 'Solicitudes' : 'Config'}
+                                            activeTab === 'requests' ? 'Solicitudes' :
+                                                activeTab === 'whatsapp' ? 'Mensajes Programados' : 'Config'}
                         </span>
                     </div>
                 </header>
@@ -118,6 +134,7 @@ export default function LinkedInApp() {
                     {activeTab === 'publicaciones' && <PublicacionesPage />}
                     {activeTab === 'prospecting' && <ProspectingPage />}
                     {activeTab === 'config' && <ConfigPage />}
+                    {activeTab === 'whatsapp' && <WhatsAppPage />}
                 </div>
             </main>
         </div>
@@ -132,14 +149,18 @@ function SidebarButton({
     active,
     disabled,
     onClick,
+    accentColor,
 }: {
     Icon: React.ElementType;
     label: string;
     active: boolean;
     disabled?: boolean;
     onClick: () => void;
+    accentColor?: string;
 }) {
     const [hovered, setHovered] = useState(false);
+    const accent = accentColor || '#7c3aed';
+    const accentLight = accentColor || '#a78bfa';
 
     return (
         <div className="relative group">
@@ -153,12 +174,12 @@ function SidebarButton({
                     opacity: disabled ? 0.3 : 1,
                     cursor: disabled ? 'not-allowed' : 'pointer',
                     background: active
-                        ? 'rgba(124, 58, 237, 0.3)'
+                        ? `${accent}33`
                         : hovered && !disabled
                             ? 'rgba(255, 255, 255, 0.1)'
                             : 'transparent',
                     transform: hovered && !disabled ? 'scale(1.1)' : 'scale(1)',
-                    boxShadow: active ? '0 0 15px rgba(168, 85, 247, 0.3)' : 'none',
+                    boxShadow: active ? `0 0 15px ${accent}4D` : 'none',
                 }}
             >
                 {/* Active indicator bar */}
@@ -166,12 +187,12 @@ function SidebarButton({
                     <div
                         className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
                         style={{
-                            background: 'linear-gradient(180deg, #a855f7, #7c3aed)',
-                            boxShadow: '0 0 8px rgba(168, 85, 247, 0.6)',
+                            background: `linear-gradient(180deg, ${accentLight}, ${accent})`,
+                            boxShadow: `0 0 8px ${accent}99`,
                         }}
                     />
                 )}
-                <Icon size={20} color={active ? '#e9d5ff' : disabled ? '#6b7280' : '#a78bfa'} />
+                <Icon size={20} color={active ? '#e9d5ff' : disabled ? '#6b7280' : accentLight} />
             </button>
 
             {/* Tooltip */}

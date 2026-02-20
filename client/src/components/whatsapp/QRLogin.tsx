@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 
-import { API_BASE } from '../../config';
+import api from '../../lib/axios';
 
-const API_URL = `${API_BASE}/api/whatsapp`;
+const API_URL = '/whatsapp';
 
 interface Props {
     onConnected: () => void
@@ -16,8 +16,8 @@ export default function QRLogin({ onConnected }: Props) {
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                const res = await fetch(`${API_URL}/status`)
-                const data = await res.json()
+                const res = await api.get(`${API_URL}/status`)
+                const data = res.data
                 setStatus(data.status)
 
                 if (data.status === 'connected') {

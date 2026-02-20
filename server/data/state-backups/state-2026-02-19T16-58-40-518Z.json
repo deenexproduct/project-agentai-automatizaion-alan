@@ -1,0 +1,26 @@
+{
+  "batchId": "2026-02-19T16:54:34.417Z",
+  "accountEmail": "unknown",
+  "profiles": [
+    {
+      "url": "https://www.linkedin.com/in/sebasti%C3%A1n-alewaerts-fiorini-311a1bb/",
+      "status": "pending",
+      "attempts": 0
+    }
+  ],
+  "currentIndex": 0,
+  "startTime": "2026-02-19T16:54:35.115Z",
+  "isPaused": false,
+  "options": {
+    "totalLimit": 1,
+    "dailyLimit": 1
+  },
+  "stats": {
+    "processed": 0,
+    "successful": 0,
+    "failed": 0,
+    "pending": 1
+  },
+  "lastUpdate": "2026-02-19T16:54:35.116Z",
+  "version": 1
+}

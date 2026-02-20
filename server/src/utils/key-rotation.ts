@@ -86,13 +86,13 @@ export interface RotationResult {
  * Rotates encryption keys for all accounts in a workspace.
  * @param oldKeyHex - The current encryption key (64 hex chars)
  * @param newKeyHex - The new encryption key (64 hex chars)
- * @param workspaceId - Workspace to rotate (or 'all' for all workspaces)
+ * @param userId - Workspace to rotate (or 'all' for all workspaces)
  * @param dryRun - If true, validates decryption but does NOT save new ciphertext
  */
 export async function rotateKeys(
     oldKeyHex: string,
     newKeyHex: string,
-    workspaceId: string = 'all',
+    userId: string = 'all',
     dryRun: boolean = false
 ): Promise<RotationResult> {
     const oldKey = parseHexKey(oldKeyHex, 'OLD key');
@@ -111,12 +111,12 @@ export async function rotateKeys(
     };
 
     console.log(`[KeyRotation] 🔑 Starting key rotation${dryRun ? ' (DRY RUN)' : ''}...`);
-    console.log(`[KeyRotation] Workspace: ${workspaceId}`);
+    console.log(`[KeyRotation] Workspace: ${userId}`);
 
     // Query accounts with stored cookies
-    const query = workspaceId === 'all'
+    const query = userId === 'all'
         ? {}
-        : { workspaceId };
+        : { userId };
 
     const accounts = await LinkedInAccount
         .find(query)
@@ -171,7 +171,7 @@ export async function rotateKeys(
             });
 
             await LinkedInAuditLog.append(
-                account.workspaceId,
+                account.userId,
                 account._id as Types.ObjectId,
                 'key_rotated',
                 { dryRun: false }
@@ -197,7 +197,7 @@ async function main() {
     const oldKey = process.env.LINKEDIN_ENCRYPTION_KEY;
     const newKey = process.env.LINKEDIN_NEW_ENCRYPTION_KEY;
     const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/voicecommand';
-    const workspaceId = process.env.LINKEDIN_WORKSPACE_ID || 'all';
+    const userId = process.env.LINKEDIN_WORKSPACE_ID || 'all';
     const dryRun = process.env.DRY_RUN === 'true';
 
     if (!oldKey || !newKey) {
@@ -210,7 +210,7 @@ async function main() {
     console.log('[KeyRotation] Connected');
 
     try {
-        const result = await rotateKeys(oldKey, newKey, workspaceId, dryRun);
+        const result = await rotateKeys(oldKey, newKey, userId, dryRun);
 
         if (result.failed > 0) {
             console.error(`[KeyRotation] ⚠️  ${result.failed} accounts failed to rotate`);

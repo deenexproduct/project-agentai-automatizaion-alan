@@ -8,14 +8,14 @@ import { LinkedInContact, type ILinkedInContact } from '../models/linkedin-conta
 import { LinkedInLogger } from '../utils/linkedin-logger';
 
 // NEW: Import enhanced services
-import { operationManager, OperationType } from './linkedin/operation-manager.service';
-import { statePersistence, ProspectingState, ProfileProgress as PersistedProfileProgress } from './linkedin/state-persistence.service';
+import { OperationManager, OperationType } from './linkedin/operation-manager.service';
+import { StatePersistenceService, ProspectingState, ProfileProgress as PersistedProfileProgress } from './linkedin/state-persistence.service';
 import { RetryService } from './linkedin/retry.service';
 import { connectionVerifier, VerificationResult } from './linkedin/connection-verifier.service';
 import { humanBehavior } from './linkedin/human-behavior.service';
-import { healthMonitor } from './linkedin/health-monitor.service';
-import { captchaHandler } from './linkedin/captcha-handler.service';
-import { rateLimitHandler } from './linkedin/rate-limit-handler.service';
+import { HealthMonitor } from './linkedin/health-monitor.service';
+import { CaptchaHandler } from './linkedin/captcha-handler.service';
+import { RateLimitHandler } from './linkedin/rate-limit-handler.service';
 import { enrichmentService } from './enrichment.service';
 
 // Session Manager — encrypted cookie persistence
@@ -81,12 +81,6 @@ export interface ScrapedProfileData {
 
 type ServiceStatus = 'disconnected' | 'browser-open' | 'logged-in';
 
-// ── Constants ────────────────────────────────────────────────
-
-// SESSION_DIR is kept for screenshots and logs only — NOT for cookies.
-// Cookies are stored encrypted in MongoDB via SessionManager.
-const SESSION_DIR = path.join(__dirname, '../../linkedin-session');
-
 // Delay ranges (milliseconds)
 const DELAYS = {
     pageLoad: { min: 3000, max: 6000 },
@@ -99,7 +93,7 @@ const DELAYS = {
 
 const LONG_PAUSE_EVERY = 15 + Math.floor(Math.random() * 6); // random 15-20
 
-class LinkedInService extends EventEmitter {
+export class LinkedInTenant extends EventEmitter {
     private browser: Browser | null = null;
     private page: Page | null = null;
     private status: ServiceStatus = 'disconnected';
@@ -121,9 +115,35 @@ class LinkedInService extends EventEmitter {
     private currentBatchId: string | null = null;
     private accountEmail: string = ''; // Set during login
 
-    // Session Manager: active account for this workspace
     private activeAccount: ILinkedInAccount | null = null;
-    private readonly workspaceId: string = process.env.LINKEDIN_WORKSPACE_ID || 'default';
+    public readonly userId: string;
+
+    private operationManager: OperationManager;
+    private statePersistence: StatePersistenceService;
+    private healthMonitor: HealthMonitor;
+    private captchaHandler: CaptchaHandler;
+    private rateLimitHandler: RateLimitHandler;
+
+    constructor(userId: string) {
+        super();
+        this.userId = userId;
+        this.operationManager = new OperationManager();
+        this.statePersistence = new StatePersistenceService();
+        this.healthMonitor = new HealthMonitor();
+        this.captchaHandler = new CaptchaHandler();
+        this.rateLimitHandler = new RateLimitHandler();
+    }
+
+
+    // ── Public accessors ─────────────────────────────────────
+
+    /**
+     * Get the active Puppeteer page for deep scraping.
+     * Returns null if browser is not launched or page not available.
+     */
+    getActivePage(): Page | null {
+        return this.page;
+    }
 
     // ── Helpers ──────────────────────────────────────────────
 
@@ -170,8 +190,9 @@ class LinkedInService extends EventEmitter {
         console.log('🚀 Launching LinkedIn browser...');
 
         // Ensure session directory exists
-        if (!fs.existsSync(SESSION_DIR)) {
-            fs.mkdirSync(SESSION_DIR, { recursive: true });
+        const sessionDir = path.join(__dirname, '../../linkedin-session', this.userId);
+        if (!fs.existsSync(sessionDir)) {
+            fs.mkdirSync(sessionDir, { recursive: true });
         }
 
         this.browser = await puppeteer.launch({
@@ -312,16 +333,16 @@ class LinkedInService extends EventEmitter {
             // No account configured yet — create a default one on first login
             try {
                 this.activeAccount = await sessionManager.createAccount(
-                    this.workspaceId,
+                    this.userId,
                     'Default Account'
                 );
                 await sessionManager.setActiveAccount(
-                    this.workspaceId,
+                    this.userId,
                     (this.activeAccount._id as any).toString()
                 );
             } catch (err: any) {
                 // Account may already exist (e.g. duplicate label) — try to load it
-                const existing = await sessionManager.getActiveAccount(this.workspaceId);
+                const existing = await sessionManager.getActiveAccount(this.userId);
                 if (existing) {
                     this.activeAccount = existing;
                 } else {
@@ -347,7 +368,7 @@ class LinkedInService extends EventEmitter {
 
         try {
             // Get the active account for this workspace
-            this.activeAccount = await sessionManager.getActiveAccount(this.workspaceId);
+            this.activeAccount = await sessionManager.getActiveAccount(this.userId);
 
             if (!this.activeAccount) {
                 console.log('[LinkedInService] ℹ️ No active account found — manual login required');
@@ -398,20 +419,20 @@ class LinkedInService extends EventEmitter {
 
     async startProspecting(options: ProspectingOptions): Promise<boolean> {
         // NEW: Use operation manager for mutual exclusion
-        if (!await operationManager.acquire('prospecting', { urlCount: options.urls.length })) {
-            const current = operationManager.getCurrent();
+        if (!await this.operationManager.acquire('prospecting', { urlCount: options.urls.length })) {
+            const current = this.operationManager.getCurrent();
             console.error(`❌ Cannot start prospecting — operation '${current}' in progress`);
             return false;
         }
 
         if (!this.page || this.status !== 'logged-in') {
-            operationManager.release();
+            this.operationManager.release();
             console.error('❌ Cannot start prospecting — not logged in');
             return false;
         }
 
         if (this.isRunning) {
-            operationManager.release();
+            this.operationManager.release();
             console.error('❌ Prospecting already running');
             return false;
         }
@@ -420,7 +441,7 @@ class LinkedInService extends EventEmitter {
         if (this.activeAccount) {
             // Check circuit breaker first
             if (!circuitBreaker.canProceed((this.activeAccount._id as any).toString())) {
-                operationManager.release();
+                this.operationManager.release();
                 const status = circuitBreaker.getStatus((this.activeAccount._id as any).toString());
                 console.error(`❌ Circuit breaker OPEN for account — cooldown: ${Math.round((status.cooldownRemainingMs ?? 0) / 60000)}min`);
                 this.emit('circuit-open', {
@@ -435,7 +456,7 @@ class LinkedInService extends EventEmitter {
                 // Fast pre-check (status + expiry) — no network call
                 await sessionManager.sessionPreCheck(this.activeAccount, this.page, false);
             } catch (err) {
-                operationManager.release();
+                this.operationManager.release();
                 console.error('❌ Session pre-check failed:', (err as Error).message);
                 this.emit('session-expired', {
                     accountId: (this.activeAccount._id as any).toString(),
@@ -451,7 +472,7 @@ class LinkedInService extends EventEmitter {
             .filter(u => u.length > 0 && (u.includes('linkedin.com/in/') || u.includes('linkedin.com/pub/')));
 
         if (urls.length === 0) {
-            operationManager.release();
+            this.operationManager.release();
             console.error('❌ No valid LinkedIn URLs provided');
             return false;
         }
@@ -511,13 +532,13 @@ class LinkedInService extends EventEmitter {
         this.runProspectingLoop(options).catch(err => {
             console.error('❌ Prospecting loop error:', err);
             this.isRunning = false;
-            operationManager.release();
+            this.operationManager.release();
             this.emitProgress();
         }).finally(() => {
             // Always release the lock when done
-            operationManager.release();
+            this.operationManager.release();
             // Clear saved state on completion
-            statePersistence.clear().catch(() => { });
+            this.statePersistence.clear().catch(() => { });
         });
 
         return true;
@@ -536,7 +557,7 @@ class LinkedInService extends EventEmitter {
             lastError: p.error,
         }));
 
-        await statePersistence.save({
+        await this.statePersistence.save({
             batchId: this.currentBatchId,
             accountEmail: this.accountEmail || 'unknown',
             profiles: persistedProfiles,
@@ -588,7 +609,7 @@ class LinkedInService extends EventEmitter {
             }
 
             // NEW: Auto-save every 5 profiles
-            if (statePersistence.shouldAutoSave(i + 1, 5)) {
+            if (this.statePersistence.shouldAutoSave(i + 1, 5)) {
                 await this.saveCurrentState(options);
             }
 
@@ -644,7 +665,7 @@ class LinkedInService extends EventEmitter {
         console.log(`\n✅ Prospecting complete: ${done} done, ${errors} errors, ${this.profiles.length - done - errors} skipped`);
 
         // NEW: Print health status
-        const health = healthMonitor.getHealthStatus();
+        const health = this.healthMonitor.getHealthStatus();
         console.log(`📊 Health Status: ${health.healthy ? '✅ HEALTHY' : '❌ UNHEALTHY'} (risk: ${health.riskScore})`);
         if (health.alerts.length > 0) {
             console.log(`⚠️ Alerts: ${health.alerts.join(', ')}`);
@@ -656,14 +677,14 @@ class LinkedInService extends EventEmitter {
             succeeded: done,
             failed: errors,
             skipped: this.profiles.length - done - errors,
-            health: healthMonitor.getMetrics(),
+            health: this.healthMonitor.getMetrics(),
         });
 
         // Record success in circuit breaker (if no critical errors)
         if (this.activeAccount && errors < this.profiles.length) {
             await circuitBreaker.recordSuccess(
                 (this.activeAccount._id as any).toString(),
-                this.workspaceId
+                this.userId
             );
         }
     }
@@ -682,7 +703,7 @@ class LinkedInService extends EventEmitter {
         logger.log(`   Options: sendNote=${options.sendNote}, noteText="${(options.noteText || '').substring(0, 50)}"`);
 
         // NEW: Start operation tracking
-        healthMonitor.startOperation(`processing_profile_${index}`);
+        this.healthMonitor.startOperation(`processing_profile_${index}`);
 
         try {
             // ── CRM: Mark as 'visitando' ──
@@ -805,10 +826,10 @@ class LinkedInService extends EventEmitter {
             }
 
             // NEW: Check for captcha
-            const captchaCheck = await captchaHandler.detect(page);
+            const captchaCheck = await this.captchaHandler.detect(page);
             if (captchaCheck.detected) {
                 logger.log(`  🔒 CAPTCHA DETECTED (${captchaCheck.type}, confidence: ${captchaCheck.confidence})`);
-                const result = await captchaHandler.handle(page);
+                const result = await this.captchaHandler.handle(page);
                 if (result !== 'resolved') {
                     throw new Error(`Captcha not resolved: ${result}`);
                 }
@@ -816,10 +837,10 @@ class LinkedInService extends EventEmitter {
             }
 
             // NEW: Check for rate limit
-            const rateLimitCheck = await rateLimitHandler.detect(page);
+            const rateLimitCheck = await this.rateLimitHandler.detect(page);
             if (rateLimitCheck.isRateLimited) {
                 logger.log(`  🚫 RATE LIMIT DETECTED: ${rateLimitCheck.type} - ${rateLimitCheck.message}`);
-                await rateLimitHandler.handle(page, rateLimitCheck);
+                await this.rateLimitHandler.handle(page, rateLimitCheck);
                 throw new Error(`Rate limited: ${rateLimitCheck.message}. Retry after ${rateLimitCheck.suggestedWaitHours}h`);
             }
 
@@ -853,7 +874,7 @@ class LinkedInService extends EventEmitter {
                 if (accountId && this.activeAccount) {
                     await circuitBreaker.recordFailure(
                         accountId,
-                        this.workspaceId,
+                        this.userId,
                         'Redirected to login — session expired'
                     );
                     await sessionManager.markReauthRequired(
@@ -875,7 +896,7 @@ class LinkedInService extends EventEmitter {
                         logger.log('  ⏳ Waiting for re-authentication (up to 10 minutes)...');
                         const refreshedAccount = await sessionManager.waitForReauth(
                             accountId,
-                            this.workspaceId,
+                            this.userId,
                             10 * 60 * 1000 // 10 minutes
                         );
                         this.activeAccount = refreshedAccount;
@@ -1106,19 +1127,19 @@ class LinkedInService extends EventEmitter {
 
             // NEW: Record success in HealthMonitor
             const duration = Date.now() - profileStartTime;
-            healthMonitor.recordSuccess(duration);
-            rateLimitHandler.recordSuccess(); // Reset rate limit counter
+            this.healthMonitor.recordSuccess(duration);
+            this.rateLimitHandler.recordSuccess(); // Reset rate limit counter
 
         } catch (error: any) {
             // NEW: Record error in HealthMonitor
-            healthMonitor.recordError(error, `profile_${index}`);
+            this.healthMonitor.recordError(error, `profile_${index}`);
             logger.log(`  ❌ Profile error: ${error.message}`);
             throw error; // Re-throw to be handled by caller
 
         } finally {
             // Always close the logger, even on exceptions
             logger.close();
-            healthMonitor.endOperation();
+            this.healthMonitor.endOperation();
         }
     }
 
@@ -2219,7 +2240,7 @@ class LinkedInService extends EventEmitter {
 
         // 🧹 Limpiar estado guardado para que la próxima vez empiece desde cero
         try {
-            await statePersistence.clear();
+            await this.statePersistence.clear();
             console.log('[StatePersistence] 🧹 Estado limpiado tras detención manual');
         } catch (err: any) {
             console.error('[StatePersistence] ❌ Error limpiando estado:', err.message);
@@ -2372,15 +2393,26 @@ class LinkedInService extends EventEmitter {
                 } catch (e) { /* skip */ }
 
                 // ── Profile Photo ──
+                // IMPORTANT: Filter by size to avoid capturing the logged-in user's small nav avatar
                 try {
                     const imgs = document.querySelectorAll('img');
+                    let bestPhoto = '';
+                    let bestSize = 0;
                     for (let i = 0; i < imgs.length; i++) {
                         const src = imgs[i].src || '';
                         if (src.indexOf('profile-displayphoto') !== -1 || src.indexOf('profile-framedphoto') !== -1) {
-                            result.profilePhotoUrl = src;
-                            break;
+                            const rect = imgs[i].getBoundingClientRect();
+                            const size = rect.width * rect.height;
+                            // Only consider images that are:
+                            // 1. At least 100x100px (skip 32px nav avatars)
+                            // 2. In the profile card area (top 600px of page)
+                            if (rect.width >= 100 && rect.height >= 100 && rect.top < 600 && size > bestSize) {
+                                bestPhoto = src;
+                                bestSize = size;
+                            }
                         }
                     }
+                    if (bestPhoto) result.profilePhotoUrl = bestPhoto;
                 } catch (e) { /* skip */ }
 
                 // ── Current Company + Position ──
@@ -2654,13 +2686,13 @@ class LinkedInService extends EventEmitter {
 
     async checkAcceptedConnections(): Promise<{ found: number; updated: number }> {
         // NEW: Use operation manager for mutual exclusion
-        if (!await operationManager.acquire('checking_accepted')) {
-            const current = operationManager.getCurrent();
+        if (!await this.operationManager.acquire('checking_accepted')) {
+            const current = this.operationManager.getCurrent();
             throw new Error(`Cannot check accepted — operation '${current}' in progress`);
         }
 
         if (!this.page || this.status !== 'logged-in') {
-            operationManager.release();
+            this.operationManager.release();
             throw new Error('Browser not open or not logged in');
         }
 
@@ -2668,14 +2700,14 @@ class LinkedInService extends EventEmitter {
         if (this.activeAccount) {
             const accountId = (this.activeAccount._id as any).toString();
             if (!circuitBreaker.canProceed(accountId)) {
-                operationManager.release();
+                this.operationManager.release();
                 const status = circuitBreaker.getStatus(accountId);
                 throw new Error(`Circuit breaker OPEN — cooldown: ${Math.round((status.cooldownRemainingMs ?? 0) / 60000)}min`);
             }
             try {
                 await sessionManager.sessionPreCheck(this.activeAccount, this.page, false);
             } catch (err) {
-                operationManager.release();
+                this.operationManager.release();
                 throw new Error(`Session pre-check failed: ${(err as Error).message}`);
             }
         }
@@ -2937,14 +2969,14 @@ class LinkedInService extends EventEmitter {
             if (this.activeAccount) {
                 await circuitBreaker.recordSuccess(
                     (this.activeAccount._id as any).toString(),
-                    this.workspaceId
+                    this.userId
                 );
             }
 
             return { found: pendingContacts.length, updated };
         } finally {
             this.isBusy = false;
-            operationManager.release(); // NEW: Release operation lock
+            this.operationManager.release(); // NEW: Release operation lock
         }
     }
 
@@ -2962,5 +2994,35 @@ class LinkedInService extends EventEmitter {
     }
 }
 
-// Singleton instance
-export const linkedinService = new LinkedInService();
+// ============================================================
+// LinkedIn Manager — Multi-Tenant Wrapper
+// ============================================================
+
+export class LinkedInManager {
+    private tenants = new Map<string, LinkedInTenant>();
+
+    getTenant(userId: string): LinkedInTenant {
+        if (!this.tenants.has(userId)) {
+            const tenant = new LinkedInTenant(userId);
+            this.tenants.set(userId, tenant);
+        }
+        return this.tenants.get(userId)!;
+    }
+
+    getActivePageFromAny(): import('puppeteer').Page | null {
+        for (const tenant of this.tenants.values()) {
+            const page = tenant.getActivePage();
+            if (page) return page;
+        }
+        return null;
+    }
+
+    async stopAll(): Promise<void> {
+        console.log('🛑 Shutting down all LinkedIn automation tenants...');
+        for (const tenant of this.tenants.values()) {
+            await tenant.stop();
+        }
+    }
+}
+
+export const linkedinService = new LinkedInManager();

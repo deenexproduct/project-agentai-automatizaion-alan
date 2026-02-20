@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IScheduledMessage extends Document {
+    userId: string;
     chatId: string;
     chatName: string;
     isGroup: boolean;
@@ -21,6 +22,7 @@ export interface IScheduledMessage extends Document {
 }
 
 const ScheduledMessageSchema = new Schema<IScheduledMessage>({
+    userId: { type: String, required: true, index: true },
     chatId: { type: String, required: true },
     chatName: { type: String, required: true },
     isGroup: { type: Boolean, default: false },
@@ -40,7 +42,7 @@ const ScheduledMessageSchema = new Schema<IScheduledMessage>({
     createdAt: { type: Date, default: Date.now },
 });
 
-// Index for efficient scheduler queries
-ScheduledMessageSchema.index({ status: 1, scheduledAt: 1 });
+// Index for efficient scheduler queries per user
+ScheduledMessageSchema.index({ userId: 1, status: 1, scheduledAt: 1 });
 
 export const ScheduledMessage = mongoose.model<IScheduledMessage>('ScheduledMessage', ScheduledMessageSchema);

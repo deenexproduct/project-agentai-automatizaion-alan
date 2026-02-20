@@ -77,9 +77,9 @@ class LearningLoopService {
     /**
      * Get top-performing posts to use as few-shot examples for AI.
      */
-    async getTopPosts(workspaceId: string, limit = 5): Promise<TopPost[]> {
+    async getTopPosts(userId: string, limit = 5): Promise<TopPost[]> {
         const posts = await ScheduledPost.find({
-            workspaceId,
+            userId,
             status: 'published',
             'engagement.engagementRate': { $gt: 0 },
         })
@@ -109,9 +109,9 @@ class LearningLoopService {
     /**
      * Analyze performance patterns to inform future content generation.
      */
-    async getInsights(workspaceId: string): Promise<LearningInsight> {
+    async getInsights(userId: string): Promise<LearningInsight> {
         const published = await ScheduledPost.find({
-            workspaceId,
+            userId,
             status: 'published',
         }).lean().exec();
 
@@ -179,7 +179,7 @@ class LearningLoopService {
             formatOut[key] = { avgEngagement: val.count > 0 ? val.totalRate / val.count : 0, count: val.count };
         }
 
-        const topPosts = await this.getTopPosts(workspaceId, 5);
+        const topPosts = await this.getTopPosts(userId, 5);
 
         return {
             bestPilar,
@@ -197,8 +197,8 @@ class LearningLoopService {
      * Build a "learning prompt" section to inject into the AI system prompt.
      * Contains best patterns and top-performing examples.
      */
-    async buildLearningPromptSection(workspaceId: string): Promise<string> {
-        const insights = await this.getInsights(workspaceId);
+    async buildLearningPromptSection(userId: string): Promise<string> {
+        const insights = await this.getInsights(userId);
 
         if (insights.totalPublished < 3) {
             return ''; // Not enough data yet

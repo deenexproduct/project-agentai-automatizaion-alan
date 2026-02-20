@@ -39,47 +39,47 @@ type TabType = 'overview' | 'profile' | 'enrichment' | 'notes' | 'history';
 // ── Status Config ─────────────────────────────────────────────
 
 const STATUS_INFO: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
-    visitando: { 
-        label: 'Visitando', 
-        color: '#06b6d4', 
+    visitando: {
+        label: 'Visitando',
+        color: '#06b6d4',
         bgColor: 'rgba(6, 182, 212, 0.15)',
-        icon: <Clock size={14} /> 
+        icon: <Clock size={14} />
     },
-    conectando: { 
-        label: 'Conectando', 
-        color: '#eab308', 
+    conectando: {
+        label: 'Conectando',
+        color: '#eab308',
         bgColor: 'rgba(234, 179, 8, 0.15)',
-        icon: <Link2 size={14} /> 
+        icon: <Link2 size={14} />
     },
-    interactuando: { 
-        label: 'Interactuando', 
-        color: '#f97316', 
+    interactuando: {
+        label: 'Interactuando',
+        color: '#f97316',
         bgColor: 'rgba(249, 115, 22, 0.15)',
-        icon: <MessageCircle size={14} /> 
+        icon: <MessageCircle size={14} />
     },
-    enriqueciendo: { 
-        label: 'Enriqueciendo', 
-        color: '#a855f7', 
+    enriqueciendo: {
+        label: 'Enriqueciendo',
+        color: '#a855f7',
         bgColor: 'rgba(168, 85, 247, 0.15)',
-        icon: <Sparkles size={14} /> 
+        icon: <Sparkles size={14} />
     },
-    esperando_aceptacion: { 
-        label: 'Esperando Aceptación', 
-        color: '#f59e0b', 
+    esperando_aceptacion: {
+        label: 'Esperando Aceptación',
+        color: '#f59e0b',
         bgColor: 'rgba(245, 158, 11, 0.15)',
-        icon: <Clock size={14} /> 
+        icon: <Clock size={14} />
     },
-    aceptado: { 
-        label: 'Aceptado', 
-        color: '#10b981', 
+    aceptado: {
+        label: 'Aceptado',
+        color: '#10b981',
         bgColor: 'rgba(16, 185, 129, 0.15)',
-        icon: <CheckCircle2 size={14} /> 
+        icon: <CheckCircle2 size={14} />
     },
-    mensaje_enviado: { 
-        label: 'Mensaje Enviado', 
-        color: '#8b5cf6', 
+    mensaje_enviado: {
+        label: 'Mensaje Enviado',
+        color: '#8b5cf6',
         bgColor: 'rgba(139, 92, 246, 0.15)',
-        icon: <Send size={14} /> 
+        icon: <Send size={14} />
     },
 };
 
@@ -136,15 +136,15 @@ function extractWhatsAppNumber(contact: LinkedInContact): string | null {
 
 // ── Circular Progress Component ───────────────────────────────
 
-function CircularProgress({ 
-    value, 
-    size = 60, 
-    strokeWidth = 4, 
-    color = '#7c3aed' 
-}: { 
-    value: number; 
-    size?: number; 
-    strokeWidth?: number; 
+function CircularProgress({
+    value,
+    size = 60,
+    strokeWidth = 4,
+    color = '#7c3aed'
+}: {
+    value: number;
+    size?: number;
+    strokeWidth?: number;
     color?: string;
 }) {
     const radius = (size - strokeWidth) / 2;
@@ -184,15 +184,15 @@ function CircularProgress({
 
 // ── Tab Button Component ─────────────────────────────────────
 
-function TabButton({ 
-    active, 
-    onClick, 
-    icon: Icon, 
-    label 
-}: { 
-    active: boolean; 
-    onClick: () => void; 
-    icon: React.ElementType; 
+function TabButton({
+    active,
+    onClick,
+    icon: Icon,
+    label
+}: {
+    active: boolean;
+    onClick: () => void;
+    icon: React.ElementType;
     label: string;
 }) {
     return (
@@ -214,7 +214,7 @@ function TabButton({
 
 function ExpandableCard({ title, children, defaultExpanded = false }: { title: string; children: React.ReactNode; defaultExpanded?: boolean }) {
     const [expanded, setExpanded] = useState(defaultExpanded);
-    
+
     return (
         <div className="rounded-lg bg-white/60 border border-purple-50 overflow-hidden">
             <button
@@ -341,11 +341,11 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                         {/* ── Header ───────────────────────────────────────── */}
                         <div className="relative shrink-0">
                             {/* Banner/Gradient Background */}
-                            <div 
+                            <div
                                 className="h-24"
                                 style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(168,85,247,0.1))' }}
                             />
-                            
+
                             {/* Close Button */}
                             <button
                                 onClick={onClose}
@@ -369,18 +369,18 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                             }}
                                         >
                                             {contact.profilePhotoUrl ? (
-                                                <img 
-                                                    src={contact.profilePhotoUrl} 
-                                                    alt={contact.fullName} 
-                                                    className="w-full h-full object-cover" 
-                                                    referrerPolicy="no-referrer" 
+                                                <img
+                                                    src={contact.profilePhotoUrl}
+                                                    alt={contact.fullName}
+                                                    className="w-full h-full object-cover"
+                                                    referrerPolicy="no-referrer"
                                                 />
                                             ) : (
                                                 <span className="text-white text-2xl font-bold">{getInitials(contact.fullName)}</span>
                                             )}
                                         </div>
                                         {/* Online Status Indicator */}
-                                        <div 
+                                        <div
                                             className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-white"
                                             style={{ background: '#10b981' }}
                                             title="Online"
@@ -389,14 +389,14 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
 
                                     {/* Quick Actions */}
                                     <div className="flex gap-2 mb-2">
-                                        <button 
+                                        <button
                                             className="p-2 rounded-lg transition-all hover:scale-105"
                                             style={{ background: 'rgba(124, 58, 237, 0.1)' }}
                                             title="Editar contacto"
                                         >
                                             <Edit3 size={16} style={{ color: '#7c3aed' }} />
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={handleEnrich}
                                             disabled={enriching}
                                             className="p-2 rounded-lg transition-all hover:scale-105 disabled:opacity-50"
@@ -405,7 +405,7 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                         >
                                             {enriching ? <Loader2 size={16} className="animate-spin" style={{ color: '#a855f7' }} /> : <Sparkles size={16} style={{ color: '#a855f7' }} />}
                                         </button>
-                                        <button 
+                                        <button
                                             className="p-2 rounded-lg transition-all hover:scale-105"
                                             style={{ background: 'rgba(6, 182, 212, 0.1)' }}
                                             title="Enviar mensaje"
@@ -460,35 +460,35 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                             {/* ── Tabs ───────────────────────────────────────── */}
                             <div className="px-4 mt-4 border-b border-purple-100/50">
                                 <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-2">
-                                    <TabButton 
-                                        active={activeTab === 'overview'} 
-                                        onClick={() => setActiveTab('overview')} 
-                                        icon={User} 
-                                        label="Overview" 
+                                    <TabButton
+                                        active={activeTab === 'overview'}
+                                        onClick={() => setActiveTab('overview')}
+                                        icon={User}
+                                        label="Overview"
                                     />
-                                    <TabButton 
-                                        active={activeTab === 'profile'} 
-                                        onClick={() => setActiveTab('profile')} 
-                                        icon={Briefcase} 
-                                        label="Perfil" 
+                                    <TabButton
+                                        active={activeTab === 'profile'}
+                                        onClick={() => setActiveTab('profile')}
+                                        icon={Briefcase}
+                                        label="Perfil"
                                     />
-                                    <TabButton 
-                                        active={activeTab === 'enrichment'} 
-                                        onClick={() => setActiveTab('enrichment')} 
-                                        icon={Sparkles} 
-                                        label="Enriquecimiento" 
+                                    <TabButton
+                                        active={activeTab === 'enrichment'}
+                                        onClick={() => setActiveTab('enrichment')}
+                                        icon={Sparkles}
+                                        label="Enriquecimiento"
                                     />
-                                    <TabButton 
-                                        active={activeTab === 'notes'} 
-                                        onClick={() => setActiveTab('notes')} 
-                                        icon={StickyNote} 
-                                        label="Notas" 
+                                    <TabButton
+                                        active={activeTab === 'notes'}
+                                        onClick={() => setActiveTab('notes')}
+                                        icon={StickyNote}
+                                        label="Notas"
                                     />
-                                    <TabButton 
-                                        active={activeTab === 'history'} 
-                                        onClick={() => setActiveTab('history')} 
-                                        icon={History} 
-                                        label="Historial" 
+                                    <TabButton
+                                        active={activeTab === 'history'}
+                                        onClick={() => setActiveTab('history')}
+                                        icon={History}
+                                        label="Historial"
                                     />
                                 </div>
                             </div>
@@ -506,7 +506,7 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                             Estado en Pipeline
                                         </h3>
                                         <div className="flex items-center gap-4">
-                                            <div 
+                                            <div
                                                 className="w-12 h-12 rounded-full flex items-center justify-center"
                                                 style={{ background: statusConfig?.bgColor }}
                                             >
@@ -581,12 +581,12 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                             </h3>
                                             {contact.enrichmentData.keyInsights?.[0] && (
                                                 <p className="text-sm text-slate-600 mb-2">
-                                                    • {typeof contact.enrichmentData.keyInsights[0] === 'string' 
-                                                        ? contact.enrichmentData.keyInsights[0] 
+                                                    • {typeof contact.enrichmentData.keyInsights[0] === 'string'
+                                                        ? contact.enrichmentData.keyInsights[0]
                                                         : contact.enrichmentData.keyInsights[0].text}
                                                 </p>
                                             )}
-                                            <button 
+                                            <button
                                                 onClick={() => setActiveTab('enrichment')}
                                                 className="text-xs text-purple-600 hover:text-purple-700 font-medium"
                                             >
@@ -723,20 +723,96 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                     {/* Enrichment Data */}
                                     {contact.enrichmentStatus === 'completed' && contact.enrichmentData ? (
                                         <div className="space-y-4">
-                                            {/* Confidence Score */}
+                                            {/* Personalized Pitch — MOST IMPORTANT */}
+                                            {contact.enrichmentData.personalizedPitch && (
+                                                <div className="rounded-xl border-2 border-purple-200 p-4" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(168,85,247,0.04))' }}>
+                                                    <h4 className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                                        🎯 Pitch Personalizado
+                                                    </h4>
+                                                    <p className="text-sm text-slate-700 leading-relaxed italic">
+                                                        "{contact.enrichmentData.personalizedPitch}"
+                                                    </p>
+                                                    {contact.enrichmentData.bestApproachChannel && (
+                                                        <p className="text-[10px] text-purple-500 mt-2 font-medium">
+                                                            📱 Canal recomendado: {contact.enrichmentData.bestApproachChannel}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Commercial Score + Confidence Score */}
                                             <div className="rounded-xl bg-white/60 border border-purple-50 p-4">
                                                 <div className="flex items-center gap-4">
-                                                    <CircularProgress 
-                                                        value={contact.enrichmentData.confidenceScore || 75} 
+                                                    <CircularProgress
+                                                        value={contact.enrichmentData.commercialScore || contact.enrichmentData.confidenceScore || 75}
                                                         size={70}
-                                                        color="#7c3aed"
+                                                        color={
+                                                            (contact.enrichmentData.commercialScore || contact.enrichmentData.confidenceScore || 0) >= 70 ? '#10b981' :
+                                                                (contact.enrichmentData.commercialScore || contact.enrichmentData.confidenceScore || 0) >= 40 ? '#eab308' : '#ef4444'
+                                                        }
                                                     />
                                                     <div>
-                                                        <p className="text-sm font-semibold text-slate-700">Score de Confianza</p>
-                                                        <p className="text-xs text-slate-500">Basado en fuentes verificadas</p>
+                                                        <p className="text-sm font-semibold text-slate-700">
+                                                            {contact.enrichmentData.commercialScore ? 'Score Comercial' : 'Score de Confianza'}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {contact.enrichmentData.dataQuality === 'verified' ? '✅ Datos verificados' :
+                                                                contact.enrichmentData.dataQuality === 'partial' ? '⚠️ Datos parciales' : 'Basado en fuentes disponibles'}
+                                                        </p>
                                                     </div>
                                                 </div>
+
+                                                {/* Score Breakdown */}
+                                                {contact.enrichmentData.commercialScoreBreakdown && (
+                                                    <div className="mt-3 pt-3 border-t border-purple-50 space-y-1.5">
+                                                        {Object.entries(contact.enrichmentData.commercialScoreBreakdown).map(([key, val]: [string, any]) => (
+                                                            <div key={key} className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-slate-500 w-28 truncate capitalize">
+                                                                    {key.replace(/([A-Z])/g, ' $1').trim()}
+                                                                </span>
+                                                                <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                                                    <div
+                                                                        className="h-full rounded-full transition-all"
+                                                                        style={{
+                                                                            width: `${((val as number) / 20) * 100}%`,
+                                                                            background: (val as number) >= 15 ? '#10b981' : (val as number) >= 10 ? '#eab308' : '#ef4444'
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                                <span className="text-[10px] text-slate-500 w-8 text-right">{val as number}/20</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
+
+                                            {/* Pain Points */}
+                                            {contact.enrichmentData.painPoints?.length > 0 && (
+                                                <ExpandableCard title="💢 Pain Points" defaultExpanded={true}>
+                                                    <div className="space-y-2">
+                                                        {contact.enrichmentData.painPoints.map((point: string, i: number) => (
+                                                            <div key={i} className="flex items-start gap-2 p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.05)' }}>
+                                                                <span className="text-red-400 mt-0.5 shrink-0 text-xs">⚡</span>
+                                                                <p className="text-xs text-slate-600 leading-relaxed">{point}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </ExpandableCard>
+                                            )}
+
+                                            {/* Talking Points */}
+                                            {contact.enrichmentData.talkingPoints?.length > 0 && (
+                                                <ExpandableCard title="💬 Talking Points" defaultExpanded={true}>
+                                                    <div className="space-y-2">
+                                                        {contact.enrichmentData.talkingPoints.map((point: string, i: number) => (
+                                                            <div key={i} className="flex items-start gap-2 p-2 rounded-lg" style={{ background: 'rgba(59,130,246,0.05)' }}>
+                                                                <span className="text-blue-400 mt-0.5 shrink-0 text-xs">💡</span>
+                                                                <p className="text-xs text-slate-600 leading-relaxed">{point}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </ExpandableCard>
+                                            )}
 
                                             {/* Company Info */}
                                             {contact.enrichmentData.company && (
@@ -745,7 +821,7 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                                         <p className="text-sm font-semibold text-slate-700">
                                                             {contact.enrichmentData.company.name}
                                                         </p>
-                                                        {contact.enrichmentData.company.description && (
+                                                        {contact.enrichmentData.company.description && contact.enrichmentData.company.description !== 'No verificado' && (
                                                             <p className="text-xs text-slate-500 leading-relaxed">
                                                                 {contact.enrichmentData.company.description}
                                                             </p>
@@ -756,34 +832,137 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                                                     👥 {contact.enrichmentData.company.employeeCount} empleados
                                                                 </span>
                                                             )}
-                                                            {contact.enrichmentData.company.locationsCount && (
+                                                            {contact.enrichmentData.company.locationsCount && contact.enrichmentData.company.locationsCount !== 'No verificado' && (
                                                                 <span className="text-[10px] px-2 py-1 rounded-full bg-green-50 text-green-600">
                                                                     🏪 {contact.enrichmentData.company.locationsCount} locales
                                                                 </span>
                                                             )}
-                                                            {contact.enrichmentData.company.sector && (
+                                                            {contact.enrichmentData.company.sector && contact.enrichmentData.company.sector !== 'No verificado' && (
                                                                 <span className="text-[10px] px-2 py-1 rounded-full bg-purple-50 text-purple-600">
                                                                     📂 {contact.enrichmentData.company.sector}
                                                                 </span>
                                                             )}
                                                             {contact.enrichmentData.company.website && contact.enrichmentData.company.website !== 'No verificado' && (
-                                                                <a 
-                                                                    href={contact.enrichmentData.company.website} 
-                                                                    target="_blank" 
-                                                                    rel="noopener noreferrer" 
+                                                                <a
+                                                                    href={contact.enrichmentData.company.website}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
                                                                     className="text-[10px] px-2 py-1 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
                                                                 >
                                                                     🌐 Web
                                                                 </a>
+                                                            )}
+                                                            {contact.enrichmentData.company.socialMedia?.instagram && contact.enrichmentData.company.socialMedia.instagram !== 'No verificado' && (
+                                                                <span className="text-[10px] px-2 py-1 rounded-full bg-pink-50 text-pink-600">
+                                                                    📸 {contact.enrichmentData.company.socialMedia.instagram}
+                                                                </span>
                                                             )}
                                                         </div>
                                                     </div>
                                                 </ExpandableCard>
                                             )}
 
+                                            {/* Google Maps Data */}
+                                            {contact.enrichmentData.googleMaps && (
+                                                <ExpandableCard title="📍 Google Maps" defaultExpanded={false}>
+                                                    <div className="space-y-2">
+                                                        {contact.enrichmentData.googleMaps.rating && (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-yellow-500">{'⭐'.repeat(Math.round(contact.enrichmentData.googleMaps.rating))}</span>
+                                                                <span className="text-xs text-slate-600 font-medium">{contact.enrichmentData.googleMaps.rating}</span>
+                                                                {contact.enrichmentData.googleMaps.reviewCount && (
+                                                                    <span className="text-[10px] text-slate-400">({contact.enrichmentData.googleMaps.reviewCount} reviews)</span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {contact.enrichmentData.googleMaps.address && (
+                                                            <p className="text-xs text-slate-500">📍 {contact.enrichmentData.googleMaps.address}</p>
+                                                        )}
+                                                        {contact.enrichmentData.googleMaps.phone && (
+                                                            <p className="text-xs text-slate-500">📞 {contact.enrichmentData.googleMaps.phone}</p>
+                                                        )}
+                                                        {contact.enrichmentData.googleMaps.category && (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {(Array.isArray(contact.enrichmentData.googleMaps.category)
+                                                                    ? contact.enrichmentData.googleMaps.category
+                                                                    : [contact.enrichmentData.googleMaps.category]
+                                                                ).map((cat: string, i: number) => (
+                                                                    <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-600">
+                                                                        {cat}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </ExpandableCard>
+                                            )}
+
+                                            {/* Website & Social Links */}
+                                            {contact.enrichmentData.companyWebsite?.socialLinks && (
+                                                <ExpandableCard title="🔗 Redes Sociales" defaultExpanded={false}>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {Object.entries(contact.enrichmentData.companyWebsite.socialLinks).filter(([_, v]) => v).map(([platform, url]: [string, any]) => (
+                                                            <a
+                                                                key={platform}
+                                                                href={url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-[10px] px-2.5 py-1 rounded-full font-medium hover:opacity-80 transition-opacity"
+                                                                style={{
+                                                                    background: platform === 'instagram' ? 'rgba(228,64,95,0.1)' :
+                                                                        platform === 'facebook' ? 'rgba(66,103,178,0.1)' :
+                                                                            platform === 'twitter' ? 'rgba(29,161,242,0.1)' :
+                                                                                platform === 'tiktok' ? 'rgba(0,0,0,0.06)' :
+                                                                                    platform === 'youtube' ? 'rgba(255,0,0,0.08)' :
+                                                                                        platform === 'linkedin' ? 'rgba(0,119,181,0.1)' : 'rgba(100,100,100,0.08)',
+                                                                    color: platform === 'instagram' ? '#e4405f' :
+                                                                        platform === 'facebook' ? '#4267b2' :
+                                                                            platform === 'twitter' ? '#1da1f2' :
+                                                                                platform === 'tiktok' ? '#333' :
+                                                                                    platform === 'youtube' ? '#ff0000' :
+                                                                                        platform === 'linkedin' ? '#0077b5' : '#666',
+                                                                }}
+                                                            >
+                                                                {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                </ExpandableCard>
+                                            )}
+
+                                            {/* Company News */}
+                                            {contact.enrichmentData.companyNews?.length > 0 && (
+                                                <ExpandableCard title="📰 Noticias" defaultExpanded={false}>
+                                                    <div className="space-y-2">
+                                                        {contact.enrichmentData.companyNews.slice(0, 5).map((news: any, i: number) => (
+                                                            <div key={i} className="p-2.5 rounded-lg bg-white/40 border border-purple-50/50">
+                                                                <div className="flex items-start gap-2">
+                                                                    <Newspaper size={14} className="text-purple-400 mt-0.5 shrink-0" />
+                                                                    <div>
+                                                                        {news.url ? (
+                                                                            <a href={news.url} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-700 font-medium hover:text-purple-600">
+                                                                                {news.title}
+                                                                            </a>
+                                                                        ) : (
+                                                                            <p className="text-xs text-slate-700 font-medium">{news.title}</p>
+                                                                        )}
+                                                                        {news.summary && (
+                                                                            <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{news.summary}</p>
+                                                                        )}
+                                                                        <div className="flex items-center gap-2 mt-1">
+                                                                            {news.source && <span className="text-[10px] text-slate-400 font-medium">{news.source}</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </ExpandableCard>
+                                            )}
+
                                             {/* Person News */}
                                             {contact.enrichmentData.personNews?.length > 0 && (
-                                                <ExpandableCard title="📰 Noticias Recientes" defaultExpanded={false}>
+                                                <ExpandableCard title="📰 Noticias de la Persona" defaultExpanded={false}>
                                                     <div className="space-y-2">
                                                         {contact.enrichmentData.personNews.slice(0, 5).map((news: any, i: number) => (
                                                             <div key={i} className="p-2.5 rounded-lg bg-white/40 border border-purple-50/50">
@@ -809,10 +988,9 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                                     <div className="space-y-2">
                                                         {contact.enrichmentData.keyInsights.map((insight: any, i: number) => (
                                                             <div key={i} className="flex items-start gap-2">
-                                                                <div className={`w-2 h-2 rounded-full mt-1 shrink-0 ${
-                                                                    insight.confidence === 'high' ? 'bg-green-500' : 
+                                                                <div className={`w-2 h-2 rounded-full mt-1 shrink-0 ${insight.confidence === 'high' ? 'bg-green-500' :
                                                                     insight.confidence === 'medium' ? 'bg-yellow-500' : 'bg-red-400'
-                                                                }`} />
+                                                                    }`} />
                                                                 <div className="flex-1">
                                                                     <p className="text-xs text-slate-600 leading-relaxed">{insight.text || insight}</p>
                                                                     {insight.source && insight.source !== 'No verificado' && (
@@ -828,23 +1006,27 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                             {/* Buying Signals */}
                                             {contact.enrichmentData.buyingSignals?.length > 0 && (
                                                 <ExpandableCard title="🚦 Señales de Compra" defaultExpanded={true}>
-                                                    <div className="flex flex-wrap gap-2">
+                                                    <div className="space-y-2">
                                                         {contact.enrichmentData.buyingSignals.map((signal: any, i: number) => (
-                                                            <span 
-                                                                key={i} 
-                                                                className="flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-medium"
-                                                                style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}
-                                                                title={signal.source || ''}
-                                                            >
-                                                                <ShoppingCart size={10} />
-                                                                {signal.text || signal}
-                                                                {signal.confidence && (
-                                                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                                                        signal.confidence === 'high' ? 'bg-green-500' : 
-                                                                        signal.confidence === 'medium' ? 'bg-yellow-500' : 'bg-red-400'
-                                                                    }`} />
-                                                                )}
-                                                            </span>
+                                                            <div key={i} className="flex items-start gap-2 p-2 rounded-lg" style={{ background: 'rgba(16,185,129,0.05)' }}>
+                                                                <ShoppingCart size={12} className="text-emerald-500 mt-0.5 shrink-0" />
+                                                                <div className="flex-1">
+                                                                    <p className="text-xs text-slate-600 leading-relaxed">{signal.text || signal}</p>
+                                                                    {signal.evidence && (
+                                                                        <p className="text-[10px] text-slate-400 mt-0.5 italic">📋 {signal.evidence}</p>
+                                                                    )}
+                                                                    <div className="flex items-center gap-1.5 mt-1">
+                                                                        {signal.source && signal.source !== 'No verificado' && (
+                                                                            <span className="text-[10px] text-slate-400">{signal.source}</span>
+                                                                        )}
+                                                                        {signal.confidence && (
+                                                                            <span className={`w-1.5 h-1.5 rounded-full ${signal.confidence === 'high' ? 'bg-green-500' :
+                                                                                signal.confidence === 'medium' ? 'bg-yellow-500' : 'bg-red-400'
+                                                                                }`} />
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         ))}
                                                     </div>
                                                 </ExpandableCard>
@@ -913,8 +1095,8 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                         ) : (
                                             <div className="space-y-3">
                                                 {(contact.notes || []).slice().reverse().map((note: INote, i: number) => (
-                                                    <div 
-                                                        key={note._id || i} 
+                                                    <div
+                                                        key={note._id || i}
                                                         className="p-4 rounded-xl bg-white/60 border border-purple-50 hover:border-purple-100 transition-colors"
                                                     >
                                                         <p className="text-sm text-slate-700 leading-relaxed">{note.text}</p>
@@ -937,24 +1119,24 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                         <History size={14} />
                                         Timeline de Pipeline
                                     </h3>
-                                    
+
                                     <div className="relative">
                                         {/* Timeline Line */}
-                                        <div 
+                                        <div
                                             className="absolute left-4 top-2 bottom-2 w-0.5"
                                             style={{ background: 'linear-gradient(to bottom, #7c3aed, #a855f7)' }}
                                         />
-                                        
+
                                         <div className="space-y-4">
                                             {PIPELINE_STEPS.map((step, i) => {
                                                 const date = (contact as any)?.[step.dateField];
                                                 const isCurrent = contact.status === step.key;
                                                 const isPast = PIPELINE_STEPS.findIndex(s => s.key === contact.status) > i;
-                                                
+
                                                 return (
                                                     <div key={step.key} className="relative flex items-start gap-4 pl-1">
                                                         {/* Timeline Dot */}
-                                                        <div 
+                                                        <div
                                                             className="relative z-10 w-7 h-7 rounded-full flex items-center justify-center border-2 shrink-0"
                                                             style={{
                                                                 background: isCurrent ? step.color : isPast ? step.color : 'white',
@@ -969,7 +1151,7 @@ export default function ContactDrawerV2({ contactId, onClose }: Props) {
                                                                 <div className="w-2 h-2 rounded-full" style={{ background: step.color }} />
                                                             )}
                                                         </div>
-                                                        
+
                                                         {/* Content */}
                                                         <div className="flex-1 pt-0.5">
                                                             <div className="flex items-center justify-between">

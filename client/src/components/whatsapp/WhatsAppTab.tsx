@@ -5,9 +5,9 @@ import ScheduleForm from './ScheduleForm'
 import ScheduledList from './ScheduledList'
 import SentHistory from './SentHistory'
 
-import { API_BASE } from '../../config';
+import api from '../../lib/axios';
 
-const API_URL = `${API_BASE}/api/whatsapp`;
+const API_URL = '/whatsapp';
 
 type SubTab = 'schedule' | 'pending' | 'history'
 
@@ -22,8 +22,8 @@ export default function WhatsAppTab() {
 
     const checkConnection = async () => {
         try {
-            const res = await fetch(`${API_URL}/status`)
-            const data = await res.json()
+            const res = await api.get(`${API_URL}/status`)
+            const data = res.data
             setConnected(data.status === 'connected')
         } catch {
             setConnected(false)
@@ -37,8 +37,8 @@ export default function WhatsAppTab() {
         if (!connected) return
         const interval = setInterval(async () => {
             try {
-                const res = await fetch(`${API_URL}/status`)
-                const data = await res.json()
+                const res = await api.get(`${API_URL}/status`)
+                const data = res.data
                 if (data.status !== 'connected') {
                     setConnected(false)
                 }

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 
-import { API_BASE } from '../../config';
+import api from '../../lib/axios';
 
-const API_URL = `${API_BASE}/api/whatsapp`;
+const API_URL = '/whatsapp';
 
 interface ScheduledMsg {
     _id: string
@@ -32,9 +32,8 @@ export default function ScheduledList() {
 
     const loadScheduled = async () => {
         try {
-            const res = await fetch(`${API_URL}/scheduled`)
-            const data = await res.json()
-            setMessages(data)
+            const res = await api.get(`${API_URL}/scheduled`)
+            setMessages(res.data)
         } catch {
             console.error('Error loading scheduled messages')
         } finally {
@@ -44,8 +43,8 @@ export default function ScheduledList() {
 
     const cancelMessage = async (id: string) => {
         try {
-            const res = await fetch(`${API_URL}/scheduled/${id}`, { method: 'DELETE' })
-            if (res.ok) {
+            const res = await api.delete(`${API_URL}/scheduled/${id}`)
+            if (res.data.success) {
                 setMessages(prev => prev.filter(m => m._id !== id))
             }
         } catch {
@@ -56,9 +55,8 @@ export default function ScheduledList() {
     const retryMessage = async (id: string) => {
         setRetrying(id)
         try {
-            const res = await fetch(`${API_URL}/retry/${id}`, { method: 'POST' })
-            const data = await res.json()
-            if (data.success) {
+            const res = await api.post(`${API_URL}/retry/${id}`)
+            if (res.data.success) {
                 // Remove from list (it's now sent)
                 setMessages(prev => prev.filter(m => m._id !== id))
             } else {

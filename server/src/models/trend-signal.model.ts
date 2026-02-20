@@ -11,7 +11,7 @@ import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 // ── Interface ────────────────────────────────────────────────
 
 export interface ITrendSignal extends Document {
-    workspaceId: string;
+    userId: string;
     source: string;
     sourceUrl: string;
     title: string;
@@ -28,14 +28,14 @@ export interface ITrendSignalModel extends Model<ITrendSignal> {
     /**
      * Get unused, high-relevance signals for a workspace.
      */
-    getActiveForWorkspace(workspaceId: string, minScore?: number): Promise<ITrendSignal[]>;
+    getActiveForWorkspace(userId: string, minScore?: number): Promise<ITrendSignal[]>;
 }
 
 // ── Schema ────────────────────────────────────────────────────
 
 const TrendSignalSchema = new Schema<ITrendSignal>(
     {
-        workspaceId: {
+        userId: {
             type: String,
             required: true,
             index: true,
@@ -95,7 +95,7 @@ const TrendSignalSchema = new Schema<ITrendSignal>(
 TrendSignalSchema.index({ detectedAt: 1 }, { expireAfterSeconds: 604800 });
 
 // Find unused, relevant signals
-TrendSignalSchema.index({ workspaceId: 1, used: 1, relevanceScore: -1 });
+TrendSignalSchema.index({ userId: 1, used: 1, relevanceScore: -1 });
 
 // Prevent duplicate URLs
 TrendSignalSchema.index({ sourceUrl: 1 }, { unique: true, sparse: true });
@@ -103,11 +103,11 @@ TrendSignalSchema.index({ sourceUrl: 1 }, { unique: true, sparse: true });
 // ── Static Methods ────────────────────────────────────────────
 
 TrendSignalSchema.statics.getActiveForWorkspace = async function (
-    workspaceId: string,
+    userId: string,
     minScore = 30
 ): Promise<ITrendSignal[]> {
     return this.find({
-        workspaceId,
+        userId,
         used: false,
         relevanceScore: { $gte: minScore },
     })

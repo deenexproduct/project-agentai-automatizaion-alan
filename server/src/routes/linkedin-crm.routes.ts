@@ -197,9 +197,11 @@ router.post('/contacts/:id/notes', async (req: Request, res: Response) => {
 
 // ── POST /check-accepted — Trigger acceptance check ──────────
 
-router.post('/check-accepted', async (_req: Request, res: Response) => {
+router.post('/check-accepted', async (req: Request, res: Response) => {
     try {
-        const result = await linkedinService.checkAcceptedConnections();
+        const userId = (req as any).user?._id?.toString() || 'default';
+        const tenant = linkedinService.getTenant(userId);
+        const result = await tenant.checkAcceptedConnections();
         res.json(result);
     } catch (err: any) {
         console.error('CRM check-accepted error:', err.message);
@@ -209,9 +211,11 @@ router.post('/check-accepted', async (_req: Request, res: Response) => {
 
 // ── GET /check-accepted/status — Last check timestamp ────────
 
-router.get('/check-accepted/status', async (_req: Request, res: Response) => {
+router.get('/check-accepted/status', async (req: Request, res: Response) => {
     try {
-        const lastCheck = linkedinService.getLastAcceptedCheck();
+        const userId = (req as any).user?._id?.toString() || 'default';
+        const tenant = linkedinService.getTenant(userId);
+        const lastCheck = tenant.getLastAcceptedCheck();
         res.json({ lastCheck });
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -264,11 +268,11 @@ router.patch('/enrichment/config', async (req: Request, res: Response) => {
 router.post('/contacts/bulk/enrich', async (req: Request, res: Response) => {
     try {
         const { ids } = req.body;
-        
+
         if (!Array.isArray(ids) || ids.length === 0) {
             return res.status(400).json({ error: 'ids array is required' });
         }
-        
+
         if (ids.length > 50) {
             return res.status(400).json({ error: 'Maximum 50 contacts per bulk operation' });
         }
@@ -280,8 +284,8 @@ router.post('/contacts/bulk/enrich', async (req: Request, res: Response) => {
         const succeeded = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.filter(r => r.status === 'rejected').length;
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             summary: { total: ids.length, succeeded, failed },
             results: results.map((r, i) => ({
                 id: ids[i],
@@ -305,7 +309,7 @@ router.post('/contacts/bulk/status', async (req: Request, res: Response) => {
         if (!Array.isArray(ids) || ids.length === 0) {
             return res.status(400).json({ error: 'ids array is required' });
         }
-        
+
         if (!status || !validStatuses.includes(status)) {
             return res.status(400).json({ error: 'Invalid status' });
         }
@@ -327,9 +331,9 @@ router.post('/contacts/bulk/status', async (req: Request, res: Response) => {
             { $set: update }
         );
 
-        res.json({ 
-            success: true, 
-            modified: result.modifiedCount 
+        res.json({
+            success: true,
+            modified: result.modifiedCount
         });
     } catch (err: any) {
         console.error('CRM bulk status update error:', err.message);
@@ -342,14 +346,14 @@ router.post('/contacts/bulk/status', async (req: Request, res: Response) => {
 router.get('/contacts/export', async (req: Request, res: Response) => {
     try {
         const { status, search } = req.query;
-        
+
         // Build query
         const query: any = {};
-        
+
         if (status && ['visitando', 'conectando', 'interactuando', 'enriqueciendo', 'esperando_aceptacion', 'aceptado', 'mensaje_enviado'].includes(status as string)) {
             query.status = status;
         }
-        
+
         if (search && (search as string).trim().length > 0) {
             const s = (search as string).trim();
             query.$or = [
@@ -364,9 +368,9 @@ router.get('/contacts/export', async (req: Request, res: Response) => {
 
         // Build CSV
         const headers = [
-            'ID', 'Full Name', 'First Name', 'Last Name', 'Headline', 
+            'ID', 'Full Name', 'First Name', 'Last Name', 'Headline',
             'Current Position', 'Current Company', 'Industry', 'Location',
-            'Profile URL', 'Status', 'Sent At', 'Accepted At', 
+            'Profile URL', 'Status', 'Sent At', 'Accepted At',
             'Enriched At', 'Message Sent At', 'Enrichment Status',
             'Created At', 'Notes Count'
         ];
@@ -419,11 +423,11 @@ router.get('/contacts/export', async (req: Request, res: Response) => {
 router.get('/contacts/stats', async (_req: Request, res: Response) => {
     try {
         const total = await LinkedInContact.countDocuments();
-        
+
         const byStatus = await LinkedInContact.aggregate([
             { $group: { _id: '$status', count: { $sum: 1 } } }
         ]);
-        
+
         const byEnrichmentStatus = await LinkedInContact.aggregate([
             { $group: { _id: '$enrichmentStatus', count: { $sum: 1 } } }
         ]);

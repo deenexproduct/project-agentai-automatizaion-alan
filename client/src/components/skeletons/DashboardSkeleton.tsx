@@ -90,7 +90,7 @@ export function ChartSkeleton({
         <SkeletonCard
             className={`chart-skeleton ${className}`}
             pulse={pulse}
-            style={{ height }}
+            {...({ style: { height } } as any)}
         >
             {/* Chart Title */}
             <Skeleton variant="text" width={120} height={18} pulse={pulse} />
@@ -261,7 +261,7 @@ export function DashboardSkeleton({ pulse = true, className = '' }: DashboardSke
                     <div className="space-y-3 mt-3">
                         {Array.from({ length: 3 }).map((_, i) => (
                             <div key={i} className="flex items-center gap-3">
-                                <Skeleton variant="circle" size={32} pulse={pulse} />
+                                <Skeleton variant="circle" {...({ size: 32 } as any)} pulse={pulse} />
                                 <div className="flex-1 space-y-1">
                                     <Skeleton variant="text" width="60%" height={12} pulse={pulse} />
                                     <Skeleton variant="text" width="40%" height={10} pulse={pulse} />

@@ -131,7 +131,7 @@ export function EmptyState({
                     style={{
                         padding: '10px 20px',
                         borderRadius: 10,
-                        border: 'none',
+                        
                         fontSize: 14,
                         fontWeight: 500,
                         cursor: 'pointer',

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 
-import { API_BASE } from '../../config';
+import api from '../../lib/axios';
 
-const API_URL = `${API_BASE}/api/whatsapp`;
+const API_URL = '/whatsapp';
 
 interface SentMsg {
     _id: string
@@ -28,9 +28,8 @@ export default function SentHistory() {
 
     const loadHistory = async () => {
         try {
-            const res = await fetch(`${API_URL}/history`)
-            const data = await res.json()
-            setMessages(data)
+            const res = await api.get(`${API_URL}/history`)
+            setMessages(res.data)
         } catch {
             console.error('Error loading history')
         } finally {

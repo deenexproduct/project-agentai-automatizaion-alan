@@ -129,16 +129,16 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     ref
   ) => {
     const [isHovered, setIsHovered] = React.useState(false);
-    
+
     const effectivePadding = padding ?? defaultPaddingByVariant[variant];
 
     const getHoverStyles = (): React.CSSProperties => {
       if (!hover || !isHovered) return {};
-      
+
       return {
         transform: 'scale(1.02)',
-        boxShadow: variant === 'elevated' 
-          ? 'var(--vc-shadow-lg)' 
+        boxShadow: variant === 'elevated'
+          ? 'var(--vc-shadow-lg)'
           : 'var(--vc-shadow-xl)',
       };
     };
@@ -150,7 +150,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
         style={{
           ...cardBaseStyles,
           ...variantStyles[variant],
-          ...paddingStyles[effectivePadding],
+          ...paddingStyles[effectivePadding as keyof typeof paddingStyles],
           ...getHoverStyles(),
           ...(accentColor && {
             borderLeftWidth: '3px',
@@ -258,9 +258,9 @@ export const CardFooter = forwardRef<HTMLDivElement, CardFooterProps>(
 CardFooter.displayName = 'CardFooter';
 
 // Asignar subcomponentes
-Card.Header = CardHeader;
-Card.Content = CardContent;
-Card.Footer = CardFooter;
+(Card as any).Header = CardHeader;
+(Card as any).Content = CardContent;
+(Card as any).Footer = CardFooter;
 
 export default Card;
 

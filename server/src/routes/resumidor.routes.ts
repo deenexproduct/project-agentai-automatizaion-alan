@@ -8,8 +8,10 @@ const router = Router();
 // ── Health Check ────────────────────────────────────────────
 
 router.get('/health', async (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString();
+    const tenant = userId ? whatsappService.getTenant(userId) : null;
     const llm = await resumidorService.checkLLMHealth();
-    const waConnected = whatsappService.isConnected();
+    const waConnected = tenant ? tenant.isConnected() : false;
 
     res.json({
         provider: llm.provider,
@@ -32,7 +34,11 @@ router.get('/models', async (req: Request, res: Response) => {
 
 router.get('/groups', async (req: Request, res: Response) => {
     try {
-        const chats = await whatsappService.getChats();
+        const userId = req.user?._id?.toString();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const tenant = whatsappService.getTenant(userId);
+
+        const chats = await tenant.getChats();
         const groups = chats.filter(c => c.isGroup);
         res.json(groups);
     } catch (error: any) {
@@ -82,7 +88,17 @@ router.post('/summarize', async (req: Request, res: Response) => {
         };
 
         const result = await resumidorService.summarize(
-            { chatId, rangeMode, hours, rangeFrom, rangeTo, model, config: reportConfig, timezoneOffset },
+            {
+                userId: req.user?._id?.toString() || '',
+                chatId,
+                rangeMode,
+                hours,
+                rangeFrom,
+                rangeTo,
+                model,
+                config: reportConfig,
+                timezoneOffset
+            },
             onProgress
         );
 

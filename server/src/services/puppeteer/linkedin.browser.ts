@@ -13,7 +13,7 @@
  */
 
 import puppeteer from 'puppeteer-extra';
-import * as StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import type { Browser, Page, HTTPResponse, HTTPRequest } from 'puppeteer';
 import { EventEmitter } from 'events';
 import {

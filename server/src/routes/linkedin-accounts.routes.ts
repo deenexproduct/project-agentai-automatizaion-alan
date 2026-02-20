@@ -2,7 +2,7 @@
  * LinkedIn Accounts Routes
  *
  * REST endpoints for managing LinkedIn accounts (multi-account support).
- * All routes are scoped to a workspaceId (defaults to 'default' for single-user setups).
+ * All routes are scoped to a userId (defaults to 'default' for single-user setups).
  *
  * Endpoints:
  *   GET    /api/linkedin/accounts                  — list accounts
@@ -22,16 +22,19 @@ import { linkedinService } from '../services/linkedin.service';
 
 const router = Router();
 
-// Helper: get workspaceId from query param or default to 'default'
-function getWorkspaceId(req: Request): string {
-    return (req.query.workspaceId as string) || 'default';
+// Helper: get userId from query param or default to 'default'
+function getUserId(req: Request): string {
+    if (!req.user || !req.user._id) {
+        throw new Error('Unauthorized');
+    }
+    return req.user._id.toString();
 }
 
 // ── GET /accounts — List all accounts ───────────────────────
 router.get('/', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
-        const accounts = await sessionManager.listAccounts(workspaceId);
+        const userId = getUserId(req);
+        const accounts = await sessionManager.listAccounts(userId);
         res.json({ success: true, accounts });
     } catch (err: any) {
         console.error('[AccountsRoutes] listAccounts error:', err.message);
@@ -42,8 +45,8 @@ router.get('/', async (req: Request, res: Response) => {
 // ── GET /accounts/active — Get active account ────────────────
 router.get('/active', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
-        const account = await sessionManager.getActiveAccount(workspaceId);
+        const userId = getUserId(req);
+        const account = await sessionManager.getActiveAccount(userId);
         if (!account) {
             return res.json({ success: true, account: null, message: 'No active account' });
         }
@@ -57,14 +60,14 @@ router.get('/active', async (req: Request, res: Response) => {
 // ── POST /accounts — Create account ─────────────────────────
 router.post('/', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const { label } = req.body;
 
         if (!label || typeof label !== 'string' || label.trim().length === 0) {
             return res.status(400).json({ error: 'label is required and must be a non-empty string' });
         }
 
-        const account = await sessionManager.createAccount(workspaceId, label.trim());
+        const account = await sessionManager.createAccount(userId, label.trim());
         res.status(201).json({ success: true, account });
     } catch (err: any) {
         if (err.code === 11000) {
@@ -79,14 +82,14 @@ router.post('/', async (req: Request, res: Response) => {
 // ── POST /accounts/:id/set-active — Set active account ──────
 router.post('/:id/set-active', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const { id } = req.params;
 
         if (!Types.ObjectId.isValid(id)) {
             return res.status(400).json({ error: 'Invalid account ID' });
         }
 
-        const account = await sessionManager.setActiveAccount(workspaceId, id);
+        const account = await sessionManager.setActiveAccount(userId, id);
         res.json({ success: true, account });
     } catch (err: any) {
         if (err instanceof AccountNotFoundError) {
@@ -103,14 +106,14 @@ router.post('/:id/set-active', async (req: Request, res: Response) => {
 // ── DELETE /accounts/:id — Disable account ───────────────────
 router.delete('/:id', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const { id } = req.params;
 
         if (!Types.ObjectId.isValid(id)) {
             return res.status(400).json({ error: 'Invalid account ID' });
         }
 
-        await sessionManager.disableAccount(workspaceId, id);
+        await sessionManager.disableAccount(userId, id);
         res.json({ success: true, message: 'Account disabled' });
     } catch (err: any) {
         if (err instanceof AccountNotFoundError) {
@@ -124,7 +127,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // ── GET /accounts/:id/audit — Get audit log ──────────────────
 router.get('/:id/audit', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const { id } = req.params;
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
 
@@ -133,7 +136,7 @@ router.get('/:id/audit', async (req: Request, res: Response) => {
         }
 
         const events = await LinkedInAuditLog.getRecent(
-            workspaceId,
+            userId,
             new Types.ObjectId(id),
             limit
         );
@@ -148,7 +151,7 @@ router.get('/:id/audit', async (req: Request, res: Response) => {
 // ── POST /accounts/:id/switch — Switch active account in browser ──
 router.post('/:id/switch', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const { id } = req.params;
 
         if (!Types.ObjectId.isValid(id)) {
@@ -156,14 +159,15 @@ router.post('/:id/switch', async (req: Request, res: Response) => {
         }
 
         // Get the current browser page from the LinkedIn service
-        const page = linkedinService.getPage();
+        const tenant = linkedinService.getTenant(userId);
+        const page = tenant.getActivePage();
         if (!page) {
             return res.status(409).json({
                 error: 'Browser not open. Launch the browser first via POST /api/linkedin/launch'
             });
         }
 
-        const account = await sessionManager.switchAccount(page, id, workspaceId);
+        const account = await sessionManager.switchAccount(page, id, userId);
         res.json({ success: true, account, message: `Switched to account: ${account.label}` });
     } catch (err: any) {
         if (err instanceof AccountNotFoundError) {

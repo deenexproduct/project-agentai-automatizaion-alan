@@ -136,6 +136,12 @@ export default function ContactCard({ contact, onClick, provided, onEnriched }: 
                             {contact.currentCompany}
                         </p>
                     )}
+                    {/* Fallback: show headline if neither position nor company */}
+                    {!contact.currentPosition && !contact.currentCompany && contact.headline && (
+                        <p className="text-xs text-slate-500 truncate mt-0.5">
+                            {contact.headline}
+                        </p>
+                    )}
                 </div>
 
                 {/* Enrich button */}

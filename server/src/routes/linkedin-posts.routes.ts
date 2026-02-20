@@ -29,16 +29,19 @@ import { publishingNotifications } from '../services/linkedin/publishing-notific
 
 const router = Router();
 
-// Helper: get workspaceId from query param or default
-function getWorkspaceId(req: Request): string {
-    return (req.query.workspaceId as string) || 'default';
+// Helper: get userId from query param or default
+function getuserId(req: Request): string {
+    if (!req.user || !req.user._id) {
+        throw new Error('Unauthorized');
+    }
+    return req.user._id.toString();
 }
 
 // ── POST /generate — Generate post draft with AI ────────────
 
 router.post('/generate', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getuserId(req);
         const { idea, context, pilar, formato, accountId, includeTrends } = req.body;
 
         if (!idea || typeof idea !== 'string' || idea.trim().length === 0) {
@@ -51,11 +54,11 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Resolve pilar name
         let pilarName = pilar || 'Auto';
         if (pilarName === 'Auto') {
-            const pilares = await ContentPilar.getActiveForWorkspace(workspaceId);
+            const pilares = await ContentPilar.getActiveForWorkspace(userId);
             if (pilares.length > 0) {
                 // Pick one that hasn't been used recently
                 const recentPosts = await ScheduledPost.find({
-                    workspaceId,
+                    userId,
                     createdAt: { $gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
                 }).lean().exec();
                 const recentPilares = recentPosts.map(p => p.aiMetadata.pilar);
@@ -67,7 +70,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Get trend signals if requested
         let trendSignals;
         if (includeTrends) {
-            trendSignals = await TrendSignal.getActiveForWorkspace(workspaceId, 30);
+            trendSignals = await TrendSignal.getActiveForWorkspace(userId, 30);
         }
 
         // Generate post
@@ -77,7 +80,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             pilar: pilarName,
             formato: formato || 'Auto',
             trendSignals: trendSignals || undefined,
-            workspaceId,
+            userId,
         });
 
         // Generate image
@@ -99,7 +102,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Save as draft
         const post = await ScheduledPost.create({
             accountId: new Types.ObjectId(accountId),
-            workspaceId,
+            userId,
             content: result.draft.texto,
             hashtags: result.draft.hashtags,
             mediaUrls,
@@ -145,8 +148,8 @@ router.post('/generate', async (req: Request, res: Response) => {
 
 router.get('/drafts', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
-        const drafts = await ScheduledPost.findDraftsForWorkspace(workspaceId);
+        const userId = getuserId(req);
+        const drafts = await ScheduledPost.findDraftsForUser(userId);
         res.json({ drafts, count: drafts.length });
     } catch (err: any) {
         console.error('[PostsRoutes] getDrafts error:', err.message);
@@ -158,9 +161,9 @@ router.get('/drafts', async (req: Request, res: Response) => {
 
 router.get('/scheduled', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getuserId(req);
         const posts = await ScheduledPost.find({
-            workspaceId,
+            userId,
             status: { $in: ['approved', 'scheduled'] },
         }).sort({ scheduledAt: 1 }).exec();
         res.json({ posts, count: posts.length });
@@ -174,10 +177,10 @@ router.get('/scheduled', async (req: Request, res: Response) => {
 
 router.get('/published', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getuserId(req);
         const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
         const posts = await ScheduledPost.find({
-            workspaceId,
+            userId,
             status: 'published',
         }).sort({ publishedAt: -1 }).limit(limit).exec();
         res.json({ posts, count: posts.length });
@@ -370,7 +373,7 @@ router.post('/:id/regenerate', async (req: Request, res: Response) => {
             context: post.aiMetadata.context,
             pilar: post.aiMetadata.pilar,
             formato: post.aiMetadata.formato,
-            workspaceId: post.workspaceId,
+            userId: post.userId,
         });
 
         // Update post with new content

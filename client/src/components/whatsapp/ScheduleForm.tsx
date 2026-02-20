@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import AudioRecorder from './AudioRecorder'
 import ChatPicker, { ChatItem } from '../shared/ChatPicker'
 
-import { API_BASE } from '../../config';
+import api from '../../lib/axios';
 
-const API_URL = `${API_BASE}/api/whatsapp`;
+const API_URL = '/whatsapp';
 
 
 
@@ -106,15 +106,11 @@ export default function ScheduleForm() {
                 formData.append('recurringLabel', recurrenceOption.label)
             }
 
-            const res = await fetch(`${API_URL}/schedule`, {
-                method: 'POST',
-                body: formData,
+            const res = await api.post(`${API_URL}/schedule`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             })
 
-            if (!res.ok) {
-                const data = await res.json()
-                throw new Error(data.error || 'Error al programar')
-            }
+            // axios automatically throws on non-2xx Status
 
             setSuccess(true)
             setTextContent('')

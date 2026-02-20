@@ -18,7 +18,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 // ── Interface ────────────────────────────────────────────────
 
 export interface IContentPilar extends Document {
-    workspaceId: string;
+    userId: string;
     nombre: string;
     descripcion: string;
     keywords: string[];
@@ -37,14 +37,14 @@ export interface IContentPilarModel extends Model<IContentPilar> {
     /**
      * Get active pillars for a workspace, ordered by frequency.
      */
-    getActiveForWorkspace(workspaceId: string): Promise<IContentPilar[]>;
+    getActiveForWorkspace(userId: string): Promise<IContentPilar[]>;
 }
 
 // ── Schema ────────────────────────────────────────────────────
 
 const ContentPilarSchema = new Schema<IContentPilar>(
     {
-        workspaceId: {
+        userId: {
             type: String,
             required: true,
             index: true,
@@ -101,14 +101,14 @@ const ContentPilarSchema = new Schema<IContentPilar>(
 
 // ── Indexes ───────────────────────────────────────────────────
 
-ContentPilarSchema.index({ workspaceId: 1, activo: 1 });
+ContentPilarSchema.index({ userId: 1, activo: 1 });
 
 // ── Static Methods ────────────────────────────────────────────
 
 ContentPilarSchema.statics.getActiveForWorkspace = async function (
-    workspaceId: string
+    userId: string
 ): Promise<IContentPilar[]> {
-    return this.find({ workspaceId, activo: true })
+    return this.find({ userId, activo: true })
         .sort({ frecuenciaSemanal: -1 })
         .exec();
 };

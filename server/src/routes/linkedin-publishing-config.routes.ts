@@ -29,16 +29,19 @@ import { learningLoop } from '../services/linkedin/learning-loop.service';
 
 const router = Router();
 
-function getWorkspaceId(req: Request): string {
-    return (req.query.workspaceId as string) || 'default';
+function getUserId(req: Request): string {
+    if (!req.user || !req.user._id) {
+        throw new Error('Unauthorized');
+    }
+    return req.user._id.toString();
 }
 
 // ── GET /profile ────────────────────────────────────────────
 
 router.get('/profile', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
-        const profile = await ClientProfile.getForWorkspace(workspaceId);
+        const userId = getUserId(req);
+        const profile = await ClientProfile.getForWorkspace(userId);
         if (!profile) {
             return res.status(404).json({ error: 'Client profile not found. Run the seed script first.' });
         }
@@ -53,11 +56,11 @@ router.get('/profile', async (req: Request, res: Response) => {
 
 router.put('/profile', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const update = req.body;
 
         const profile = await ClientProfile.findOneAndUpdate(
-            { workspaceId },
+            { userId },
             { $set: update },
             { new: true, upsert: true }
         ).exec();
@@ -73,8 +76,8 @@ router.put('/profile', async (req: Request, res: Response) => {
 
 router.get('/pilares', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
-        const pilares = await ContentPilar.getActiveForWorkspace(workspaceId);
+        const userId = getUserId(req);
+        const pilares = await ContentPilar.getActiveForWorkspace(userId);
         res.json({ pilares, count: pilares.length });
     } catch (err: any) {
         console.error('[PublishingConfig] getPilares error:', err.message);
@@ -86,7 +89,7 @@ router.get('/pilares', async (req: Request, res: Response) => {
 
 router.post('/pilares', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const { nombre, descripcion, keywords, frecuenciaSemanal, formatoPreferido, diasPreferidos, ejemplos } = req.body;
 
         if (!nombre || !descripcion) {
@@ -94,7 +97,7 @@ router.post('/pilares', async (req: Request, res: Response) => {
         }
 
         const pilar = await ContentPilar.create({
-            workspaceId,
+            userId,
             nombre,
             descripcion,
             keywords: keywords || [],
@@ -155,9 +158,9 @@ router.delete('/pilares/:id', async (req: Request, res: Response) => {
 
 router.get('/trends', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
+        const userId = getUserId(req);
         const minScore = parseInt(req.query.minScore as string) || 30;
-        const trends = await TrendSignal.getActiveForWorkspace(workspaceId, minScore);
+        const trends = await TrendSignal.getActiveForWorkspace(userId, minScore);
         res.json({ trends, count: trends.length });
     } catch (err: any) {
         console.error('[PublishingConfig] getTrends error:', err.message);
@@ -202,8 +205,8 @@ router.get('/notifications', async (_req: Request, res: Response) => {
 
 router.get('/insights', async (req: Request, res: Response) => {
     try {
-        const workspaceId = getWorkspaceId(req);
-        const insights = await learningLoop.getInsights(workspaceId);
+        const userId = getUserId(req);
+        const insights = await learningLoop.getInsights(userId);
         res.json({ insights });
     } catch (err: any) {
         console.error('[PublishingConfig] getInsights error:', err.message);

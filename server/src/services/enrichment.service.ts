@@ -7,6 +7,10 @@ import { LinkedInContact, type ILinkedInContact, type IEnrichmentData } from '..
 import { openRouterService } from './openrouter.service';
 import { enrichmentValidator } from './enrichment-validator.service';
 import { webSearchService } from './web-search.service';
+import { googleMapsService } from './google-maps.service';
+import { instagramScraper } from './instagram-scraper.service';
+import { websiteScraper } from './website-scraper.service';
+import { deepLinkedInScraper } from './deep-linkedin-scraper.service';
 
 // ── Paths ────────────────────────────────────────────────────
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -26,14 +30,14 @@ interface EnrichmentConfig {
 
 // ── System Prompt ────────────────────────────────────────────
 const ENRICHMENT_SYSTEM_PROMPT = `
-Sos un organizador de datos comerciales B2B. Tu ÚNICA función es ORGANIZAR los datos que te proporciono en formato JSON estructurado.
+Sos un analista de inteligencia comercial B2B experto. Tu trabajo es organizar y sintetizar datos reales de múltiples fuentes para generar un dossier de venta accionable.
 
 ## REGLAS CRÍTICAS
 
-1. **SOLO usá datos proporcionados en el mensaje** — datos del perfil de LinkedIn y resultados de búsqueda web (si hay)
-2. **Si un dato NO está en la información proporcionada**, poné "No verificado" — NUNCA inventes
+1. **SOLO usá datos proporcionados en el mensaje** — LinkedIn, búsqueda web, website, Google Maps, Instagram
+2. **Si un dato NO está disponible**, poné "No verificado" — NUNCA inventes
 3. **NUNCA inventes URLs, noticias, nombres de medios, ni datos de empresas**
-4. **Indicá la fuente** de cada dato: "LinkedIn", "Búsqueda web", o "No verificado"
+4. **Indicá la fuente** de cada dato: "LinkedIn", "Búsqueda web", "Website", "Google Maps", "Instagram", o "No verificado"
 
 ## FORMATO JSON REQUERIDO
 
@@ -41,72 +45,105 @@ Respondé EXACTAMENTE con este JSON (sin texto antes ni después):
 
 {
   "personProfile": {
-    "verifiedPosition": "cargo del perfil LinkedIn o No verificado",
+    "verifiedPosition": "cargo o No verificado",
     "positionSource": "LinkedIn / No verificado",
-    "verifiedCompany": "empresa del perfil LinkedIn o No verificado",
+    "verifiedCompany": "empresa o No verificado",
     "companySource": "LinkedIn / No verificado",
-    "summary": "resumen profesional basado en datos del perfil o No verificado",
+    "summary": "resumen profesional o No verificado",
     "summarySource": "LinkedIn / No verificado"
   },
   "personNews": [],
   "company": {
-    "name": "nombre de la empresa o No verificado",
+    "name": "nombre o No verificado",
     "nameSource": "LinkedIn / Búsqueda web / No verificado",
-    "description": "descripción de la empresa basada en datos proporcionados o No verificado",
-    "descriptionSource": "Búsqueda web / LinkedIn / No verificado",
-    "website": "URL real de búsqueda web o No verificado",
+    "description": "descripción o No verificado",
+    "descriptionSource": "Búsqueda web / Website / No verificado",
+    "website": "URL real o No verificado",
     "websiteSource": "Búsqueda web / No verificado",
-    "category": "Categoría inferida del nombre si es obvio o No verificado",
-    "categorySource": "Inferido del nombre / Búsqueda web / No verificado",
-    "sector": "Gastronomía / Retail / Servicios / No verificado",
+    "category": "Categoría o No verificado",
+    "categorySource": "Google Maps / Inferido / No verificado",
+    "sector": "sector o No verificado",
     "sectorSource": "Búsqueda web / Inferido / No verificado",
-    "locationsCount": "No verificado",
-    "locationsCountSource": "No verificado",
+    "locationsCount": "cant de sucursales o No verificado",
+    "locationsCountSource": "Google Maps / No verificado",
     "socialMedia": {
-      "instagram": "No verificado",
-      "twitter": "No verificado"
+      "instagram": "@handle o No verificado",
+      "twitter": "@handle o No verificado"
     },
-    "socialMediaSource": "No verificado"
+    "socialMediaSource": "Website / Instagram / No verificado"
   },
   "companyNews": [],
+
+  "experienceSummary": "Career path de la persona en 2-3 líneas basado en su historial laboral",
+  "educationSummary": "Formación académica en 1 línea",
+  "skillsHighlight": ["skill1", "skill2", "skill3"],
+
+  "commercialScore": 50,
+  "commercialScoreBreakdown": {
+    "companySize": 10,
+    "digitalPresence": 10,
+    "growthSignals": 10,
+    "decisionPower": 10,
+    "approachability": 10
+  },
+
+  "personalizedPitch": "Pitch personalizado de 2-3 oraciones usando datos REALES del contacto",
+
+  "painPoints": [
+    "Pain point detectado del sector/empresa basado en datos reales"
+  ],
+
+  "talkingPoints": [
+    "Tema de conversación basado en datos reales del contacto"
+  ],
+
+  "bestApproachChannel": "LinkedIn / WhatsApp / Email",
+
   "keyInsights": [
     {
       "text": "insight basado SOLO en datos proporcionados",
-      "source": "LinkedIn / Búsqueda web",
+      "source": "LinkedIn / Búsqueda web / Website / Google Maps / Instagram",
       "confidence": "high / medium / low"
     }
   ],
   "buyingSignals": [
     {
-      "text": "señal de compra basada SOLO en datos proporcionados",
-      "source": "LinkedIn / Búsqueda web",
-      "evidence": "dato específico del perfil o búsqueda",
+      "text": "señal de compra",
+      "source": "fuente",
+      "evidence": "dato específico",
       "confidence": "high / medium / low"
     }
   ],
+
   "confidenceScore": 50,
   "dataQuality": "verified / partial / insufficient"
 }
 
 ## NOTICIAS
+- SOLO incluí noticias de los resultados de búsqueda web proporcionados
+- Si NO hay resultados, dejá arrays vacíos []
+- NUNCA inventes noticias ni URLs
 
-- SOLO incluí noticias que aparezcan en los resultados de búsqueda web proporcionados
-- Si NO hay resultados de búsqueda web, dejá companyNews y personNews como arrays vacíos []
-- NUNCA inventes noticias ni URLs de medios
+## COMMERCIAL SCORE (0-100)
+- companySize (0-20): cantidad de empleados, sucursales, escala
+- digitalPresence (0-20): website, social media, actividad online
+- growthSignals (0-20): expansión, contrataciones, nuevos productos
+- decisionPower (0-20): cargo de la persona (CEO/Fundador = 18-20, Gerente = 12-15)
+- approachability (0-20): facilidad de contacto, actividad en LinkedIn
 
-## CATEGORÍA
+## PITCH PERSONALIZADO
+- Usá el nombre de pila del contacto
+- Mencioná algo específico de SU empresa o trayectoria
+- Máximo 2-3 oraciones cortas y directas
+- Ejemplo: "Dario, vi que Trigal lleva +20 años liderando congelados. Tu historia de emprendimiento es increíble."
 
-- Inferí la categoría del nombre de empresa si es obvio:
-  - "Sushi" → "Restaurante de Sushi"
-  - "Burger" → "Hamburguesería"
-  - "Café/Coffee" → "Cafetería"
-  - Si no es obvio, poné "No verificado"
+## PAIN POINTS
+- Detectá 2-4 problemas potenciales basados en el sector, tamaño de empresa, y datos disponibles
+- Ejemplo: "Logística de cadena de frío" para empresa de congelados
 
-## PUNTUACIÓN
-
-- confidenceScore: 80-100 = muchos datos reales con fuentes, 50-70 = datos parciales, 0-40 = pocos datos
-- dataQuality: "verified" = muchos datos con fuentes reales, "partial" = algunos datos, "insufficient" = muchos vacíos
-- Si la mayoría de campos son "No verificado", el score debe ser bajo (0-40)
+## TALKING POINTS
+- 2-4 temas de conversación para romper el hielo
+- Basados en datos REALES: posts, trayectoria, historia de la empresa
 `;
 
 // ── Service ──────────────────────────────────────────────────
@@ -183,16 +220,68 @@ class EnrichmentService {
         console.log(`   → Estado cambiado a: enriqueciendo`);
 
         try {
-            // 4. Buscar información real en la web (si está disponible)
-            let searchResults = null;
+            // ═══ DEEP ENRICHMENT 2.0: Multi-source intelligence ═══
+            const rawIntel: any = {};
+
+            // 4a. SerpAPI Web Search (existing)
             if (webSearchService.isAvailable() && contact.currentCompany) {
                 console.log(`🔍 [Enrichment] Buscando información web...`);
-                searchResults = await webSearchService.searchCompany(contact.currentCompany);
-                console.log(`   → Encontrado: ${searchResults.website ? 'Website ✓' : ''} ${searchResults.news.length} noticias`);
+                rawIntel.webSearch = await webSearchService.searchCompany(contact.currentCompany);
+                console.log(`   → Encontrado: ${rawIntel.webSearch.website ? 'Website ✓' : ''} ${rawIntel.webSearch.news.length} noticias`);
             }
 
+            // 4b. Deep LinkedIn Scrape (NEW)
+            try {
+                // Import linkedInService lazily to avoid circular dependency
+                const { linkedinService } = await import('./linkedin.service');
+                const activePage = linkedinService.getActivePageFromAny();
+                if (activePage) {
+                    console.log(`🔍 [Enrichment] LinkedIn deep scrape...`);
+                    rawIntel.deepLinkedIn = await deepLinkedInScraper.scrapeDeep(activePage, contact.profileUrl);
+                    const dli = rawIntel.deepLinkedIn;
+                    console.log(`   → Deep: ${dli.experienceHistory?.length || 0} exp, ${dli.educationHistory?.length || 0} edu, ${dli.skillsList?.length || 0} skills, ${dli.about ? 'about ✓' : ''} ${dli.recentPosts?.length || 0} posts`);
+                } else {
+                    console.log(`⚠️ [Enrichment] LinkedIn browser no disponible para deep scrape`);
+                }
+            } catch (e: any) { console.log(`⚠️ [Enrichment] Deep LinkedIn scrape failed: ${e.message?.substring(0, 60)}`); }
+
+            // 4c. Website Scrape (NEW)
+            const websiteUrl = rawIntel.webSearch?.website;
+            if (websiteUrl) {
+                try {
+                    console.log(`🌐 [Enrichment] Scraping website: ${websiteUrl}`);
+                    rawIntel.website = await websiteScraper.scrapeWebsite(websiteUrl);
+                    const ws = rawIntel.website;
+                    console.log(`   → Website: ${ws.homepage?.title ? 'homepage ✓' : ''} ${ws.about ? 'about ✓' : ''} ${ws.team?.members?.length ? ws.team.members.length + ' team' : ''} ${Object.keys(ws.socialLinks || {}).length} social`);
+                } catch (e: any) { console.log(`⚠️ [Enrichment] Website scrape failed: ${e.message?.substring(0, 60)}`); }
+            }
+
+            // 4d. Google Maps (NEW)
+            if (contact.currentCompany) {
+                try {
+                    console.log(`📍 [Enrichment] Buscando en Google Maps...`);
+                    rawIntel.googleMaps = await googleMapsService.searchBusiness(contact.currentCompany, contact.location || undefined);
+                    if (rawIntel.googleMaps.found) {
+                        console.log(`   → Maps: ${rawIntel.googleMaps.rating}★ (${rawIntel.googleMaps.reviewCount} reviews), ${rawIntel.googleMaps.locationCount} ubicación(es)`);
+                    }
+                } catch (e: any) { console.log(`⚠️ [Enrichment] Google Maps failed: ${e.message?.substring(0, 60)}`); }
+            }
+
+            // 4e. Instagram (NEW)
+            if (contact.currentCompany) {
+                try {
+                    console.log(`📸 [Enrichment] Buscando Instagram...`);
+                    rawIntel.instagram = await instagramScraper.searchProfile(contact.currentCompany);
+                    if (rawIntel.instagram.found) {
+                        console.log(`   → Instagram: @${rawIntel.instagram.handle} — ${rawIntel.instagram.followers ? rawIntel.instagram.followers + ' followers' : 'followers?'}`);
+                    }
+                } catch (e: any) { console.log(`⚠️ [Enrichment] Instagram failed: ${e.message?.substring(0, 60)}`); }
+            }
+
+            const searchResults = rawIntel.webSearch || null;
+
             // 5. Build prompt con resultados de búsqueda
-            const messages = this.buildPrompt(contact, searchResults);
+            const messages = this.buildPrompt(contact, searchResults, rawIntel);
 
             // 6. Call OpenRouter
             const rawResponse = await openRouterService.call(messages, {
@@ -231,10 +320,74 @@ class EnrichmentService {
                 });
             }
 
-            // 7. Save enrichment data to MongoDB
+            // 7. Merge raw intel data into enrichment data (preserve scraped data)
+            if (rawIntel.deepLinkedIn) {
+                enrichmentData.deepLinkedIn = {
+                    experienceHistory: rawIntel.deepLinkedIn.experienceHistory || [],
+                    educationHistory: rawIntel.deepLinkedIn.educationHistory || [],
+                    skillsList: rawIntel.deepLinkedIn.skillsList || [],
+                    about: rawIntel.deepLinkedIn.about,
+                    recentPosts: rawIntel.deepLinkedIn.recentPosts || [],
+                    followersCount: rawIntel.deepLinkedIn.followersCount,
+                    connectionsCount: rawIntel.deepLinkedIn.connectionsCount,
+                };
+            }
+            if (rawIntel.website) {
+                enrichmentData.companyWebsite = {
+                    slogan: rawIntel.website.homepage?.slogan,
+                    founders: rawIntel.website.about?.founders,
+                    history: rawIntel.website.about?.history,
+                    mission: rawIntel.website.about?.mission,
+                    yearFounded: rawIntel.website.about?.yearFounded,
+                    products: rawIntel.website.products?.items,
+                    techStack: rawIntel.website.homepage?.techStack,
+                    socialLinks: rawIntel.website.socialLinks,
+                    contactInfo: rawIntel.website.contactInfo,
+                };
+            }
+            if (rawIntel.googleMaps?.found) {
+                enrichmentData.googleMaps = {
+                    rating: rawIntel.googleMaps.rating,
+                    reviewCount: rawIntel.googleMaps.reviewCount,
+                    address: rawIntel.googleMaps.address,
+                    locationCount: rawIntel.googleMaps.locationCount,
+                    category: rawIntel.googleMaps.category,
+                    phone: rawIntel.googleMaps.phone,
+                    priceLevel: rawIntel.googleMaps.priceLevel,
+                };
+            }
+            if (rawIntel.instagram?.found) {
+                enrichmentData.instagram = {
+                    handle: rawIntel.instagram.handle,
+                    url: rawIntel.instagram.url,
+                    followers: rawIntel.instagram.followers,
+                    bio: rawIntel.instagram.bio,
+                };
+            }
+
+            // 7b. Save enrichment data to MongoDB
             contact.enrichmentData = enrichmentData;
             contact.enrichmentStatus = 'completed';
             contact.enrichedAt = new Date();
+
+            // 7c. Propagate profile photo from deep scrape if we don't already have one
+            if (rawIntel.deepLinkedIn?.profilePhotoUrl && !contact.profilePhotoUrl) {
+                contact.profilePhotoUrl = rawIntel.deepLinkedIn.profilePhotoUrl;
+                console.log(`   📸 Profile photo captured from deep scrape`);
+            }
+
+            // 7d. Back-fill position/company from AI-enriched data if scraper didn't capture them
+            const pp = enrichmentData.personProfile;
+            if (pp) {
+                if (!contact.currentPosition && pp.verifiedPosition && pp.verifiedPosition !== 'No verificado') {
+                    contact.currentPosition = pp.verifiedPosition;
+                    console.log(`   📋 Position back-filled from enrichment: ${pp.verifiedPosition}`);
+                }
+                if (!contact.currentCompany && pp.verifiedCompany && pp.verifiedCompany !== 'No verificado') {
+                    contact.currentCompany = pp.verifiedCompany;
+                    console.log(`   🏢 Company back-filled from enrichment: ${pp.verifiedCompany}`);
+                }
+            }
 
             // 8. Generate .md dossier file
             const vanityName = this.extractVanityName(contact.profileUrl);
@@ -309,7 +462,7 @@ class EnrichmentService {
      * Build the prompt messages for OpenRouter.
      * Includes web search results if available.
      */
-    private buildPrompt(contact: ILinkedInContact, searchResults: any = null): any[] {
+    private buildPrompt(contact: ILinkedInContact, searchResults: any = null, rawIntel: any = {}): any[] {
         // Try loading ICP context
         let icpContext = '';
         try {
@@ -330,17 +483,138 @@ class EnrichmentService {
         const hasCompany = contact.currentCompany && contact.currentCompany !== 'No disponible';
         const hasHeadline = contact.headline && contact.headline !== 'No disponible';
         const sparseWarning = (!hasCompany && !hasHeadline)
-            ? `\n\n⚠️ ATENCIÓN: Este contacto tiene datos MUY ESCASOS (sin empresa ni headline). Buscá su nombre en LinkedIn y en Google para encontrar info real. Si NO encontrás nada verificable, respondé con "No verificado" en la mayoría de campos. NO inventes datos.\n`
+            ? `\n\n⚠️ ATENCIÓN: Este contacto tiene datos MUY ESCASOS. Usá lo que haya disponible. Si NO encontrás nada verificable, respondé con "No verificado" en la mayoría de campos. NO inventes datos.\n`
             : '';
 
         const company = contact.currentCompany || 'No disponible';
         const hasValidCompany = hasCompany && company !== 'No disponible';
 
+        // ── Build deep enrichment sections ────────────────────
+        let deepLinkedInSection = '';
+        if (rawIntel.deepLinkedIn) {
+            const dl = rawIntel.deepLinkedIn;
+            deepLinkedInSection = `\n═══════════════════════════════════════
+🔍 LINKEDIN DEEP DATA
+═══════════════════════════════════════\n`;
+
+            if (dl.about) deepLinkedInSection += `**About/Bio:** ${dl.about.substring(0, 800)}\n\n`;
+
+            if (dl.experienceHistory?.length > 0) {
+                deepLinkedInSection += `**Historial de Experiencia:**\n`;
+                dl.experienceHistory.slice(0, 8).forEach((exp: any, i: number) => {
+                    deepLinkedInSection += `${i + 1}. **${exp.position}** en ${exp.company}${exp.duration ? ` (${exp.duration})` : ''}${exp.isCurrent ? ' ← ACTUAL' : ''}\n`;
+                    if (exp.description) deepLinkedInSection += `   ${exp.description.substring(0, 150)}\n`;
+                });
+                deepLinkedInSection += '\n';
+            }
+
+            if (dl.educationHistory?.length > 0) {
+                deepLinkedInSection += `**Educación:**\n`;
+                dl.educationHistory.slice(0, 5).forEach((edu: any, i: number) => {
+                    deepLinkedInSection += `${i + 1}. ${edu.institution}${edu.degree ? ` — ${edu.degree}` : ''}${edu.years ? ` (${edu.years})` : ''}\n`;
+                });
+                deepLinkedInSection += '\n';
+            }
+
+            if (dl.skillsList?.length > 0) {
+                deepLinkedInSection += `**Skills:** ${dl.skillsList.slice(0, 10).join(', ')}\n\n`;
+            }
+
+            if (dl.recentPosts?.length > 0) {
+                deepLinkedInSection += `**Posts recientes:**\n`;
+                dl.recentPosts.slice(0, 3).forEach((post: any, i: number) => {
+                    deepLinkedInSection += `${i + 1}. "${post.text.substring(0, 200)}..." ${post.date ? `(${post.date})` : ''} ${post.likes ? `— ${post.likes} likes` : ''}\n`;
+                });
+                deepLinkedInSection += '\n';
+            }
+
+            if (dl.followersCount) deepLinkedInSection += `**Seguidores:** ${dl.followersCount}\n`;
+            if (dl.connectionsCount) deepLinkedInSection += `**Conexiones:** ${dl.connectionsCount}\n`;
+        }
+
+        let websiteSection = '';
+        if (rawIntel.website) {
+            const ws = rawIntel.website;
+            websiteSection = `\n═══════════════════════════════════════
+🌐 DATOS DEL WEBSITE CORPORATIVO
+═══════════════════════════════════════\n`;
+
+            if (ws.homepage?.title) websiteSection += `**Título:** ${ws.homepage.title}\n`;
+            if (ws.homepage?.description) websiteSection += `**Meta descripción:** ${ws.homepage.description.substring(0, 300)}\n`;
+            if (ws.homepage?.slogan) websiteSection += `**Slogan/Hero:** ${ws.homepage.slogan}\n`;
+            if (ws.homepage?.techStack?.length > 0) websiteSection += `**Tech Stack:** ${ws.homepage.techStack.join(', ')}\n`;
+
+            if (ws.about?.text) websiteSection += `\n**Página "Nosotros":** ${ws.about.text.substring(0, 500)}\n`;
+            if (ws.about?.founders?.length > 0) websiteSection += `**Fundadores mencionados:** ${ws.about.founders.join(', ')}\n`;
+            if (ws.about?.history) websiteSection += `**Historia:** ${ws.about.history.substring(0, 300)}\n`;
+            if (ws.about?.mission) websiteSection += `**Misión:** ${ws.about.mission.substring(0, 200)}\n`;
+            if (ws.about?.yearFounded) websiteSection += `**Año fundación:** ${ws.about.yearFounded}\n`;
+
+            if (ws.team?.members?.length > 0) {
+                websiteSection += `\n**Equipo:**\n`;
+                ws.team.members.slice(0, 5).forEach((m: any) => {
+                    websiteSection += `- ${m.name} — ${m.role}\n`;
+                });
+            }
+
+            if (ws.products?.items?.length > 0) {
+                websiteSection += `\n**Productos/Servicios:**\n`;
+                ws.products.items.slice(0, 5).forEach((p: any) => {
+                    websiteSection += `- ${p.name}${p.description ? `: ${p.description.substring(0, 100)}` : ''}\n`;
+                });
+            }
+
+            const socialLinks = Object.entries(ws.socialLinks || {}).filter(([, v]) => v);
+            if (socialLinks.length > 0) {
+                websiteSection += `\n**Redes sociales (del website):**\n`;
+                socialLinks.forEach(([network, url]) => {
+                    websiteSection += `- ${network}: ${url}\n`;
+                });
+            }
+
+            if (ws.contactInfo) {
+                websiteSection += '\n';
+                if (ws.contactInfo.email) websiteSection += `**Email:** ${ws.contactInfo.email}\n`;
+                if (ws.contactInfo.phone) websiteSection += `**Teléfono:** ${ws.contactInfo.phone}\n`;
+                if (ws.contactInfo.address) websiteSection += `**Dirección:** ${ws.contactInfo.address}\n`;
+            }
+        }
+
+        let googleMapsSection = '';
+        if (rawIntel.googleMaps?.found) {
+            const gm = rawIntel.googleMaps;
+            googleMapsSection = `\n═══════════════════════════════════════
+📍 DATOS DE GOOGLE MAPS
+═══════════════════════════════════════
+**Nombre:** ${gm.name || 'N/A'}
+${gm.rating ? `**Rating:** ${gm.rating}★ (${gm.reviewCount || 0} reviews)` : ''}
+${gm.address ? `**Dirección:** ${gm.address}` : ''}
+${gm.category ? `**Categoría GMB:** ${gm.category}` : ''}
+${gm.phone ? `**Teléfono:** ${gm.phone}` : ''}
+${gm.locationCount ? `**Ubicaciones encontradas:** ${gm.locationCount}` : ''}
+${gm.priceLevel ? `**Nivel de precio:** ${gm.priceLevel}` : ''}
+${gm.description ? `**Descripción:** ${gm.description}` : ''}
+`;
+        }
+
+        let instagramSection = '';
+        if (rawIntel.instagram?.found) {
+            const ig = rawIntel.instagram;
+            instagramSection = `\n═══════════════════════════════════════
+📸 DATOS DE INSTAGRAM
+═══════════════════════════════════════
+**Handle:** @${ig.handle || 'desconocido'}
+**URL:** ${ig.url || 'N/A'}
+${ig.followers ? `**Seguidores:** ${ig.followers.toLocaleString()}` : ''}
+${ig.bio ? `**Bio:** ${ig.bio.substring(0, 300)}` : ''}
+`;
+        }
+
         const userMessage = `
-Investigá a esta persona y su empresa usando búsqueda web intensiva:
+Analizá a esta persona y su empresa con TODA la información proporcionada abajo. Generá un dossier comercial completo.
 
 ═══════════════════════════════════════
-📋 DATOS DEL CONTACTO
+📋 DATOS DEL CONTACTO (LINKEDIN)
 ═══════════════════════════════════════
 **Nombre:** ${contact.fullName}
 **Cargo:** ${contact.currentPosition || 'No disponible'}
@@ -351,14 +625,17 @@ Investigá a esta persona y su empresa usando búsqueda web intensiva:
 
 ${contact.about ? `**Bio LinkedIn:** ${contact.about.substring(0, 500)}` : ''}
 ${sparseWarning}
-
+${deepLinkedInSection}
 ${searchResults ? `═══════════════════════════════════════
-🔍 RESULTADOS DE BÚSQUEDA WEB REALES
+🔍 RESULTADOS DE BÚSQUEDA WEB (SERPAPI)
 ═══════════════════════════════════════
 ${searchResults.website ? `**Website encontrado:** ${searchResults.website}` : '**Website:** No encontrado'}
 ${searchResults.description ? `\n**Descripción encontrada:** ${searchResults.description.substring(0, 300)}` : ''}
 ${searchResults.news.length > 0 ? `\n**Noticias encontradas:**\n${searchResults.news.map((n: any, i: number) => `${i + 1}. "${n.title}" - ${n.source}\n   URL: ${n.link}\n   Resumen: ${n.snippet?.substring(0, 150)}...`).join('\n')}` : '**Noticias:** No se encontraron noticias'}
-` : '**⚠️ Búsqueda web no disponible - Usar datos del perfil de LinkedIn únicamente**'}
+` : '**⚠️ Búsqueda web no disponible**'}
+${websiteSection}
+${googleMapsSection}
+${instagramSection}
 
 ═══════════════════════════════════════
 🎯 CONTEXTO DEL CLIENTE IDEAL (ICP)
@@ -372,16 +649,19 @@ ${deenexContext ? `════════════════════�
 ═══════════════════════════════════════
 
 ${hasValidCompany
-                ? `Organizá los datos proporcionados arriba sobre "${contact.fullName}" y "${company}" en el formato JSON solicitado.`
-                : `⚠️ NO HAY EMPRESA IDENTIFICADA — el enriquecimiento será limitado. Solo organizá los datos del perfil.`}
+                ? `Organizá TODOS los datos de "${contact.fullName}" y "${company}" de las ${Object.keys(rawIntel).filter(k => rawIntel[k]).length + 1} fuentes disponibles en el formato JSON solicitado.`
+                : `⚠️ NO HAY EMPRESA IDENTIFICADA — el enriquecimiento será limitado. Solo organizá los datos disponibles.`}
 
 **REGLAS:**
-1. SOLO usá datos del perfil de LinkedIn y los resultados de búsqueda web proporcionados arriba
+1. SOLO usá datos proporcionados arriba — LinkedIn, búsqueda web, website, Google Maps, Instagram
 2. Si NO hay resultados de búsqueda web, dejá companyNews y personNews como arrays vacíos []
 3. NUNCA inventes URLs, noticias, ni datos que no estén en la información proporcionada
 4. Si un dato no está disponible, poné "No verificado"
-5. company.category: inferí del nombre si es obvio (ej: "Sushi" → "Restaurante de Sushi"), sino "No verificado"
-6. Respondé SOLO con el JSON, sin texto antes ni después
+5. Generá un personalizedPitch usando el NOMBRE DE PILA y datos REALES
+6. Detectá painPoints basados en el sector y los datos disponibles
+7. Generá talkingPoints basados en su trayectoria, posts, o historia de la empresa
+8. Calculá el commercialScore con el breakdown de 5 categorías (0-20 cada una)
+9. Respondé SOLO con el JSON, sin texto antes ni después
 `;
 
         return [
@@ -540,6 +820,17 @@ ${hasValidCompany
             buyingSignals: buyingSignals.length > 0 ? buyingSignals : [{ text: 'No se encontraron señales de compra verificables', source: 'N/A', evidence: 'N/A', confidence: 'low' }],
             confidenceScore: data.confidenceScore || 0,
             dataQuality: data.dataQuality || 'insufficient',
+
+            // Deep Enrichment 2.0 fields (pass through from AI)
+            experienceSummary: data.experienceSummary,
+            educationSummary: data.educationSummary,
+            skillsHighlight: data.skillsHighlight,
+            commercialScore: data.commercialScore,
+            commercialScoreBreakdown: data.commercialScoreBreakdown,
+            personalizedPitch: data.personalizedPitch,
+            painPoints: data.painPoints,
+            talkingPoints: data.talkingPoints,
+            bestApproachChannel: data.bestApproachChannel,
         };
     }
 
@@ -556,12 +847,28 @@ ${hasValidCompany
             return '🔴';
         };
 
-        let md = `# 📇 ${contact.fullName} — Dossier de Contacto\n\n`;
-        md += `**Generado:** ${now} | **Modelo:** Kimi K2 via OpenRouter\n`;
-        md += `**Calidad de datos:** ${data.dataQuality || 'unknown'} | **Confianza:** ${getConfEmoji(confScore)} ${confScore}/100\n\n`;
-        md += `---\n\n`;
+        let md = `# 📇 ${contact.fullName} — Dossier Comercial\n\n`;
+        md += `**Generado:** ${now} | **Modelo:** Kimi K2 via OpenRouter | **Versión:** Enrichment 2.0\n`;
+        md += `**Calidad de datos:** ${data.dataQuality || 'unknown'} | **Confianza:** ${getConfEmoji(confScore)} ${confScore}/100\n`;
 
-        // Profile section
+        // Commercial score header
+        if (data.commercialScore) {
+            const csEmoji = data.commercialScore >= 70 ? '🟢' : data.commercialScore >= 50 ? '🟡' : '🔴';
+            md += `**Score Comercial:** ${csEmoji} ${data.commercialScore}/100\n`;
+        }
+        md += `\n---\n\n`;
+
+        // ── Personalized Pitch (most important section) ──────
+        if (data.personalizedPitch) {
+            md += `## 🎯 Pitch Personalizado\n\n`;
+            md += `> ${data.personalizedPitch}\n\n`;
+            if (data.bestApproachChannel) {
+                md += `**Canal recomendado:** ${data.bestApproachChannel}\n\n`;
+            }
+            md += `---\n\n`;
+        }
+
+        // ── Profile section ─────────────────────────────────
         md += `## 👤 Perfil LinkedIn\n\n`;
         md += `- **Nombre:** ${contact.fullName}\n`;
         md += `- **Cargo:** ${data.personProfile?.verifiedPosition || contact.currentPosition || 'No disponible'}\n`;
@@ -575,6 +882,7 @@ ${hasValidCompany
         md += `- **Headline:** ${contact.headline || 'No disponible'}\n`;
         md += `- **Ubicación:** ${contact.location || 'No disponible'}\n`;
         if (contact.connectionsCount) md += `- **Conexiones:** ${contact.connectionsCount}\n`;
+        if (data.deepLinkedIn?.followersCount) md += `- **Seguidores:** ${data.deepLinkedIn.followersCount}\n`;
         md += `\n`;
 
         if (data.personProfile?.summary && data.personProfile.summary !== 'No verificado') {
@@ -583,12 +891,33 @@ ${hasValidCompany
                 md += `*Fuente: ${data.personProfile.summarySource}*\n`;
             }
             md += `\n`;
+        } else if (data.deepLinkedIn?.about) {
+            md += `### Bio (LinkedIn About)\n${data.deepLinkedIn.about}\n\n`;
         } else if (contact.about) {
             md += `### Bio\n${contact.about}\n\n`;
         }
 
-        // Experience
-        if (contact.experience && contact.experience.length > 0) {
+        // AI summaries
+        if (data.experienceSummary) {
+            md += `### Resumen de Carrera\n${data.experienceSummary}\n\n`;
+        }
+        if (data.educationSummary) {
+            md += `### Formación\n${data.educationSummary}\n\n`;
+        }
+        if (data.skillsHighlight && data.skillsHighlight.length > 0) {
+            md += `### Skills Destacados\n${data.skillsHighlight.join(' • ')}\n\n`;
+        }
+
+        // Deep LinkedIn: Experience timeline
+        if (data.deepLinkedIn?.experienceHistory && data.deepLinkedIn.experienceHistory.length > 0) {
+            md += `### 📋 Historial Profesional\n`;
+            data.deepLinkedIn.experienceHistory.slice(0, 8).forEach((exp, i) => {
+                const current = exp.isCurrent ? ' ← **ACTUAL**' : '';
+                md += `${i + 1}. **${exp.position}** — ${exp.company}${exp.duration ? ` (${exp.duration})` : ''}${current}\n`;
+                if (exp.description) md += `   ${exp.description.substring(0, 200)}\n`;
+            });
+            md += `\n`;
+        } else if (contact.experience && contact.experience.length > 0) {
             md += `### Experiencia\n`;
             contact.experience.slice(0, 3).forEach((exp, i) => {
                 md += `${i + 1}. **${exp.position}** — ${exp.company}${exp.duration ? ` (${exp.duration})` : ''}\n`;
@@ -596,8 +925,14 @@ ${hasValidCompany
             md += `\n`;
         }
 
-        // Education
-        if (contact.education && contact.education.length > 0) {
+        // Deep LinkedIn: Education
+        if (data.deepLinkedIn?.educationHistory && data.deepLinkedIn.educationHistory.length > 0) {
+            md += `### 🎓 Educación\n`;
+            data.deepLinkedIn.educationHistory.slice(0, 5).forEach((edu, i) => {
+                md += `${i + 1}. **${edu.institution}**${edu.degree ? ` — ${edu.degree}` : ''}${edu.years ? ` (${edu.years})` : ''}\n`;
+            });
+            md += `\n`;
+        } else if (contact.education && contact.education.length > 0) {
             md += `### Educación\n`;
             contact.education.slice(0, 2).forEach((edu, i) => {
                 md += `${i + 1}. **${edu.degree || 'N/A'}** — ${edu.institution}${edu.years ? ` (${edu.years})` : ''}\n`;
@@ -605,9 +940,23 @@ ${hasValidCompany
             md += `\n`;
         }
 
+        // Deep LinkedIn: Skills
+        if (data.deepLinkedIn?.skillsList && data.deepLinkedIn.skillsList.length > 0) {
+            md += `### 🛠️ Skills\n${data.deepLinkedIn.skillsList.slice(0, 12).join(' • ')}\n\n`;
+        }
+
+        // Deep LinkedIn: Recent Posts
+        if (data.deepLinkedIn?.recentPosts && data.deepLinkedIn.recentPosts.length > 0) {
+            md += `### 📝 Posts Recientes\n`;
+            data.deepLinkedIn.recentPosts.slice(0, 3).forEach((post, i) => {
+                md += `${i + 1}. "${post.text.substring(0, 150)}..."${post.date ? ` (${post.date})` : ''}${post.likes ? ` — ${post.likes} likes` : ''}\n`;
+            });
+            md += `\n`;
+        }
+
         md += `---\n\n`;
 
-        // Company section with sources
+        // ── Company section ─────────────────────────────────
         if (data.company) {
             md += `## 🏢 Empresa: ${data.company.name || contact.currentCompany || 'No disponible'}\n`;
             if (data.company.nameSource && data.company.nameSource !== 'No verificado') {
@@ -616,7 +965,7 @@ ${hasValidCompany
             md += `\n`;
 
             if (data.company.description && data.company.description !== 'No verificado') {
-                md += `### Descripción Completa\n${data.company.description}\n`;
+                md += `### Descripción\n${data.company.description}\n`;
                 if (data.company.descriptionSource && data.company.descriptionSource !== 'No verificado') {
                     md += `*Fuente: ${data.company.descriptionSource}*\n`;
                 }
@@ -624,44 +973,88 @@ ${hasValidCompany
             }
 
             md += `### Datos Clave\n`;
-            if (data.company.category && data.company.category !== 'No verificado') {
-                md += `- **Categoría:** ${data.company.category}\n`;
-                if (data.company.categorySource && data.company.categorySource !== 'No verificado') {
-                    md += `  *Fuente: ${data.company.categorySource}*\n`;
-                }
-            }
-            if (data.company.sector && data.company.sector !== 'No verificado') {
-                md += `- **Sector:** ${data.company.sector}\n`;
-                if (data.company.sectorSource && data.company.sectorSource !== 'No verificado') {
-                    md += `  *Fuente: ${data.company.sectorSource}*\n`;
-                }
-            }
-            if (data.company.locationsCount && data.company.locationsCount !== 'No verificado') {
-                md += `- **Cantidad de Locales:** ${data.company.locationsCount}\n`;
-                if (data.company.locationsCountSource && data.company.locationsCountSource !== 'No verificado') {
-                    md += `  *Fuente: ${data.company.locationsCountSource}*\n`;
-                }
-            }
-            if (data.company.website && data.company.website !== 'No verificado') {
-                md += `- **Website:** [${data.company.website}](${data.company.website})\n`;
-                if (data.company.websiteSource && data.company.websiteSource !== 'No verificado') {
-                    md += `  *Fuente: ${data.company.websiteSource}*\n`;
-                }
-            }
-
-            if (data.company.socialMedia?.instagram || data.company.socialMedia?.twitter) {
-                md += `- **Redes Sociales:**`;
-                if (data.company.socialMedia?.instagram) md += ` Instagram ${data.company.socialMedia.instagram}`;
-                if (data.company.socialMedia?.twitter) md += ` Twitter ${data.company.socialMedia.twitter}`;
-                md += `\n`;
-                if (data.company.socialMediaSource && data.company.socialMediaSource !== 'No verificado') {
-                    md += `  *Fuente: ${data.company.socialMediaSource}*\n`;
-                }
-            }
-            md += `\n---\n\n`;
+            if (data.company.category && data.company.category !== 'No verificado') md += `- **Categoría:** ${data.company.category}\n`;
+            if (data.company.sector && data.company.sector !== 'No verificado') md += `- **Sector:** ${data.company.sector}\n`;
+            if (data.company.locationsCount && data.company.locationsCount !== 'No verificado') md += `- **Locales:** ${data.company.locationsCount}\n`;
+            if (data.company.website && data.company.website !== 'No verificado') md += `- **Website:** [${data.company.website}](${data.company.website})\n`;
+            if (data.company.socialMedia?.instagram && data.company.socialMedia.instagram !== 'No verificado') md += `- **Instagram:** ${data.company.socialMedia.instagram}\n`;
+            if (data.company.socialMedia?.twitter && data.company.socialMedia.twitter !== 'No verificado') md += `- **Twitter:** ${data.company.socialMedia.twitter}\n`;
+            md += `\n`;
         }
 
-        // Person news
+        // ── Website insights ────────────────────────────────
+        if (data.companyWebsite) {
+            md += `### 🌐 Website\n`;
+            if (data.companyWebsite.slogan) md += `- **Slogan:** ${data.companyWebsite.slogan}\n`;
+            if (data.companyWebsite.yearFounded) md += `- **Año fundación:** ${data.companyWebsite.yearFounded}\n`;
+            if (data.companyWebsite.founders && data.companyWebsite.founders.length > 0) md += `- **Fundadores:** ${data.companyWebsite.founders.join(', ')}\n`;
+            if (data.companyWebsite.history) md += `- **Historia:** ${data.companyWebsite.history.substring(0, 200)}\n`;
+            if (data.companyWebsite.mission) md += `- **Misión:** ${data.companyWebsite.mission.substring(0, 200)}\n`;
+            if (data.companyWebsite.techStack && data.companyWebsite.techStack.length > 0) md += `- **Tech stack:** ${data.companyWebsite.techStack.join(', ')}\n`;
+            if (data.companyWebsite.products && data.companyWebsite.products.length > 0) {
+                md += `- **Productos/Servicios:** ${data.companyWebsite.products.map(p => p.name).join(', ')}\n`;
+            }
+            md += `\n`;
+        }
+
+        // ── Google Maps ─────────────────────────────────────
+        if (data.googleMaps) {
+            md += `### 📍 Google Maps\n`;
+            if (data.googleMaps.rating) md += `- **Rating:** ${data.googleMaps.rating}★ (${data.googleMaps.reviewCount || 0} reviews)\n`;
+            if (data.googleMaps.address) md += `- **Dirección:** ${data.googleMaps.address}\n`;
+            if (data.googleMaps.category) md += `- **Categoría:** ${data.googleMaps.category}\n`;
+            if (data.googleMaps.locationCount && data.googleMaps.locationCount > 1) md += `- **Sucursales:** ${data.googleMaps.locationCount}\n`;
+            if (data.googleMaps.phone) md += `- **Teléfono:** ${data.googleMaps.phone}\n`;
+            md += `\n`;
+        }
+
+        // ── Instagram ───────────────────────────────────────
+        if (data.instagram) {
+            md += `### 📸 Instagram\n`;
+            if (data.instagram.handle) md += `- **Handle:** @${data.instagram.handle}\n`;
+            if (data.instagram.followers) md += `- **Seguidores:** ${data.instagram.followers.toLocaleString()}\n`;
+            if (data.instagram.bio) md += `- **Bio:** ${data.instagram.bio.substring(0, 200)}\n`;
+            md += `\n`;
+        }
+
+        md += `---\n\n`;
+
+        // ── Commercial Intelligence ─────────────────────────
+        if (data.commercialScore || data.painPoints || data.talkingPoints) {
+            md += `## ⭐ Inteligencia Comercial\n\n`;
+
+            if (data.commercialScore && data.commercialScoreBreakdown) {
+                const csb = data.commercialScoreBreakdown;
+                md += `### Score: ${data.commercialScore}/100\n\n`;
+                md += `| Criterio | Puntos |\n|----------|--------|\n`;
+                if (csb.companySize !== undefined) md += `| Tamaño de empresa | ${csb.companySize}/20 |\n`;
+                if (csb.digitalPresence !== undefined) md += `| Presencia digital | ${csb.digitalPresence}/20 |\n`;
+                if (csb.growthSignals !== undefined) md += `| Señales de crecimiento | ${csb.growthSignals}/20 |\n`;
+                if (csb.decisionPower !== undefined) md += `| Poder de decisión | ${csb.decisionPower}/20 |\n`;
+                if (csb.approachability !== undefined) md += `| Accesibilidad | ${csb.approachability}/20 |\n`;
+                md += `\n`;
+            }
+
+            if (data.painPoints && data.painPoints.length > 0) {
+                md += `### 💢 Pain Points\n`;
+                data.painPoints.forEach((pp, i) => {
+                    md += `${i + 1}. ${pp}\n`;
+                });
+                md += `\n`;
+            }
+
+            if (data.talkingPoints && data.talkingPoints.length > 0) {
+                md += `### 💬 Talking Points\n`;
+                data.talkingPoints.forEach((tp, i) => {
+                    md += `${i + 1}. ${tp}\n`;
+                });
+                md += `\n`;
+            }
+
+            md += `---\n\n`;
+        }
+
+        // ── News ────────────────────────────────────────────
         if (data.personNews && data.personNews.length > 0) {
             md += `## 📰 Noticias de ${contact.fullName}\n\n`;
             data.personNews.forEach((news, i) => {
@@ -672,10 +1065,8 @@ ${hasValidCompany
                 if (news.summary) md += `   - Resumen: ${news.summary}\n`;
                 md += `\n`;
             });
-            md += `---\n\n`;
         }
 
-        // Company news
         if (data.companyNews && data.companyNews.length > 0) {
             md += `## 📰 Noticias de ${data.company?.name || contact.currentCompany || 'la empresa'}\n\n`;
             data.companyNews.forEach((news, i) => {
@@ -688,7 +1079,7 @@ ${hasValidCompany
             md += `---\n\n`;
         }
 
-        // Key insights with sources
+        // ── Insights & Signals ──────────────────────────────
         if (data.keyInsights && data.keyInsights.length > 0) {
             md += `## 💡 Insights Clave\n\n`;
             data.keyInsights.forEach((insight, i) => {
@@ -696,16 +1087,12 @@ ${hasValidCompany
                 const source = typeof insight === 'object' ? insight.source : null;
                 const confidence = typeof insight === 'object' ? insight.confidence : null;
                 const confEmoji = confidence === 'high' ? '🟢' : confidence === 'medium' ? '🟡' : '🔴';
-
                 md += `${i + 1}. ${text}\n`;
-                if (source && source !== 'No verificado') {
-                    md += `   ${confEmoji} *Fuente: ${source}*\n`;
-                }
+                if (source && source !== 'No verificado') md += `   ${confEmoji} *Fuente: ${source}*\n`;
             });
             md += `\n`;
         }
 
-        // Buying signals with sources and evidence
         if (data.buyingSignals && data.buyingSignals.length > 0) {
             md += `## 🚦 Señales de Compra\n\n`;
             data.buyingSignals.forEach((signal, i) => {
@@ -714,14 +1101,9 @@ ${hasValidCompany
                 const evidence = typeof signal === 'object' ? signal.evidence : null;
                 const confidence = typeof signal === 'object' ? signal.confidence : null;
                 const confEmoji = confidence === 'high' ? '🟢' : confidence === 'medium' ? '🟡' : '🔴';
-
                 md += `${i + 1}. ${text}\n`;
-                if (source && source !== 'No verificado') {
-                    md += `   ${confEmoji} *Fuente: ${source}*\n`;
-                }
-                if (evidence && evidence !== 'No verificado') {
-                    md += `   📋 *Evidencia: ${evidence}*\n`;
-                }
+                if (source && source !== 'No verificado') md += `   ${confEmoji} *Fuente: ${source}*\n`;
+                if (evidence && evidence !== 'No verificado') md += `   📋 *Evidencia: ${evidence}*\n`;
             });
             md += `\n`;
         }

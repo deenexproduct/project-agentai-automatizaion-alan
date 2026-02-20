@@ -15,8 +15,8 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 export type AccountStatus = 'active' | 'disabled' | 'reauth_required';
 
 export interface ILinkedInAccount extends Document {
-    /** Tenant/user identifier. Use 'default' for single-user setups. */
-    workspaceId: string;
+    /** Tenant/user identifier (required for SaaS isolation) */
+    userId: string;
 
     /** Human-readable label, e.g. "Alan - Main Account" */
     label: string;
@@ -58,20 +58,19 @@ export interface ILinkedInAccount extends Document {
 
 export interface ILinkedInAccountModel extends Model<ILinkedInAccount> {
     /**
-     * Find the active account for a workspace.
+     * Find the active account for a user.
      * Returns null if no active account exists.
      */
-    findActive(workspaceId: string): Promise<ILinkedInAccount | null>;
+    findActive(userId: string): Promise<ILinkedInAccount | null>;
 }
 
 // ── Schema ────────────────────────────────────────────────────
 
 const LinkedInAccountSchema = new Schema<ILinkedInAccount>(
     {
-        workspaceId: {
-            type: String,
+        userId: {
+            type: String, // String representation of ObjectId or user email
             required: true,
-            trim: true,
             index: true,
         },
         label: {
@@ -109,24 +108,24 @@ const LinkedInAccountSchema = new Schema<ILinkedInAccount>(
 
 // ── Indexes ───────────────────────────────────────────────────
 
-// Enforce unique label per workspace
-LinkedInAccountSchema.index({ workspaceId: 1, label: 1 }, { unique: true });
+// Enforce unique label per user
+LinkedInAccountSchema.index({ userId: 1, label: 1 }, { unique: true });
 
-// Fast lookup: active accounts per workspace
-LinkedInAccountSchema.index({ workspaceId: 1, status: 1 });
+// Fast lookup: active accounts per user
+LinkedInAccountSchema.index({ userId: 1, status: 1 });
 
 // Expiry monitoring (for pre-expiry warnings)
 LinkedInAccountSchema.index({ expiresAt: 1 }, { sparse: true });
 
 // Most recently used accounts
-LinkedInAccountSchema.index({ workspaceId: 1, lastUsedAt: -1 });
+LinkedInAccountSchema.index({ userId: 1, lastUsedAt: -1 });
 
 // ── Static Methods ────────────────────────────────────────────
 
 LinkedInAccountSchema.statics.findActive = async function (
-    workspaceId: string
+    userId: string
 ): Promise<ILinkedInAccount | null> {
-    return this.findOne({ workspaceId, status: 'active' })
+    return this.findOne({ userId, status: 'active' })
         .sort({ lastUsedAt: -1 })
         .exec();
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
-import { Eye, Link, Hand, Microscope, Clock, CheckCircle, Send, Search, RefreshCw, Loader2, X, Download } from 'lucide-react';
+import { Eye, Link, Hand, Microscope, Clock, CheckCircle, Send, Search, RefreshCw, Loader2, X, Download, Mail } from 'lucide-react';
 import ContactCard from './ContactCard';
 import ContactDrawer from './ContactDrawer';
 import {
@@ -215,7 +215,7 @@ export default function CRMPage() {
 
     // ── Render ────────────────────────────────────────────────
 
-    const totalContacts = counts.conectado + counts.esperando_aceptacion + counts.interactuando + counts.aceptado + counts.listo_para_mensaje + counts.mensaje_enviado + counts.enriquecido;
+    const totalContacts = counts.conectando + counts.esperando_aceptacion + counts.interactuando + counts.aceptado + counts.mensaje_enviado + counts.enriqueciendo;
 
     return (
         <div className="flex flex-col h-full">
@@ -321,11 +321,11 @@ export default function CRMPage() {
                 </div>
             ) : (
                 <DragDropContext onDragEnd={onDragEnd}>
-                    <div className="flex-1 flex gap-4 overflow-x-auto pb-2">
+                    <div className="flex gap-4 overflow-x-auto pb-2" style={{ minWidth: 'max-content' }}>
                         {COLUMNS.map((col) => (
                             <div
                                 key={col.id}
-                                className="flex-1 flex flex-col min-w-[260px] max-w-[360px] rounded-2xl"
+                                className="flex flex-col min-w-[280px] max-w-[320px] rounded-2xl"
                                 style={{ background: col.accentBg }}
                             >
                                 {/* Column Header */}

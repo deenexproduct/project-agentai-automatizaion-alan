@@ -31,6 +31,7 @@ function getGroqClient(): Groq {
 }
 
 export interface SummarizeOptions {
+    userId: string;
     chatId: string;
     rangeMode: 'hours' | 'range';
     hours?: number;
@@ -139,7 +140,7 @@ class ResumidorService {
 
     async getGroupMessages(
         chatId: string,
-        options: { rangeMode: 'hours' | 'range'; hours?: number; rangeFrom?: string; rangeTo?: string; timezoneOffset?: number },
+        options: { userId: string; rangeMode: 'hours' | 'range'; hours?: number; rangeFrom?: string; rangeTo?: string; timezoneOffset?: number },
         onProgress?: ProgressCallback
     ): Promise<{ messages: ParsedMessage[]; chatName: string }> {
 
@@ -148,8 +149,9 @@ class ResumidorService {
 
         onProgress?.('fetch', '🔍 Conectando con WhatsApp y obteniendo chat...', 2);
 
-        const client = (whatsappService as any).client;
-        if (!client || !whatsappService.isConnected()) {
+        const tenant = whatsappService.getTenant(options.userId);
+        const client = tenant.client;
+        if (!client || !tenant.isConnected()) {
             throw new Error('WhatsApp no está conectado');
         }
 
@@ -256,7 +258,7 @@ class ResumidorService {
                     body = msg.body ? `[🎬 Video] ${msg.body}` : '[🎬 Video enviado]';
                     break;
                 case 'document':
-                    body = `[📄 Documento: ${msg.filename || 'archivo'}]${msg.body ? ' ' + msg.body : ''}`;
+                    body = `[📄 Documento: ${(msg as any).filename || 'archivo'}]${msg.body ? ' ' + msg.body : ''}`;
                     break;
                 case 'sticker':
                     body = '[😄 Sticker]';
@@ -729,6 +731,7 @@ class ResumidorService {
         const { messages, chatName } = await this.getGroupMessages(
             options.chatId,
             {
+                userId: options.userId,
                 rangeMode: options.rangeMode,
                 hours: options.hours,
                 rangeFrom: options.rangeFrom,

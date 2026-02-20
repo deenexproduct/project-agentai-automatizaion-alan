@@ -10,14 +10,15 @@ import { ScheduledMessage, IScheduledMessage } from '../models/scheduled-message
 const execFileAsync = promisify(execFile);
 
 // ============================================================
-// WhatsApp Service — Connection, Sending, Scheduling
+// WhatsApp Tenant — Connection, Sending, Scheduling per User
 // ============================================================
 
-class WhatsAppService {
-    private client: Client | null = null;
+export class WhatsAppTenant {
+    public client: Client | null = null;
     private qrCode: string | null = null;
     private status: 'disconnected' | 'qr' | 'connecting' | 'connected' = 'disconnected';
     private schedulerJob: cron.ScheduledTask | null = null;
+    public readonly userId: string;
 
     // ── Session Persistence State ────────────────────────────────
     private reconnectAttempts = 0;
@@ -29,25 +30,30 @@ class WhatsAppService {
     private preventiveRestartJob: cron.ScheduledTask | null = null;
     private lastPreventiveRestart: Date | null = null;
 
+    constructor(userId: string) {
+        this.userId = userId;
+    }
+
     // ── Initialization ──────────────────────────────────────────
 
     async initialize(): Promise<void> {
-        console.log('📱 Initializing WhatsApp client...');
+        if (this.status !== 'disconnected') {
+            return;
+        }
+        this.status = 'connecting';
+        console.log(`📱 [User ${this.userId}] Initializing WhatsApp client...`);
 
         this.client = new Client({
             authStrategy: new LocalAuth({
-                dataPath: path.join(__dirname, '../../wa-session'),
+                dataPath: path.join(__dirname, '../../wa-sessions', this.userId),
             }),
             // ── Memory optimization ──────────────────────────────────
-            // Disable WhatsApp Web cache to reduce Chromium memory usage.
-            // Without this, Chromium accumulates message/media cache over
-            // hours, causing memory leaks that eventually crash the process.
             webVersionCache: {
                 type: 'none',
             },
             puppeteer: {
                 headless: true,
-                protocolTimeout: 120000, // 120s — prevents 'Error: t' on large media
+                protocolTimeout: 300000,
                 executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
                 args: [
                     '--no-sandbox',
@@ -56,37 +62,35 @@ class WhatsAppService {
                     '--disable-gpu',
                     '--disable-extensions',
                     '--disable-background-timer-throttling',
-                    // ── Session persistence flags ──────────────────
-                    '--disable-backgrounding-occluded-windows',  // Prevent page from going inactive
-                    '--disable-renderer-backgrounding',          // Keep renderer active in background
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
                     '--disable-features=IsolateOrigins,site-per-process',
                     '--disable-site-isolation-trials',
                     '--no-first-run',
                     '--no-zygote',
                     '--disable-ipc-flooding-protection',
                     '--disable-component-update',
-                    // ── Memory management ───────────────────────────
-                    '--js-flags=--max-old-space-size=256',       // Limit Chromium JS heap to 256MB
-                    '--renderer-process-limit=1',                 // Only 1 renderer process
-                    '--disable-accelerated-2d-canvas',           // Reduce GPU memory usage
+                    '--js-flags=--max-old-space-size=256',
+                    '--renderer-process-limit=1',
+                    '--disable-accelerated-2d-canvas',
                 ],
             },
         });
 
         // QR event
         this.client.on('qr', async (qr: string) => {
-            console.log('📱 QR code received');
+            console.log(`📱 [User ${this.userId}] QR code received`);
             this.status = 'qr';
             try {
                 this.qrCode = await QRCode.toDataURL(qr, { width: 300 });
             } catch (err) {
-                console.error('QR generation error:', err);
+                console.error(`[User ${this.userId}] QR generation error:`, err);
             }
         });
 
         // Ready event
         this.client.on('ready', () => {
-            console.log('✅ WhatsApp client ready!');
+            console.log(`✅ [User ${this.userId}] WhatsApp client ready!`);
             this.status = 'connected';
             this.qrCode = null;
             this.reconnectAttempts = 0;
@@ -100,20 +104,20 @@ class WhatsAppService {
 
         // Authenticated event
         this.client.on('authenticated', () => {
-            console.log('🔐 WhatsApp authenticated');
+            console.log(`🔐 [User ${this.userId}] WhatsApp authenticated`);
             this.status = 'connecting';
             this.refreshChats();
         });
 
         // Auth failure
         this.client.on('auth_failure', (msg: string) => {
-            console.error('❌ WhatsApp auth failure:', msg);
+            console.error(`❌ [User ${this.userId}] WhatsApp auth failure:`, msg);
             this.status = 'disconnected';
         });
 
         // Disconnected — trigger auto-reconnect
         this.client.on('disconnected', (reason: string) => {
-            console.warn('⚠️ WhatsApp disconnected:', reason);
+            console.warn(`⚠️ [User ${this.userId}] WhatsApp disconnected:`, reason);
             this.status = 'disconnected';
             this.qrCode = null;
             this.connectedSince = null;
@@ -122,11 +126,11 @@ class WhatsAppService {
             this.attemptReconnect(reason);
         });
 
-        // State change — detect silent disconnections
+        // State change
         this.client.on('change_state', (state: string) => {
-            console.log('📱 WhatsApp state changed:', state);
+            console.log(`📱 [User ${this.userId}] WhatsApp state changed:`, state);
             if (state === 'CONFLICT' || state === 'UNLAUNCHED' || state === 'UNPAIRED') {
-                console.warn(`⚠️ Problematic state detected: ${state} — triggering reconnect`);
+                console.warn(`⚠️ [User ${this.userId}] Problematic state detected: ${state} — triggering reconnect`);
                 this.stopKeepAlive();
                 this.stopScheduler();
                 this.attemptReconnect(state);
@@ -136,7 +140,7 @@ class WhatsAppService {
         try {
             await this.client.initialize();
         } catch (error: any) {
-            console.error('❌ WhatsApp init error:', error.message);
+            console.error(`❌ [User ${this.userId}] WhatsApp init error:`, error.message);
             this.status = 'disconnected';
         }
     }
@@ -144,6 +148,11 @@ class WhatsAppService {
     // ── Status & QR ─────────────────────────────────────────────
 
     getStatus(): { status: string; qr: string | null } {
+        // Auto-initialize if someone asks for status and we are fully disconnected
+        if (this.status === 'disconnected') {
+            this.initialize().catch(err => console.error(err));
+        }
+
         return {
             status: this.status,
             qr: this.status === 'qr' ? this.qrCode : null,
@@ -160,56 +169,62 @@ class WhatsAppService {
 
     // ── Contacts & Chats ────────────────────────────────────────
 
-    private chatsCache: { id: string; name: string; isGroup: boolean }[] | null = null;
+    private chatsCache: { id: string; name: string; isGroup: boolean; timestamp: number }[] | null = null;
     private isFetchingChats = false;
 
     async refreshChats(): Promise<void> {
         if (this.isFetchingChats || !this.client || !this.isConnected()) return;
 
         this.isFetchingChats = true;
-        console.log('🔄 Refreshing chats...');
+        console.log(`🔄 [User ${this.userId}] Refreshing chats...`);
 
         try {
             const chats = await this.client.getChats();
-            this.chatsCache = chats
+            const mapped = chats
                 .filter((chat: Chat) => chat.name && chat.name.trim() !== '')
                 .map((chat: Chat) => ({
                     id: chat.id._serialized,
                     name: chat.name,
                     isGroup: chat.isGroup,
+                    timestamp: chat.timestamp || 0,
                 }))
-                .sort((a, b) => a.name.localeCompare(b.name));
+                .sort((a, b) => b.timestamp - a.timestamp); // Most recent first
 
-            console.log(`✅ Cached ${this.chatsCache.length} chats`);
+            if (mapped.length > 0) {
+                this.chatsCache = mapped;
+                console.log(`✅ [User ${this.userId}] Cached ${this.chatsCache.length} chats`);
+            } else {
+                console.log(`⚠️ [User ${this.userId}] No chats returned by WhatsApp client.`);
+            }
         } catch (error: any) {
-            console.error('❌ Error refreshing chats:', error.message);
+            console.error(`❌ [User ${this.userId}] Error refreshing chats:`, error.message);
         } finally {
             this.isFetchingChats = false;
         }
     }
 
-    async getChats(): Promise<{ id: string; name: string; isGroup: boolean }[]> {
+    async getChats(limit: number = 20, search?: string): Promise<{ id: string; name: string; isGroup: boolean }[]> {
         if (!this.client || !this.isConnected()) return [];
 
-        // Return cache if available
-        if (this.chatsCache) {
-            return this.chatsCache;
+        if (!this.chatsCache || this.chatsCache.length === 0) {
+            if (!this.isFetchingChats) this.refreshChats();
+            let retries = 0;
+            // Wait up to 60 seconds for massive chat histories
+            while (this.isFetchingChats && retries < 60) {
+                await this.delay(1000);
+                if (this.chatsCache && this.chatsCache.length > 0) break;
+                retries++;
+            }
         }
 
-        // If no cache, try to fetch with timeout
-        if (!this.isFetchingChats) {
-            this.refreshChats(); // Background fetch
+        let results = this.chatsCache || [];
+
+        if (search) {
+            const lowerSearch = search.toLowerCase();
+            results = results.filter(c => c.name.toLowerCase().includes(lowerSearch));
         }
 
-        // Wait for initial fetch (max 10s on Railway where Chrome is slower)
-        let retries = 0;
-        while (this.isFetchingChats && retries < 20) {
-            await this.delay(500);
-            if (this.chatsCache) return this.chatsCache;
-            retries++;
-        }
-
-        return this.chatsCache || [];
+        return results.slice(0, limit);
     }
 
     // ── Message Sending ─────────────────────────────────────────
@@ -219,136 +234,86 @@ class WhatsAppService {
     }
 
     private getRandomDelay(): number {
-        return 3000 + Math.random() * 2000; // 3-5 seconds
+        return 3000 + Math.random() * 2000;
     }
 
-    // ── Audio Conversion (WebM → OGG/Opus) ──────────────────────
-    //
-    // WhatsApp Web rechaza audio/webm internamente (error minificado "t").
-    // Requiere audio/ogg con codec Opus. El contenido de audio es el mismo
-    // codec (Opus), solo cambia el contenedor: WebM → OGG.
-    //
-    // Ref: whatsapp-web.js issues #5683, #3831
-    //
     private async convertToOgg(inputPath: string): Promise<string> {
         const ext = path.extname(inputPath).toLowerCase();
-        if (ext === '.ogg') return inputPath; // Ya es OGG, no convertir
+        if (ext === '.ogg') return inputPath;
 
         const outputPath = inputPath.replace(/\.[^.]+$/, '.ogg');
-        console.log(`🔄 Converting ${path.basename(inputPath)} → OGG/Opus...`);
+        console.log(`🔄 [User ${this.userId}] Converting ${path.basename(inputPath)} → OGG/Opus...`);
 
         try {
             await execFileAsync('ffmpeg', [
-                '-i', inputPath,          // Input
-                '-vn',                     // Sin video
-                '-acodec', 'libopus',      // Codec Opus
-                '-b:a', '128k',            // Bitrate
-                '-ar', '48000',            // Sample rate (Opus standard)
-                '-ac', '1',                // Mono (WhatsApp voice notes)
-                '-y',                      // Overwrite
+                '-i', inputPath,
+                '-vn',
+                '-acodec', 'libopus',
+                '-b:a', '128k',
+                '-ar', '48000',
+                '-ac', '1',
+                '-y',
                 outputPath,
             ]);
-
-            const sizeMB = fs.statSync(outputPath).size / (1024 * 1024);
-            console.log(`✅ Converted to OGG: ${path.basename(outputPath)} (${sizeMB.toFixed(2)} MB)`);
             return outputPath;
         } catch (error: any) {
-            console.error('❌ ffmpeg conversion error:', error.stderr || error.message);
             throw new Error(`Error al convertir audio: ${error.stderr || error.message}`);
         }
     }
 
     async sendTextMessage(chatId: string, text: string): Promise<boolean> {
-        if (!this.client || !this.isConnected()) {
-            throw new Error('WhatsApp not connected');
-        }
+        if (!this.client || !this.isConnected()) throw new Error('WhatsApp not connected');
 
         try {
             const chat = await this.client.getChatById(chatId);
-
-            // Simulate typing for natural behavior
             await chat.sendStateTyping();
             await this.delay(1000 + Math.random() * 1000);
 
             await chat.sendMessage(text);
-            console.log(`✅ Message sent to ${chat.name}`);
+            console.log(`✅ [User ${this.userId}] Message sent to ${chat.name}`);
             return true;
         } catch (error: any) {
-            console.error(`❌ Error sending to ${chatId}:`, error.message);
+            console.error(`❌ [User ${this.userId}] Error sending to ${chatId}:`, error.message);
             throw error;
         }
     }
 
     async sendMediaMessage(chatId: string, filePath: string, caption?: string, isAudio: boolean = false): Promise<boolean> {
-        if (!this.client || !this.isConnected()) {
-            throw new Error('WhatsApp no está conectado');
-        }
-
-        // Validate file exists
-        if (!fs.existsSync(filePath)) {
-            throw new Error(`Archivo no encontrado: ${filePath}`);
-        }
-
-        const fileSizeMB = fs.statSync(filePath).size / (1024 * 1024);
-        const fileName = path.basename(filePath);
-        console.log(`📎 Preparing media: ${fileName} (${fileSizeMB.toFixed(2)} MB) [audio=${isAudio}]`);
+        if (!this.client || !this.isConnected()) throw new Error('WhatsApp no está conectado');
+        if (!fs.existsSync(filePath)) throw new Error(`Archivo no encontrado: ${filePath}`);
 
         let convertedPath: string | null = null;
-
         try {
             let mediaPath = filePath;
-
-            // ── Audio conversion: WebM → OGG/Opus ──
-            // WhatsApp Web requiere OGG/Opus para audio.
-            // El browser MediaRecorder produce WebM/Opus.
-            // Mismo codec, distinto contenedor → ffmpeg re-mux.
             if (isAudio) {
                 const ext = path.extname(filePath).toLowerCase();
                 if (ext === '.webm' || ext === '.wav' || ext === '.mp3') {
                     mediaPath = await this.convertToOgg(filePath);
-                    if (mediaPath !== filePath) {
-                        convertedPath = mediaPath; // Track for cleanup
-                    }
+                    if (mediaPath !== filePath) convertedPath = mediaPath;
                 }
             }
 
             const chat = await this.client.getChatById(chatId);
-
-            // Simulate typing
             await chat.sendStateTyping();
             await this.delay(1000 + Math.random() * 1000);
 
             const media = MessageMedia.fromFilePath(mediaPath);
-
-            // sendAudioAsVoice: true → aparece como nota de voz nativa
             const options: any = {};
-            if (isAudio) {
-                options.sendAudioAsVoice = true;
-            }
-            if (caption) {
-                options.caption = caption;
-            }
+            if (isAudio) options.sendAudioAsVoice = true;
+            if (caption) options.caption = caption;
 
             await chat.sendMessage(media, options);
-            console.log(`✅ Media sent to ${chat.name} [${isAudio ? 'voice note' : 'file'}]`);
+            console.log(`✅ [User ${this.userId}] Media sent to ${chat.name} [${isAudio ? 'voice' : 'file'}]`);
             return true;
         } catch (error: any) {
             const errorMsg = error.message || error.toString() || 'Error desconocido';
-            console.error(`❌ Error sending media to ${chatId}:`, errorMsg);
-            if (error.stack) console.error('Stack:', error.stack);
             throw new Error(`Error al enviar media: ${errorMsg}`);
         } finally {
-            // Cleanup: eliminar archivo OGG temporal
             if (convertedPath && fs.existsSync(convertedPath)) {
-                try {
-                    fs.unlinkSync(convertedPath);
-                    console.log(`🧹 Cleaned up temp file: ${path.basename(convertedPath)}`);
-                } catch { }
+                try { fs.unlinkSync(convertedPath); } catch { }
             }
         }
     }
-
-    // ── Send a Scheduled Message ────────────────────────────────
 
     private async sendScheduledMessage(msg: IScheduledMessage): Promise<void> {
         try {
@@ -361,13 +326,10 @@ class WhatsAppService {
                 throw new Error('Configuración de mensaje inválida');
             }
 
-            // Mark as sent
             msg.status = 'sent';
             msg.sentAt = new Date();
             msg.error = undefined;
             await msg.save();
-
-            console.log(`✅ Scheduled message sent: ${msg.chatName} (${msg.messageType})`);
         } catch (error: any) {
             const errorMsg = error.message || error.toString() || 'Error desconocido';
             msg.retryCount += 1;
@@ -375,33 +337,23 @@ class WhatsAppService {
 
             if (msg.retryCount >= 3) {
                 msg.status = 'failed';
-                console.error(`❌ Message permanently failed after 3 retries: ${msg.chatName} — ${errorMsg}`);
-            } else {
-                console.warn(`⚠️ Retry ${msg.retryCount}/3 for ${msg.chatName}: ${errorMsg}`);
             }
-
             await msg.save();
         }
     }
 
-    // ── Manual Retry ────────────────────────────────────────────
-
     async retryMessage(messageId: string): Promise<{ success: boolean; error?: string }> {
-        const msg = await ScheduledMessage.findById(messageId);
+        const msg = await ScheduledMessage.findOne({ _id: messageId, userId: this.userId });
         if (!msg) return { success: false, error: 'Mensaje no encontrado' };
-
         if (!this.isConnected()) return { success: false, error: 'WhatsApp no está conectado' };
 
-        // Reset for retry
         msg.status = 'pending';
         msg.retryCount = 0;
         msg.error = undefined;
         await msg.save();
 
-        // Attempt to send now
         await this.sendScheduledMessage(msg);
 
-        // Re-fetch to get updated status
         const updated = await ScheduledMessage.findById(messageId);
         return {
             success: updated?.status === 'sent',
@@ -409,17 +361,14 @@ class WhatsAppService {
         };
     }
 
-    // ── Generate Next Recurring Instance ────────────────────────
-
     private async generateNextRecurringInstance(msg: IScheduledMessage): Promise<void> {
         if (!msg.isRecurring || !msg.cronPattern) return;
-
         try {
-            // Parse cron to find next execution time
             const nextDate = this.getNextCronDate(msg.cronPattern);
             if (!nextDate) return;
 
             const newMsg = new ScheduledMessage({
+                userId: this.userId,
                 chatId: msg.chatId,
                 chatName: msg.chatName,
                 isGroup: msg.isGroup,
@@ -437,30 +386,22 @@ class WhatsAppService {
             });
 
             await newMsg.save();
-            console.log(`🔄 Next recurring instance created for ${msg.chatName}: ${nextDate}`);
         } catch (error: any) {
-            console.error('Error creating recurring instance:', error.message);
+            console.error(`[User ${this.userId}] Error creating recurring instance:`, error.message);
         }
     }
 
     private getNextCronDate(cronPattern: string): Date | null {
         try {
-            // Simple cron parser: use node-cron validation + manual calculation
-            // Format: minute hour dayOfMonth month dayOfWeek
             const parts = cronPattern.split(' ');
             if (parts.length !== 5) return null;
-
             const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
             const now = new Date();
             const next = new Date();
-
-            // Set the time
             next.setSeconds(0);
             next.setMilliseconds(0);
             if (minute !== '*') next.setMinutes(parseInt(minute));
             if (hour !== '*') next.setHours(parseInt(hour));
-
-            // Handle day of week (0=Sunday, 1=Monday, ..., 6=Saturday)
             if (dayOfWeek !== '*') {
                 const targetDay = parseInt(dayOfWeek);
                 const currentDay = now.getDay();
@@ -470,21 +411,11 @@ class WhatsAppService {
             } else if (dayOfMonth !== '*') {
                 const targetDate = parseInt(dayOfMonth);
                 next.setDate(targetDate);
-                if (next <= now) {
-                    next.setMonth(next.getMonth() + 1);
-                }
+                if (next <= now) next.setMonth(next.getMonth() + 1);
             } else {
-                // Daily: just move to tomorrow if time has passed
-                if (next <= now) {
-                    next.setDate(next.getDate() + 1);
-                }
+                if (next <= now) next.setDate(next.getDate() + 1);
             }
-
-            // Final check: if still in past, skip
-            if (next <= now) {
-                next.setDate(next.getDate() + 7); // Jump a week for weekly
-            }
-
+            if (next <= now) next.setDate(next.getDate() + 7);
             return next;
         } catch {
             return null;
@@ -495,38 +426,33 @@ class WhatsAppService {
 
     startScheduler(): void {
         if (this.schedulerJob) return;
-
-        console.log('⏰ WhatsApp scheduler started');
+        console.log(`⏰ [User ${this.userId}] WhatsApp scheduler started`);
 
         this.schedulerJob = cron.schedule('* * * * *', async () => {
             if (!this.isConnected()) return;
-
             try {
                 const now = new Date();
                 const pendingMessages = await ScheduledMessage.find({
+                    userId: this.userId,
                     status: 'pending',
                     scheduledAt: { $lte: now },
                 }).sort({ scheduledAt: 1 });
 
                 if (pendingMessages.length === 0) return;
 
-                console.log(`📤 Processing ${pendingMessages.length} pending message(s)...`);
-
-                for (const msg of pendingMessages) {
+                console.log(`📤 [User ${this.userId}] Processing ${pendingMessages.length} pending message(s)...`);
+                for (let i = 0; i < pendingMessages.length; i++) {
+                    const msg = pendingMessages[i];
                     await this.sendScheduledMessage(msg);
-
-                    // If recurring and successfully sent, create next instance
                     if (msg.status === 'sent' && msg.isRecurring) {
                         await this.generateNextRecurringInstance(msg);
                     }
-
-                    // Anti-ban delay between messages
-                    if (pendingMessages.indexOf(msg) < pendingMessages.length - 1) {
+                    if (i < pendingMessages.length - 1) {
                         await this.delay(this.getRandomDelay());
                     }
                 }
             } catch (error: any) {
-                console.error('Scheduler error:', error.message);
+                console.error(`[User ${this.userId}] Scheduler error:`, error.message);
             }
         });
     }
@@ -535,71 +461,50 @@ class WhatsAppService {
         if (this.schedulerJob) {
             this.schedulerJob.stop();
             this.schedulerJob = null;
-            console.log('⏰ WhatsApp scheduler stopped');
         }
     }
 
     // ── Auto-Reconnect with Exponential Backoff ─────────────────
 
     private async attemptReconnect(reason: string): Promise<void> {
-        if (this.isReconnecting) {
-            console.log('🔄 Reconnect already in progress, skipping');
-            return;
-        }
-
+        if (this.isReconnecting) return;
         if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
-            console.error(`🔴 Max reconnect attempts (${this.MAX_RECONNECT_ATTEMPTS}) reached. Manual restart required.`);
+            console.error(`🔴 [User ${this.userId}] Max reconnect attempts reached. Manual restart required.`);
             return;
         }
-
         this.isReconnecting = true;
         this.reconnectAttempts++;
         this.totalReconnects++;
 
-        // Exponential backoff: 5s, 10s, 20s, 40s, 80s... max 5min
         const backoffDelay = Math.min(5000 * Math.pow(2, this.reconnectAttempts - 1), 300000);
-        console.log(`🔄 Reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${backoffDelay / 1000}s (reason: ${reason})`);
+        console.log(`🔄 [User ${this.userId}] Reconnect ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${backoffDelay / 1000}s (${reason})`);
 
-        // Wait the backoff delay
         await this.delay(backoffDelay);
 
-        // Destroy old client cleanly
         if (this.client) {
-            try {
-                await this.client.destroy();
-            } catch (err) {
-                console.warn('⚠️ Error destroying old client during reconnect:', err);
-            }
+            try { await this.client.destroy(); } catch (err) { }
             this.client = null;
         }
 
-        console.log('🔄 Re-initializing WhatsApp client...');
-        this.isReconnecting = false;
+        this.status = 'disconnected'; // explicitly reset
+        this.isReconnecting = false;  // release lock before calling initialize which checks it
 
         try {
             await this.initialize();
         } catch (err: any) {
-            console.error('❌ Reconnect initialization failed:', err.message);
-            // Will retry via the disconnected event or next state check
+            console.error(`❌ [User ${this.userId}] Reconnect initialization failed:`, err.message);
         }
     }
 
     // ── Keep-Alive Heartbeat ─────────────────────────────────────
 
     private startKeepAlive(): void {
-        this.stopKeepAlive(); // Prevent duplicate intervals
-
-        console.log('💓 Keep-alive heartbeat started (30s interval)');
-
+        this.stopKeepAlive();
         this.keepAliveInterval = setInterval(async () => {
             if (!this.client || this.status !== 'connected') return;
-
             try {
-                // Check client state
                 const state = await this.client.getState();
-
                 if (state !== 'CONNECTED') {
-                    console.warn(`⚠️ Heartbeat detected unhealthy state: ${state}`);
                     this.stopKeepAlive();
                     this.status = 'disconnected';
                     this.connectedSince = null;
@@ -607,26 +512,12 @@ class WhatsAppService {
                     this.attemptReconnect(`heartbeat_state_${state}`);
                     return;
                 }
-
-                // Simulate page activity to prevent WhatsApp from marking as inactive
-                // This reads the page title — a minimal operation that keeps the page "alive"
                 const page = (this.client as any).pupPage;
                 if (page) {
-                    await page.evaluate(() => {
-                        // Minimal activity: read title + touch scroll position
-                        document.title;
-                        window.scrollY;
-                    });
+                    await page.evaluate(() => { document.title; window.scrollY; });
                 }
             } catch (err: any) {
-                console.warn('⚠️ Keep-alive check failed:', err.message);
-
-                // If the page/client is dead, trigger reconnect
-                if (err.message?.includes('Protocol error') ||
-                    err.message?.includes('Session closed') ||
-                    err.message?.includes('Target closed') ||
-                    err.message?.includes('Execution context was destroyed')) {
-                    console.error('🔴 Client appears dead — triggering reconnect');
+                if (err.message?.includes('Protocol error') || err.message?.includes('Target closed') || err.message?.includes('Execution context was destroyed')) {
                     this.stopKeepAlive();
                     this.status = 'disconnected';
                     this.connectedSince = null;
@@ -634,100 +525,53 @@ class WhatsAppService {
                     this.attemptReconnect('heartbeat_error');
                 }
             }
-        }, 30000); // Every 30 seconds
+        }, 30000);
     }
 
     private stopKeepAlive(): void {
         if (this.keepAliveInterval) {
             clearInterval(this.keepAliveInterval);
             this.keepAliveInterval = null;
-            console.log('💓 Keep-alive heartbeat stopped');
         }
     }
 
-    // ── Preventive Restart (every 24h at 4 AM) ──────────────────
-    //
-    // Chromium accumulates memory leaks over 24+ hours of operation.
-    // This scheduled restart destroys the client and re-initializes it
-    // cleanly, preserving the session via LocalAuth.
-    //
-    // Runs at 4:00 AM (low traffic window) to minimize disruption.
-    // The scheduler checks for pending messages before restarting.
+    // ── Preventive Restart ──────────────────────────────────────
 
     private startPreventiveRestart(): void {
-        this.stopPreventiveRestart(); // Prevent duplicates
-
-        console.log('🔄 Preventive restart scheduled (daily at 4:00 AM server time)');
-
-        // Run at 4:00 AM every day
-        this.preventiveRestartJob = cron.schedule('0 4 * * *', async () => {
-            console.log('🔄 [Preventive Restart] Starting daily maintenance restart...');
-
-            // Check if there are messages pending in the next 5 minutes
+        this.stopPreventiveRestart();
+        // Add a random offset so all tenants don't restart at exactly 4:00 AM
+        const randomMinute = Math.floor(Math.random() * 59);
+        this.preventiveRestartJob = cron.schedule(`${randomMinute} 4 * * *`, async () => {
             try {
                 const soonMessages = await ScheduledMessage.countDocuments({
+                    userId: this.userId,
                     status: 'pending',
-                    scheduledAt: {
-                        $lte: new Date(Date.now() + 5 * 60 * 1000),
-                    },
+                    scheduledAt: { $lte: new Date(Date.now() + 5 * 60 * 1000) },
                 });
-
                 if (soonMessages > 0) {
-                    console.log(`🔄 [Preventive Restart] ${soonMessages} message(s) pending soon — delaying restart by 10 minutes`);
-                    // Retry in 10 minutes
                     setTimeout(() => this.doPreventiveRestart(), 10 * 60 * 1000);
                     return;
                 }
-            } catch (err) {
-                console.warn('⚠️ [Preventive Restart] Error checking pending messages:', err);
-            }
-
+            } catch (err) { }
             await this.doPreventiveRestart();
         });
     }
 
     private async doPreventiveRestart(): Promise<void> {
-        const memBefore = process.memoryUsage();
-        console.log(`🔄 [Preventive Restart] Memory before: RSS=${Math.round(memBefore.rss / 1024 / 1024)}MB, Heap=${Math.round(memBefore.heapUsed / 1024 / 1024)}MB`);
-
         this.stopKeepAlive();
         this.stopScheduler();
-
-        // Destroy current client
         if (this.client) {
-            try {
-                await this.client.destroy();
-                console.log('🔄 [Preventive Restart] Old client destroyed');
-            } catch (err) {
-                console.warn('⚠️ [Preventive Restart] Error destroying client:', err);
-            }
+            try { await this.client.destroy(); } catch (err) { }
             this.client = null;
         }
-
         this.status = 'disconnected';
         this.connectedSince = null;
         this.lastPreventiveRestart = new Date();
-
-        // Force garbage collection if available (run node with --expose-gc)
-        if (global.gc) {
-            global.gc();
-            console.log('🔄 [Preventive Restart] Forced garbage collection');
-        }
-
-        // Wait 5 seconds to let resources release
+        if (global.gc) global.gc();
         await this.delay(5000);
-
-        const memAfter = process.memoryUsage();
-        console.log(`🔄 [Preventive Restart] Memory after GC: RSS=${Math.round(memAfter.rss / 1024 / 1024)}MB, Heap=${Math.round(memAfter.heapUsed / 1024 / 1024)}MB`);
-
-        // Re-initialize
-        console.log('🔄 [Preventive Restart] Re-initializing client...');
         try {
             await this.initialize();
-            console.log('✅ [Preventive Restart] Complete — fresh client running');
         } catch (err: any) {
-            console.error('❌ [Preventive Restart] Re-initialization failed:', err.message);
-            // attemptReconnect will handle it from here
             this.attemptReconnect('preventive_restart_failed');
         }
     }
@@ -739,56 +583,29 @@ class WhatsAppService {
         }
     }
 
-    // ── Health Info (for /api/whatsapp/health endpoint) ──────────
+    // ── Health Info & Cleanup ────────────────────────────────────
 
-    getHealthInfo(): {
-        status: string;
-        connectedSince: string | null;
-        uptimeSeconds: number | null;
-        reconnectAttempts: number;
-        totalReconnects: number;
-        isReconnecting: boolean;
-        keepAliveActive: boolean;
-        schedulerActive: boolean;
-        lastPreventiveRestart: string | null;
-        memory: { rss: string; heapUsed: string; heapTotal: string };
-    } {
-        const now = new Date();
-        const mem = process.memoryUsage();
+    getHealthInfo() {
         return {
             status: this.status,
             connectedSince: this.connectedSince?.toISOString() || null,
-            uptimeSeconds: this.connectedSince
-                ? Math.floor((now.getTime() - this.connectedSince.getTime()) / 1000)
-                : null,
+            uptimeSeconds: this.connectedSince ? Math.floor((new Date().getTime() - this.connectedSince.getTime()) / 1000) : null,
             reconnectAttempts: this.reconnectAttempts,
             totalReconnects: this.totalReconnects,
             isReconnecting: this.isReconnecting,
             keepAliveActive: this.keepAliveInterval !== null,
             schedulerActive: this.schedulerJob !== null,
             lastPreventiveRestart: this.lastPreventiveRestart?.toISOString() || null,
-            memory: {
-                rss: `${Math.round(mem.rss / 1024 / 1024)}MB`,
-                heapUsed: `${Math.round(mem.heapUsed / 1024 / 1024)}MB`,
-                heapTotal: `${Math.round(mem.heapTotal / 1024 / 1024)}MB`,
-            },
         };
     }
 
-    // ── Cleanup ─────────────────────────────────────────────────
-
     async destroy(): Promise<void> {
-        console.log('🛑 Destroying WhatsApp service...');
+        console.log(`🛑 [User ${this.userId}] Destroying WhatsApp tenant`);
         this.stopPreventiveRestart();
         this.stopKeepAlive();
         this.stopScheduler();
         if (this.client) {
-            try {
-                await this.client.destroy();
-                console.log('🛑 WhatsApp client destroyed cleanly');
-            } catch (err) {
-                console.warn('⚠️ Error during client destroy:', err);
-            }
+            try { await this.client.destroy(); } catch (err) { }
             this.client = null;
         }
         this.status = 'disconnected';
@@ -796,5 +613,68 @@ class WhatsAppService {
     }
 }
 
-// Singleton instance
-export const whatsappService = new WhatsAppService();
+// ============================================================
+// WhatsApp Manager — Multi-Tenant Wrapper
+// ============================================================
+
+export class WhatsAppManager {
+    private tenants = new Map<string, WhatsAppTenant>();
+
+    getTenant(userId: string): WhatsAppTenant {
+        if (!this.tenants.has(userId)) {
+            const tenant = new WhatsAppTenant(userId);
+            this.tenants.set(userId, tenant);
+        }
+        return this.tenants.get(userId)!;
+    }
+
+    async destroyAll(): Promise<void> {
+        console.log('🛑 Shutting down all WhatsApp tenants...');
+        for (const tenant of this.tenants.values()) {
+            await tenant.destroy();
+        }
+        this.tenants.clear();
+    }
+
+    // Health across all active tenants (useful for single /health check)
+    getHealthInfo() {
+        const mem = process.memoryUsage();
+        const activeTenants = Array.from(this.tenants.keys());
+        const details: any = {};
+        for (const [userId, tenant] of this.tenants.entries()) {
+            details[userId] = tenant.getHealthInfo();
+        }
+        return {
+            totalActiveSessions: this.tenants.size,
+            activeTenants,
+            memory: {
+                rss: `${Math.round(mem.rss / 1024 / 1024)}MB`,
+                heapUsed: `${Math.round(mem.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(mem.heapTotal / 1024 / 1024)}MB`,
+            },
+            tenantDetails: details,
+        };
+    }
+
+    // Lazy load or auto-load active tenants based on pending DB schedules on startup Server Init
+    async initializeActiveTenants(): Promise<void> {
+        console.log('🚀 Checking for pending scheduled messages to boot specific users...');
+        try {
+            const userIdsWithTasks = await ScheduledMessage.distinct('userId', {
+                status: 'pending'
+            });
+            console.log(`📡 Found ${userIdsWithTasks.length} user(s) with pending messages.`);
+            for (const userId of userIdsWithTasks) {
+                if (userId) {
+                    const tenant = this.getTenant(userId.toString());
+                    // This kicks off async puppeteer launch, which might take ~10s each
+                    tenant.initialize().catch(console.error);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error initializing active WhatsApp tenants:', error);
+        }
+    }
+}
+
+export const whatsappService = new WhatsAppManager();

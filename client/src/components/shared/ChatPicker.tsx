@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { API_BASE } from '../../config'
+import api from '../../lib/axios'
 
-const API_URL = `${API_BASE}/api/whatsapp`
+const API_URL = '/whatsapp'
 
 export interface ChatItem {
     id: string
@@ -35,6 +35,7 @@ export default function ChatPicker({
     const [chats, setChats] = useState<ChatItem[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
     const [showDropdown, setShowDropdown] = useState(false)
     const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -45,15 +46,28 @@ export default function ChatPicker({
             ? '🔍 Buscar contacto...'
             : '🔍 Buscar contacto o grupo...'
 
-    const loadChats = useCallback(async (forceRefresh = false) => {
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search)
+        }, 300)
+        return () => clearTimeout(timer)
+    }, [search])
+
+    const loadChats = useCallback(async (searchTerm: string, forceRefresh = false) => {
         setLoading(true)
         try {
-            const url = forceRefresh
-                ? `${API_URL}/chats?refresh=true`
-                : `${API_URL}/chats`
-            const res = await fetch(url)
-            const data: ChatItem[] = await res.json()
-            setChats(data)
+            const params = new URLSearchParams()
+            if (forceRefresh) params.append('refresh', 'true')
+            if (searchTerm) {
+                params.append('search', searchTerm)
+                params.append('limit', '50')
+            } else {
+                params.append('limit', '20')
+            }
+
+            const res = await api.get(`${API_URL}/chats?${params.toString()}`)
+            setChats(res.data)
         } catch {
             setChats([])
         } finally {
@@ -62,8 +76,8 @@ export default function ChatPicker({
     }, [])
 
     useEffect(() => {
-        loadChats()
-    }, [loadChats])
+        loadChats(debouncedSearch)
+    }, [debouncedSearch, loadChats])
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -76,20 +90,17 @@ export default function ChatPicker({
         return () => document.removeEventListener('mousedown', handle)
     }, [])
 
-    // Filter chats by type and search
-    const filteredChats = chats
-        .filter(c => {
-            if (filter === 'groups') return c.isGroup
-            if (filter === 'contacts') return !c.isGroup
-            return true
-        })
-        .filter(c =>
-            c.name.toLowerCase().includes(search.toLowerCase())
-        )
+    // Filter chats by type (groups/contacts) locally, but the text search is remote
+    const filteredChats = chats.filter(c => {
+        if (filter === 'groups') return c.isGroup
+        if (filter === 'contacts') return !c.isGroup
+        return true
+    })
 
     const handleClear = () => {
         onSelect(null)
         setSearch('')
+        setDebouncedSearch('')
     }
 
     return (
@@ -97,7 +108,7 @@ export default function ChatPicker({
             <div className="flex justify-between items-center mb-1.5">
                 <label className="block text-sm font-semibold text-slate-700">{label}</label>
                 <button
-                    onClick={() => { setLoading(true); loadChats(true); }}
+                    onClick={() => { setLoading(true); loadChats(debouncedSearch, true); }}
                     className="text-xs text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1"
                     title="Recargar contactos"
                     disabled={disabled}
@@ -157,23 +168,30 @@ export default function ChatPicker({
                                 {search ? 'No se encontraron resultados' : 'No hay chats disponibles'}
                             </div>
                         ) : (
-                            filteredChats.map(chat => (
-                                <button
-                                    key={chat.id}
-                                    onClick={() => {
-                                        onSelect(chat)
-                                        setSearch('')
-                                        setShowDropdown(false)
-                                    }}
-                                    className="w-full px-4 py-2.5 text-left hover:bg-violet-50 flex items-center gap-2 transition-colors"
-                                >
-                                    <span className="text-lg">{chat.isGroup ? '👥' : '👤'}</span>
-                                    <span className="text-slate-700">{chat.name}</span>
-                                    {chat.isGroup && (
-                                        <span className="ml-auto text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Grupo</span>
-                                    )}
-                                </button>
-                            ))
+                            <>
+                                {filteredChats.slice(0, 100).map(chat => (
+                                    <button
+                                        key={chat.id}
+                                        onClick={() => {
+                                            onSelect(chat)
+                                            setSearch('')
+                                            setShowDropdown(false)
+                                        }}
+                                        className="w-full px-4 py-2.5 text-left hover:bg-violet-50 flex items-center gap-2 transition-colors"
+                                    >
+                                        <span className="text-lg">{chat.isGroup ? '👥' : '👤'}</span>
+                                        <span className="text-slate-700">{chat.name}</span>
+                                        {chat.isGroup && (
+                                            <span className="ml-auto text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Grupo</span>
+                                        )}
+                                    </button>
+                                ))}
+                                {filteredChats.length > 100 && (
+                                    <div className="px-4 py-3 text-center text-xs text-slate-400 italic border-t border-slate-100 bg-slate-50">
+                                        + {filteredChats.length - 100} más. Usá el buscador para encontrarlos.
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 )}

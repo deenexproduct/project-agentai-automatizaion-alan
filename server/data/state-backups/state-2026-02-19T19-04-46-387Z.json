@@ -1,0 +1,26 @@
+{
+  "batchId": "2026-02-19T19:00:15.521Z",
+  "accountEmail": "unknown",
+  "profiles": [
+    {
+      "url": "https://ar.linkedin.com/in/matias-raffe-5a8425125",
+      "status": "pending",
+      "attempts": 0
+    }
+  ],
+  "currentIndex": 0,
+  "startTime": "2026-02-19T19:00:15.713Z",
+  "isPaused": false,
+  "options": {
+    "totalLimit": 1,
+    "dailyLimit": 1
+  },
+  "stats": {
+    "processed": 0,
+    "successful": 0,
+    "failed": 0,
+    "pending": 1
+  },
+  "lastUpdate": "2026-02-19T19:00:15.713Z",
+  "version": 1
+}

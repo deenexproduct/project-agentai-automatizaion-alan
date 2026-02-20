@@ -26,14 +26,21 @@ const upload = multer({ storage: waStorage });
 // ── Status & QR ─────────────────────────────────────────────
 
 router.get('/status', (req: Request, res: Response) => {
-    res.json(whatsappService.getStatus());
+    const userId = req.user?._id?.toString();
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const tenant = whatsappService.getTenant(userId);
+    res.json(tenant.getStatus());
 });
 
 router.get('/qr', (req: Request, res: Response) => {
-    const qr = whatsappService.getQR();
+    const userId = req.user?._id?.toString();
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const tenant = whatsappService.getTenant(userId);
+
+    const qr = tenant.getQR();
     if (qr) {
         res.json({ qr });
-    } else if (whatsappService.isConnected()) {
+    } else if (tenant.isConnected()) {
         res.json({ connected: true, message: 'Already connected' });
     } else {
         res.json({ qr: null, message: 'Waiting for QR...' });
@@ -42,14 +49,33 @@ router.get('/qr', (req: Request, res: Response) => {
 
 // ── Chats ───────────────────────────────────────────────────
 
+router.get('/debug', (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString() || 'default';
+    const tenant = whatsappService.getTenant(userId);
+    res.json({
+        isConnected: tenant.isConnected(),
+        status: tenant.getStatus(),
+        chatsCacheLength: (tenant as any).chatsCache?.length,
+        isFetching: (tenant as any).isFetchingChats
+    });
+});
+
 router.get('/chats', async (req: Request, res: Response) => {
     try {
+        const userId = req.user?._id?.toString();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const tenant = whatsappService.getTenant(userId);
+
         // Force refresh if ?refresh=true or cache is empty
         const forceRefresh = req.query.refresh === 'true';
         if (forceRefresh) {
-            await whatsappService.refreshChats();
+            await tenant.refreshChats();
         }
-        const chats = await whatsappService.getChats();
+
+        const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+        const search = req.query.search ? (req.query.search as string) : undefined;
+
+        const chats = await tenant.getChats(limit, search);
         res.json(chats);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -86,6 +112,7 @@ router.post('/schedule', upload.single('file'), async (req: Request, res: Respon
         }
 
         const message = new ScheduledMessage({
+            userId: req.user?._id?.toString(),
             chatId,
             chatName,
             isGroup: isGroup === 'true' || isGroup === true,
@@ -114,6 +141,7 @@ router.post('/schedule', upload.single('file'), async (req: Request, res: Respon
 router.get('/scheduled', async (req: Request, res: Response) => {
     try {
         const messages = await ScheduledMessage.find({
+            userId: req.user?._id?.toString(),
             status: { $in: ['pending', 'failed'] },
         }).sort({ scheduledAt: 1 });
 
@@ -128,6 +156,7 @@ router.get('/scheduled', async (req: Request, res: Response) => {
 router.get('/history', async (req: Request, res: Response) => {
     try {
         const messages = await ScheduledMessage.find({
+            userId: req.user?._id?.toString(),
             status: { $in: ['sent', 'failed'] },
         }).sort({ sentAt: -1, scheduledAt: -1 }).limit(100);
 
@@ -141,9 +170,9 @@ router.get('/history', async (req: Request, res: Response) => {
 
 router.delete('/scheduled/:id', async (req: Request, res: Response) => {
     try {
-        const message = await ScheduledMessage.findById(req.params.id);
+        const message = await ScheduledMessage.findOne({ _id: req.params.id, userId: req.user?._id?.toString() });
         if (!message) {
-            return res.status(404).json({ error: 'Message not found' });
+            return res.status(404).json({ error: 'Message not found or unauthorized' });
         }
 
         if (message.status !== 'pending') {
@@ -157,6 +186,7 @@ router.delete('/scheduled/:id', async (req: Request, res: Response) => {
         if (message.isRecurring) {
             await ScheduledMessage.updateMany(
                 {
+                    userId: req.user?._id?.toString(),
                     $or: [
                         { parentId: message._id, status: 'pending' },
                         { parentId: message.parentId, status: 'pending', _id: { $ne: message._id } },
@@ -176,7 +206,11 @@ router.delete('/scheduled/:id', async (req: Request, res: Response) => {
 
 router.post('/retry/:id', async (req: Request, res: Response) => {
     try {
-        const result = await whatsappService.retryMessage(req.params.id);
+        const userId = req.user?._id?.toString();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const tenant = whatsappService.getTenant(userId);
+
+        const result = await tenant.retryMessage(req.params.id);
         if (result.success) {
             res.json({ success: true, message: 'Mensaje enviado exitosamente' });
         } else {

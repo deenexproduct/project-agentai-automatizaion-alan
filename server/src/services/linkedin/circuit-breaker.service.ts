@@ -139,7 +139,7 @@ class CircuitBreakerService {
      */
     async recordSuccess(
         accountId: string,
-        workspaceId: string
+        userId: string
     ): Promise<void> {
         const circuit = this.getCircuit(accountId);
         const state = this.getState(accountId);
@@ -156,7 +156,7 @@ class CircuitBreakerService {
                 console.log(`[CircuitBreaker] 🟢 Account ${accountId} → CLOSED (recovered)`);
 
                 await LinkedInAuditLog.append(
-                    workspaceId,
+                    userId,
                     new Types.ObjectId(accountId),
                     'circuit_closed',
                     { reason: 'recovered after half-open successes' }
@@ -175,7 +175,7 @@ class CircuitBreakerService {
      */
     async recordFailure(
         accountId: string,
-        workspaceId: string,
+        userId: string,
         reason: string
     ): Promise<void> {
         const circuit = this.getCircuit(accountId);
@@ -188,9 +188,9 @@ class CircuitBreakerService {
 
         if (state === 'HALF_OPEN') {
             // Any failure in HALF_OPEN reopens the circuit
-            await this.openCircuit(accountId, workspaceId, reason);
+            await this.openCircuit(accountId, userId, reason);
         } else if (circuit.consecutiveFailures >= this.config.failureThreshold) {
-            await this.openCircuit(accountId, workspaceId, reason);
+            await this.openCircuit(accountId, userId, reason);
         }
     }
 
@@ -200,7 +200,7 @@ class CircuitBreakerService {
      */
     private async openCircuit(
         accountId: string,
-        workspaceId: string,
+        userId: string,
         reason: string
     ): Promise<void> {
         const circuit = this.getCircuit(accountId);
@@ -215,7 +215,7 @@ class CircuitBreakerService {
         });
 
         await LinkedInAuditLog.append(
-            workspaceId,
+            userId,
             new Types.ObjectId(accountId),
             'circuit_opened',
             {

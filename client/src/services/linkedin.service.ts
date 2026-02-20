@@ -36,14 +36,16 @@ export interface ProgressData {
     message?: string;
 }
 
+import api from '../lib/axios';
+
 export async function getStatus(): Promise<LinkedInStatus> {
-    const res = await fetch(`${API_URL}/status`);
-    return res.json();
+    const res = await api.get('/linkedin/status');
+    return res.data;
 }
 
 export async function launchBrowser(): Promise<{ success: boolean; status: LinkedInStatus }> {
-    const res = await fetch(`${API_URL}/launch`, { method: 'POST' });
-    return res.json();
+    const res = await api.post('/linkedin/launch');
+    return res.data;
 }
 
 export async function startProspecting(
@@ -51,37 +53,34 @@ export async function startProspecting(
     sendNote: boolean,
     noteText?: string
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-    const res = await fetch(`${API_URL}/start-prospecting`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls, sendNote, noteText }),
-    });
-    return res.json();
+    const res = await api.post('/linkedin/start-prospecting', { urls, sendNote, noteText });
+    return res.data;
 }
 
 export async function pauseProspecting(): Promise<void> {
-    await fetch(`${API_URL}/pause`, { method: 'POST' });
+    await api.post('/linkedin/pause');
 }
 
 export async function resumeProspecting(): Promise<void> {
-    await fetch(`${API_URL}/resume`, { method: 'POST' });
+    await api.post('/linkedin/resume');
 }
 
 export async function stopProspecting(): Promise<{ success: boolean; message: string; deletedCount: number }> {
-    const res = await fetch(`${API_URL}/stop`, { method: 'POST' });
-    return res.json();
+    const res = await api.post('/linkedin/stop');
+    return res.data;
 }
 
 export async function getProgress(): Promise<ProgressData> {
-    const res = await fetch(`${API_URL}/progress`);
-    return res.json();
+    const res = await api.get('/linkedin/progress');
+    return res.data;
 }
 
 export function createProgressStream(
     onData: (data: ProgressData) => void,
     onError?: () => void
 ): EventSource {
-    const es = new EventSource(`${API_URL}/progress/stream`);
+    const token = localStorage.getItem('token');
+    const es = new EventSource(`${API_URL}/progress/stream?token=${token || ''}`);
 
     es.onmessage = (event) => {
         try {

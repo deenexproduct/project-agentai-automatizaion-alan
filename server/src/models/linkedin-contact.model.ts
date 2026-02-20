@@ -36,22 +36,22 @@ export interface IEnrichmentNews {
 export interface IEnrichmentCompany {
     name?: string;
     nameSource?: string;      // Fuente del nombre (ej: "LinkedIn", "Website oficial")
-    
+
     description?: string;     // Descripción completa de la empresa
     descriptionSource?: string; // Fuente de la descripción
-    
+
     website?: string;         // URL oficial
     websiteSource?: string;   // Fuente del website
-    
+
     category?: string;        // Categoría específica
     categorySource?: string;  // Fuente de la categoría
-    
+
     sector?: string;          // Sector general
     sectorSource?: string;    // Fuente del sector
-    
+
     locationsCount?: string;  // Cantidad de locales
     locationsCountSource?: string; // Fuente: "LinkedIn", "Noticia: [URL]", "Website"
-    
+
     socialMedia?: {
         instagram?: string;
         twitter?: string;
@@ -86,11 +86,74 @@ export interface IEnrichmentData {
     companyNews?: IEnrichmentNews[];
     keyInsights?: IEnrichmentInsight[];  // Ahora con fuentes
     buyingSignals?: IEnrichmentSignal[]; // Ahora con fuentes y evidencia
-    
+
     // Metadata de confianza
     confidenceScore?: number;  // 0-100
     dataQuality?: 'verified' | 'partial' | 'estimated' | 'insufficient';
     lastVerifiedAt?: Date;     // Cuándo se verificaron los datos
+
+    // ── Deep Enrichment 2.0 ──────────────────────────────
+
+    // Deep LinkedIn data
+    deepLinkedIn?: {
+        experienceHistory?: { company: string; position: string; duration?: string; description?: string; isCurrent?: boolean }[];
+        educationHistory?: { institution: string; degree?: string; years?: string }[];
+        skillsList?: string[];
+        about?: string;
+        recentPosts?: { text: string; date?: string; likes?: number; comments?: number }[];
+        followersCount?: string;
+        connectionsCount?: string;
+    };
+
+    // Company website scraped data
+    companyWebsite?: {
+        slogan?: string;
+        founders?: string[];
+        history?: string;
+        mission?: string;
+        yearFounded?: string;
+        products?: { name: string; description?: string }[];
+        techStack?: string[];
+        socialLinks?: Record<string, string>;
+        contactInfo?: { email?: string; phone?: string; address?: string };
+    };
+
+    // Google Maps data
+    googleMaps?: {
+        rating?: number;
+        reviewCount?: number;
+        address?: string;
+        locationCount?: number;
+        category?: string;
+        phone?: string;
+        priceLevel?: string;
+    };
+
+    // Instagram data
+    instagram?: {
+        handle?: string;
+        url?: string;
+        followers?: number;
+        bio?: string;
+        engagementRate?: number;
+    };
+
+    // AI-generated commercial intelligence
+    experienceSummary?: string;
+    educationSummary?: string;
+    skillsHighlight?: string[];
+    commercialScore?: number;           // 0-100
+    commercialScoreBreakdown?: {
+        companySize?: number;      // 0-20
+        digitalPresence?: number;  // 0-20
+        growthSignals?: number;    // 0-20
+        decisionPower?: number;    // 0-20
+        approachability?: number;  // 0-20
+    };
+    personalizedPitch?: string;
+    painPoints?: string[];
+    talkingPoints?: string[];
+    bestApproachChannel?: string;
 }
 
 export interface ILinkedInContact extends Document {
@@ -183,15 +246,15 @@ const NoteSchema = new Schema<INote>({
 
 const LinkedInContactSchema = new Schema<ILinkedInContact>({
     // Identification
-    profileUrl: { 
-        type: String, 
-        required: true, 
+    profileUrl: {
+        type: String,
+        required: true,
         unique: true,
         trim: true,
         index: true, // Single index for exact lookups
     },
-    fullName: { 
-        type: String, 
+    fullName: {
+        type: String,
         required: true,
         trim: true,
     },
@@ -200,8 +263,8 @@ const LinkedInContactSchema = new Schema<ILinkedInContact>({
     headline: { type: String, trim: true },
 
     // Professional
-    currentCompany: { 
-        type: String, 
+    currentCompany: {
+        type: String,
         trim: true,
         index: true, // Index for company-based queries
     },
@@ -260,9 +323,9 @@ const LinkedInContactSchema = new Schema<ILinkedInContact>({
 
     // Enrichment
     enrichmentData: { type: Schema.Types.Mixed, default: null },
-    enrichmentStatus: { 
-        type: String, 
-        enum: ['pending', 'enriching', 'completed', 'failed'], 
+    enrichmentStatus: {
+        type: String,
+        enum: ['pending', 'enriching', 'completed', 'failed'],
         default: null,
         index: true,
     },
@@ -311,7 +374,7 @@ LinkedInContactSchema.index(
  */
 LinkedInContactSchema.index(
     { fullName: 'text' },
-    { 
+    {
         name: 'text_search_fullname',
         default_language: 'spanish',
         weights: { fullName: 10 }
@@ -325,7 +388,7 @@ LinkedInContactSchema.index(
  */
 LinkedInContactSchema.index(
     { fullName: 'text', headline: 'text', currentCompany: 'text' },
-    { 
+    {
         name: 'text_search_compound',
         weights: { fullName: 10, currentCompany: 5, headline: 3 },
         default_language: 'spanish',
@@ -389,17 +452,17 @@ export interface ILinkedInContactModel extends Model<ILinkedInContact> {
 }
 
 // Static method: Find by pipeline status
-LinkedInContactSchema.statics.findByPipelineStatus = async function(
+LinkedInContactSchema.statics.findByPipelineStatus = async function (
     this: ILinkedInContactModel,
     status: ContactStatus,
     options: IContactQueryOptions = {}
 ): Promise<{ contacts: any[]; total: number }> {
     const { limit = 50, skip = 0, sort = { createdAt: -1 }, populate } = options;
-    
-    const filter: FilterQuery<ILinkedInContact> = { 
-        $or: [{ status }, { pipelineStatus: status }] 
+
+    const filter: FilterQuery<ILinkedInContact> = {
+        $or: [{ status }, { pipelineStatus: status }]
     };
-    
+
     const [contacts, total] = await Promise.all([
         this.find(filter)
             .sort(sort)
@@ -410,17 +473,17 @@ LinkedInContactSchema.statics.findByPipelineStatus = async function(
             .exec(),
         this.countDocuments(filter).exec()
     ]);
-    
+
     return { contacts, total };
 };
 
 // Static method: Find enriched contacts
-LinkedInContactSchema.statics.findEnriched = async function(
+LinkedInContactSchema.statics.findEnriched = async function (
     this: ILinkedInContactModel,
     options: IContactQueryOptions = {}
 ): Promise<any[]> {
     const { limit = 50, skip = 0, sort = { enrichedAt: -1 } } = options;
-    
+
     return this.find({
         enrichmentStatus: 'completed',
         enrichmentData: { $exists: true, $ne: null }
@@ -433,7 +496,7 @@ LinkedInContactSchema.statics.findEnriched = async function(
 };
 
 // Static method: Find pending enrichment
-LinkedInContactSchema.statics.findPendingEnrichment = async function(
+LinkedInContactSchema.statics.findPendingEnrichment = async function (
     this: ILinkedInContactModel,
     limit: number = 100
 ): Promise<any[]> {
@@ -466,14 +529,14 @@ LinkedInContactSchema.statics.findPendingEnrichment = async function(
 /**
  * Check if contact is fully enriched
  */
-LinkedInContactSchema.methods.isEnriched = function(this: ILinkedInContact): boolean {
+LinkedInContactSchema.methods.isEnriched = function (this: ILinkedInContact): boolean {
     return this.enrichmentStatus === 'completed' && !!this.enrichmentData;
 };
 
 /**
  * Get display name with position
  */
-LinkedInContactSchema.methods.getDisplayName = function(this: ILinkedInContact): string {
+LinkedInContactSchema.methods.getDisplayName = function (this: ILinkedInContact): string {
     if (this.currentPosition && this.currentCompany) {
         return `${this.fullName} - ${this.currentPosition} at ${this.currentCompany}`;
     }
@@ -483,7 +546,7 @@ LinkedInContactSchema.methods.getDisplayName = function(this: ILinkedInContact):
 // ── Pre-save Middleware ──────────────────────────────────────
 
 // Sync pipelineStatus with status for backward compatibility
-LinkedInContactSchema.pre('save', function(next) {
+LinkedInContactSchema.pre('save', function (next) {
     if (this.isModified('status') && !this.pipelineStatus) {
         this.pipelineStatus = this.status;
     }
@@ -493,6 +556,6 @@ LinkedInContactSchema.pre('save', function(next) {
 // ── Export ───────────────────────────────────────────────────
 
 export const LinkedInContact = mongoose.model<ILinkedInContact, ILinkedInContactModel>(
-    'LinkedInContact', 
+    'LinkedInContact',
     LinkedInContactSchema
 );

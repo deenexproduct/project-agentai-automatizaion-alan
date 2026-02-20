@@ -32,7 +32,7 @@ export type AuditEventType =
     | 'operation_failed';     // Prospecting/CRM operation failed
 
 export interface ILinkedInAuditLog extends Document {
-    workspaceId: string;
+    userId: string;
     accountId: Types.ObjectId | null; // null for workspace-level events
     eventType: AuditEventType;
     /** Non-sensitive metadata. NEVER include tokens, cookies, or passwords. */
@@ -45,7 +45,7 @@ export interface ILinkedInAuditLogModel extends Model<ILinkedInAuditLog> {
      * Append an audit event. Never throws — logs to console on DB failure.
      */
     append(
-        workspaceId: string,
+        userId: string,
         accountId: Types.ObjectId | null,
         eventType: AuditEventType,
         metadata?: Record<string, unknown>
@@ -55,7 +55,7 @@ export interface ILinkedInAuditLogModel extends Model<ILinkedInAuditLog> {
      * Get recent events for an account.
      */
     getRecent(
-        workspaceId: string,
+        userId: string,
         accountId?: Types.ObjectId,
         limit?: number
     ): Promise<ILinkedInAuditLog[]>;
@@ -65,7 +65,7 @@ export interface ILinkedInAuditLogModel extends Model<ILinkedInAuditLog> {
 
 const LinkedInAuditLogSchema = new Schema<ILinkedInAuditLog>(
     {
-        workspaceId: {
+        userId: {
             type: String,
             required: true,
             index: true,
@@ -105,7 +105,7 @@ const LinkedInAuditLogSchema = new Schema<ILinkedInAuditLog>(
 // ── Indexes ───────────────────────────────────────────────────
 
 // Most common query: recent events for a workspace
-LinkedInAuditLogSchema.index({ workspaceId: 1, createdAt: -1 });
+LinkedInAuditLogSchema.index({ userId: 1, createdAt: -1 });
 
 // Events for a specific account
 LinkedInAuditLogSchema.index({ accountId: 1, createdAt: -1 });
@@ -116,13 +116,13 @@ LinkedInAuditLogSchema.index({ eventType: 1, createdAt: -1 });
 // ── Static Methods ────────────────────────────────────────────
 
 LinkedInAuditLogSchema.statics.append = async function (
-    workspaceId: string,
+    userId: string,
     accountId: Types.ObjectId | null,
     eventType: AuditEventType,
     metadata: Record<string, unknown> = {}
 ): Promise<void> {
     try {
-        await this.create({ workspaceId, accountId, eventType, metadata });
+        await this.create({ userId, accountId, eventType, metadata });
     } catch (err) {
         // Audit log failures must never crash the main flow
         console.error(`[AuditLog] ⚠️ Failed to write audit event '${eventType}':`, err);
@@ -130,11 +130,11 @@ LinkedInAuditLogSchema.statics.append = async function (
 };
 
 LinkedInAuditLogSchema.statics.getRecent = async function (
-    workspaceId: string,
+    userId: string,
     accountId?: Types.ObjectId,
     limit = 50
 ): Promise<ILinkedInAuditLog[]> {
-    const filter: Record<string, unknown> = { workspaceId };
+    const filter: Record<string, unknown> = { userId };
     if (accountId) filter.accountId = accountId;
 
     return this.find(filter)

@@ -26,7 +26,7 @@ export interface GeneratePostInput {
     pilar: string;
     formato: string;
     trendSignals?: ITrendSignal[];
-    workspaceId: string;
+    userId: string;
 }
 
 export interface GeneratePostResult {
@@ -231,7 +231,7 @@ class ContentGeneratorService {
         // Add top performing recent posts
         try {
             const topPosts = await ScheduledPost.find({
-                workspaceId: input.workspaceId,
+                userId: input.userId,
                 status: 'published',
                 'engagement.engagementRate': { $gte: 3 },
             })

@@ -25,13 +25,13 @@ import { LinkedInAuditLog } from '../../models/linkedin-audit-log.model';
 
 export class SessionExpiredError extends Error {
     public readonly accountId: string;
-    public readonly workspaceId: string;
+    public readonly userId: string;
 
-    constructor(accountId: string, workspaceId: string) {
-        super(`LinkedIn session expired for account ${accountId} in workspace ${workspaceId}`);
+    constructor(accountId: string, userId: string) {
+        super(`LinkedIn session expired for account ${accountId} in workspace ${userId}`);
         this.name = 'SessionExpiredError';
         this.accountId = accountId;
-        this.workspaceId = workspaceId;
+        this.userId = userId;
     }
 }
 
@@ -50,8 +50,8 @@ export class AccountDisabledError extends Error {
 }
 
 export class NoActiveAccountError extends Error {
-    constructor(workspaceId: string) {
-        super(`No active LinkedIn account for workspace: ${workspaceId}`);
+    constructor(userId: string) {
+        super(`No active LinkedIn account for workspace: ${userId}`);
         this.name = 'NoActiveAccountError';
     }
 }
@@ -73,7 +73,7 @@ export interface LinkedInCookie {
 // Stored in-memory (workspace → accountId).
 // On restart, the first call to getActiveAccount() will query the DB.
 
-const activeAccountCache = new Map<string, string>(); // workspaceId → accountId string
+const activeAccountCache = new Map<string, string>(); // userId → accountId string
 
 // ── Mutex per account ─────────────────────────────────────────
 // Prevents two concurrent cookie saves or session verifications
@@ -110,15 +110,15 @@ class SessionManager {
      * Creates a new LinkedIn account record (before first login).
      * Status starts as 'reauth_required' until cookies are saved.
      */
-    async createAccount(workspaceId: string, label: string): Promise<ILinkedInAccount> {
+    async createAccount(userId: string, label: string): Promise<ILinkedInAccount> {
         const account = await LinkedInAccount.create({
-            workspaceId,
+            userId,
             label,
             status: 'reauth_required' as AccountStatus,
         });
 
         await LinkedInAuditLog.append(
-            workspaceId,
+            userId,
             account._id as Types.ObjectId,
             'account_created',
             { label }
@@ -131,8 +131,8 @@ class SessionManager {
     /**
      * Lists all accounts for a workspace (encrypted fields excluded).
      */
-    async listAccounts(workspaceId: string): Promise<ILinkedInAccount[]> {
-        return LinkedInAccount.find({ workspaceId })
+    async listAccounts(userId: string): Promise<ILinkedInAccount[]> {
+        return LinkedInAccount.find({ userId })
             .sort({ lastUsedAt: -1 })
             .exec() as unknown as ILinkedInAccount[];
     }
@@ -140,9 +140,9 @@ class SessionManager {
     /**
      * Disables an account. Does not delete cookies (for audit trail).
      */
-    async disableAccount(workspaceId: string, accountId: string): Promise<void> {
+    async disableAccount(userId: string, accountId: string): Promise<void> {
         const account = await LinkedInAccount.findOneAndUpdate(
-            { _id: accountId, workspaceId },
+            { _id: accountId, userId },
             { status: 'disabled' as AccountStatus },
             { new: true }
         );
@@ -150,12 +150,12 @@ class SessionManager {
         if (!account) throw new AccountNotFoundError(accountId);
 
         // Clear active account cache if this was the active one
-        if (activeAccountCache.get(workspaceId) === accountId) {
-            activeAccountCache.delete(workspaceId);
+        if (activeAccountCache.get(userId) === accountId) {
+            activeAccountCache.delete(userId);
         }
 
         await LinkedInAuditLog.append(
-            workspaceId,
+            userId,
             new Types.ObjectId(accountId),
             'account_disabled',
             { label: account.label }
@@ -171,23 +171,23 @@ class SessionManager {
      * Prefers the in-memory cache, falls back to DB query.
      * Returns null if no active account is set.
      */
-    async getActiveAccount(workspaceId: string): Promise<ILinkedInAccount | null> {
-        const cachedId = activeAccountCache.get(workspaceId);
+    async getActiveAccount(userId: string): Promise<ILinkedInAccount | null> {
+        const cachedId = activeAccountCache.get(userId);
         if (cachedId) {
             const account = await LinkedInAccount.findOne({
                 _id: cachedId,
-                workspaceId,
+                userId,
                 status: 'active',
             }).exec();
             if (account) return account as ILinkedInAccount;
             // Cache is stale — clear it
-            activeAccountCache.delete(workspaceId);
+            activeAccountCache.delete(userId);
         }
 
         // Fall back to DB: most recently used active account
-        const account = await LinkedInAccount.findActive(workspaceId);
+        const account = await LinkedInAccount.findActive(userId);
         if (account) {
-            activeAccountCache.set(workspaceId, (account._id as Types.ObjectId).toString());
+            activeAccountCache.set(userId, (account._id as Types.ObjectId).toString());
         }
         return account as ILinkedInAccount | null;
     }
@@ -196,16 +196,16 @@ class SessionManager {
      * Sets the active account for a workspace.
      * Throws if the account doesn't exist or is disabled.
      */
-    async setActiveAccount(workspaceId: string, accountId: string): Promise<ILinkedInAccount> {
-        const account = await LinkedInAccount.findOne({ _id: accountId, workspaceId }).exec();
+    async setActiveAccount(userId: string, accountId: string): Promise<ILinkedInAccount> {
+        const account = await LinkedInAccount.findOne({ _id: accountId, userId }).exec();
         if (!account) throw new AccountNotFoundError(accountId);
         if (account.status === 'disabled') throw new AccountDisabledError(accountId);
 
-        const previousId = activeAccountCache.get(workspaceId);
-        activeAccountCache.set(workspaceId, accountId);
+        const previousId = activeAccountCache.get(userId);
+        activeAccountCache.set(userId, accountId);
 
         await LinkedInAuditLog.append(
-            workspaceId,
+            userId,
             new Types.ObjectId(accountId),
             'account_switch',
             {
@@ -261,7 +261,7 @@ class SessionManager {
             });
 
             await LinkedInAuditLog.append(
-                account.workspaceId,
+                account.userId,
                 account._id as Types.ObjectId,
                 'cookies_saved',
                 {
@@ -309,7 +309,7 @@ class SessionManager {
             });
 
             await LinkedInAuditLog.append(
-                account.workspaceId,
+                account.userId,
                 account._id as Types.ObjectId,
                 'cookies_loaded',
                 { cookieCount: cookies.length }
@@ -366,7 +366,7 @@ class SessionManager {
             });
 
             await LinkedInAuditLog.append(
-                account.workspaceId,
+                account.userId,
                 account._id as Types.ObjectId,
                 'session_verified',
                 { url: page.url() }
@@ -377,7 +377,7 @@ class SessionManager {
         } catch (err: any) {
             // Session is invalid — mark for re-auth
             await this.markReauthRequired(account, err.message);
-            throw new SessionExpiredError(accountId, account.workspaceId);
+            throw new SessionExpiredError(accountId, account.userId);
         }
     }
 
@@ -394,12 +394,12 @@ class SessionManager {
         });
 
         // Clear from active account cache
-        if (activeAccountCache.get(account.workspaceId) === accountId) {
-            activeAccountCache.delete(account.workspaceId);
+        if (activeAccountCache.get(account.userId) === accountId) {
+            activeAccountCache.delete(account.userId);
         }
 
         await LinkedInAuditLog.append(
-            account.workspaceId,
+            account.userId,
             account._id as Types.ObjectId,
             'reauth_required',
             { reason: reason ?? 'unknown' }
@@ -434,14 +434,14 @@ class SessionManager {
         await this.saveCookies(accountId, cookies);
 
         await LinkedInAuditLog.append(
-            account.workspaceId,
+            account.userId,
             account._id as Types.ObjectId,
             'auth_success',
             { cookieCount: cookies.length }
         );
 
         // Set as active account for this workspace
-        activeAccountCache.set(account.workspaceId, accountId);
+        activeAccountCache.set(account.userId, accountId);
 
         console.log(`[SessionManager] 🎉 Login success for account ${accountId}`);
     }
@@ -473,7 +473,7 @@ class SessionManager {
         }
 
         await LinkedInAuditLog.append(
-            account.workspaceId,
+            account.userId,
             account._id as Types.ObjectId,
             'session_restored',
             { cookieCount: cookies.length }
@@ -510,7 +510,7 @@ class SessionManager {
         }
 
         if (account.status === 'reauth_required') {
-            throw new SessionExpiredError(accountId, account.workspaceId);
+            throw new SessionExpiredError(accountId, account.userId);
         }
 
         // 2. Expiry check (fast — no network)
@@ -522,13 +522,13 @@ class SessionManager {
             if (msUntilExpiry <= 0) {
                 console.warn(`[SessionManager] ⏰ Session expired for account ${accountId} (expired ${Math.abs(hoursUntilExpiry).toFixed(1)}h ago)`);
                 await this.markReauthRequired(account, 'Cookie expiry date passed');
-                throw new SessionExpiredError(accountId, account.workspaceId);
+                throw new SessionExpiredError(accountId, account.userId);
             }
 
             if (hoursUntilExpiry < 24) {
                 console.warn(`[SessionManager] ⚠️ Session expiring soon for account ${accountId} (${hoursUntilExpiry.toFixed(1)}h remaining)`);
                 await LinkedInAuditLog.append(
-                    account.workspaceId,
+                    account.userId,
                     account._id as Types.ObjectId,
                     'session_expiring_soon',
                     { hoursRemaining: Math.round(hoursUntilExpiry) }
@@ -554,14 +554,14 @@ class SessionManager {
      * this resolves.
      *
      * @param accountId - The account that needs re-auth
-     * @param workspaceId - The workspace
+     * @param userId - The workspace
      * @param timeoutMs - Maximum wait time (default: 10 minutes)
      * @param pollIntervalMs - How often to check (default: 5 seconds)
      * @throws Error if timeout is reached without re-auth
      */
     async waitForReauth(
         accountId: string,
-        workspaceId: string,
+        userId: string,
         timeoutMs: number = 10 * 60 * 1000,
         pollIntervalMs: number = 5_000
     ): Promise<ILinkedInAccount> {
@@ -576,14 +576,14 @@ class SessionManager {
 
             const account = await LinkedInAccount.findOne({
                 _id: accountId,
-                workspaceId,
+                userId,
                 status: 'active',
             }).exec();
 
             if (account) {
                 console.log(`[SessionManager] ✅ Re-auth complete for account ${accountId}`);
                 await LinkedInAuditLog.append(
-                    workspaceId,
+                    userId,
                     new Types.ObjectId(accountId),
                     'session_restored',
                     { waitedMs: elapsed }
@@ -604,18 +604,18 @@ class SessionManager {
      *
      * @param page - The active Puppeteer page
      * @param newAccountId - The account to switch to
-     * @param workspaceId - The workspace
+     * @param userId - The workspace
      * @returns The new active account document
      * @throws SessionExpiredError if the new account's session is invalid
      */
     async switchAccount(
         page: Page,
         newAccountId: string,
-        workspaceId: string
+        userId: string
     ): Promise<ILinkedInAccount> {
         const newAccount = await LinkedInAccount.findOne({
             _id: newAccountId,
-            workspaceId,
+            userId,
         }).exec();
 
         if (!newAccount) throw new AccountNotFoundError(newAccountId);
@@ -627,7 +627,7 @@ class SessionManager {
         const restored = await this.restoreSession(page, newAccount as ILinkedInAccount);
 
         if (!restored) {
-            throw new SessionExpiredError(newAccountId, workspaceId);
+            throw new SessionExpiredError(newAccountId, userId);
         }
 
         // Navigate to feed and verify
@@ -639,13 +639,13 @@ class SessionManager {
         await this.ensureValidSession(page, newAccount as ILinkedInAccount);
 
         // Update active account pointer
-        activeAccountCache.set(workspaceId, newAccountId);
+        activeAccountCache.set(userId, newAccountId);
         await LinkedInAccount.findByIdAndUpdate(newAccountId, {
             lastUsedAt: new Date(),
         });
 
         await LinkedInAuditLog.append(
-            workspaceId,
+            userId,
             new Types.ObjectId(newAccountId),
             'account_switch',
             { label: newAccount.label }

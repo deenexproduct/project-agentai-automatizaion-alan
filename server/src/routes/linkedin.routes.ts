@@ -8,15 +8,19 @@ import { statePersistence } from '../services/linkedin/state-persistence.service
 const router = Router();
 
 // ── GET /status — Session & prospecting status ──────────────
-router.get('/status', (_req: Request, res: Response) => {
-    res.json(linkedinService.getStatus());
+router.get('/status', (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString() || 'default';
+    const tenant = linkedinService.getTenant(userId);
+    res.json(tenant.getStatus());
 });
 
 // ── POST /launch — Open browser, load cookies ──────────────
-router.post('/launch', async (_req: Request, res: Response) => {
+router.post('/launch', async (req: Request, res: Response) => {
     try {
-        await linkedinService.initialize();
-        res.json({ success: true, status: linkedinService.getStatus() });
+        const userId = req.user?._id?.toString() || 'default';
+        const tenant = linkedinService.getTenant(userId);
+        await tenant.initialize();
+        res.json({ success: true, status: tenant.getStatus() });
     } catch (err: any) {
         console.error('LinkedIn launch error:', err);
         res.status(500).json({ error: err.message || 'Failed to launch browser' });
@@ -27,12 +31,14 @@ router.post('/launch', async (_req: Request, res: Response) => {
 router.post('/start-prospecting', async (req: Request, res: Response) => {
     try {
         const { urls, sendNote, noteText } = req.body;
+        const userId = req.user?._id?.toString() || 'default';
+        const tenant = linkedinService.getTenant(userId);
 
         if (!urls || !Array.isArray(urls) || urls.length === 0) {
             return res.status(400).json({ error: 'urls must be a non-empty array of strings' });
         }
 
-        const started = await linkedinService.startProspecting({
+        const started = await tenant.startProspecting({
             urls,
             sendNote: !!sendNote,
             noteText: noteText || undefined,
@@ -50,34 +56,45 @@ router.post('/start-prospecting', async (req: Request, res: Response) => {
 });
 
 // ── POST /pause — Pause prospecting ────────────────────────
-router.post('/pause', async (_req: Request, res: Response) => {
-    await linkedinService.pause();
+router.post('/pause', async (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString() || 'default';
+    const tenant = linkedinService.getTenant(userId);
+    await tenant.pause();
     res.json({ success: true, message: 'Prospecting paused' });
 });
 
 // ── POST /resume — Resume prospecting ──────────────────────
-router.post('/resume', async (_req: Request, res: Response) => {
-    await linkedinService.resume();
+router.post('/resume', async (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString() || 'default';
+    const tenant = linkedinService.getTenant(userId);
+    await tenant.resume();
     res.json({ success: true, message: 'Prospecting resumed' });
 });
 
 // ── POST /stop — Stop prospecting completely ───────────────
-router.post('/stop', async (_req: Request, res: Response) => {
-    const result = await linkedinService.stop();
-    res.json({ 
-        success: true, 
+router.post('/stop', async (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString() || 'default';
+    const tenant = linkedinService.getTenant(userId);
+    const result = await tenant.stop();
+    res.json({
+        success: true,
         message: 'Prospecting stopped',
-        deletedCount: result.deletedCount 
+        deletedCount: result.deletedCount
     });
 });
 
 // ── GET /progress — Current progress (polling) ─────────────
-router.get('/progress', (_req: Request, res: Response) => {
-    res.json(linkedinService.getProgress());
+router.get('/progress', (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString() || 'default';
+    const tenant = linkedinService.getTenant(userId);
+    res.json(tenant.getProgress());
 });
 
 // ── GET /progress/stream — SSE real-time progress ──────────
 router.get('/progress/stream', (req: Request, res: Response) => {
+    const userId = req.user?._id?.toString() || 'default';
+    const tenant = linkedinService.getTenant(userId);
+
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -86,7 +103,7 @@ router.get('/progress/stream', (req: Request, res: Response) => {
     });
 
     // Send initial state
-    const initial = linkedinService.getProgress();
+    const initial = tenant.getProgress();
     res.write(`data: ${JSON.stringify(initial)}\n\n`);
 
     // Listen for progress events
@@ -114,21 +131,21 @@ router.get('/progress/stream', (req: Request, res: Response) => {
         res.write(`data: ${JSON.stringify({ type: 'session-expired', ...data })}\n\n`);
     };
 
-    linkedinService.on('progress', onProgress);
-    linkedinService.on('complete', onComplete);
-    linkedinService.on('paused', onPaused);
-    linkedinService.on('resumed', onResumed);
-    linkedinService.on('captcha', onCaptcha);
-    linkedinService.on('session-expired', onSessionExpired);
+    tenant.on('progress', onProgress);
+    tenant.on('complete', onComplete);
+    tenant.on('paused', onPaused);
+    tenant.on('resumed', onResumed);
+    tenant.on('captcha', onCaptcha);
+    tenant.on('session-expired', onSessionExpired);
 
     // Clean up on client disconnect
     req.on('close', () => {
-        linkedinService.off('progress', onProgress);
-        linkedinService.off('complete', onComplete);
-        linkedinService.off('paused', onPaused);
-        linkedinService.off('resumed', onResumed);
-        linkedinService.off('captcha', onCaptcha);
-        linkedinService.off('session-expired', onSessionExpired);
+        tenant.off('progress', onProgress);
+        tenant.off('complete', onComplete);
+        tenant.off('paused', onPaused);
+        tenant.off('resumed', onResumed);
+        tenant.off('captcha', onCaptcha);
+        tenant.off('session-expired', onSessionExpired);
     });
 });
 
@@ -181,7 +198,7 @@ router.post('/state/restore', async (req: Request, res: Response) => {
     if (!backupFile) {
         return res.status(400).json({ error: 'backupFile is required' });
     }
-    
+
     const state = await statePersistence.restoreFromBackup(backupFile);
     if (state) {
         res.json({ success: true, message: 'State restored', batchId: state.batchId });

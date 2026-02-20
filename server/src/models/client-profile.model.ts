@@ -59,7 +59,7 @@ export interface IClientBusiness {
 // ── Main Interface ────────────────────────────────────────────
 
 export interface IClientProfile extends Document {
-    workspaceId: string;
+    userId: string;
     identidad: IClientIdentity;
     audiencia: IClientAudience;
     tono: IClientTone;
@@ -75,7 +75,7 @@ export interface IClientProfileModel extends Model<IClientProfile> {
     /**
      * Get the profile for a workspace (there should be exactly one).
      */
-    getForWorkspace(workspaceId: string): Promise<IClientProfile | null>;
+    getForWorkspace(userId: string): Promise<IClientProfile | null>;
 }
 
 // ── Schema ────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ const ClientBusinessSchema = new Schema<IClientBusiness>(
 
 const ClientProfileSchema = new Schema<IClientProfile>(
     {
-        workspaceId: {
+        userId: {
             type: String,
             required: true,
             unique: true,
@@ -170,9 +170,9 @@ const ClientProfileSchema = new Schema<IClientProfile>(
 // ── Static Methods ────────────────────────────────────────────
 
 ClientProfileSchema.statics.getForWorkspace = async function (
-    workspaceId: string
+    userId: string
 ): Promise<IClientProfile | null> {
-    return this.findOne({ workspaceId }).exec();
+    return this.findOne({ userId }).exec();
 };
 
 // ── Export ────────────────────────────────────────────────────

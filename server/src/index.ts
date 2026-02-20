@@ -15,6 +15,8 @@ import linkedinCrmRoutes from './routes/linkedin-crm.routes';
 import linkedinAccountsRoutes from './routes/linkedin-accounts.routes';
 import linkedinPostsRoutes from './routes/linkedin-posts.routes';
 import linkedinPublishingConfigRoutes from './routes/linkedin-publishing-config.routes';
+import authRoutes from './routes/auth.routes';
+import { authMiddleware } from './middleware/auth.middleware';
 import { whatsappService } from './services/whatsapp.service';
 import { validateEncryptionKey } from './utils/crypto.service';
 
@@ -194,26 +196,29 @@ app.put('/api/settings', (req, res) => {
   res.json(req.body);
 });
 
+// Mount Auth routes
+app.use('/api/auth', authRoutes);
+
 // Mount WhatsApp routes
-app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/whatsapp', authMiddleware, whatsappRoutes);
 
 // Mount Resumidor routes
-app.use('/api/resumidor', resumidorRoutes);
+app.use('/api/resumidor', authMiddleware, resumidorRoutes);
 
 // Optimizer routes
-app.use('/api/optimizer', optimizerRoutes);
+app.use('/api/optimizer', authMiddleware, optimizerRoutes);
 
 // LinkedIn routes
-app.use('/api/linkedin', linkedinRoutes);
+app.use('/api/linkedin', authMiddleware, linkedinRoutes);
 
 // LinkedIn CRM routes
-app.use('/api/linkedin/crm', linkedinCrmRoutes);
+app.use('/api/linkedin/crm', authMiddleware, linkedinCrmRoutes);
 console.log('📊 LinkedIn CRM routes mounted at /api/linkedin/crm');
 
 // LinkedIn Accounts routes (multi-account management)
-app.use('/api/linkedin/accounts', linkedinAccountsRoutes);
-app.use('/api/linkedin/posts', linkedinPostsRoutes);
-app.use('/api/linkedin/publishing', linkedinPublishingConfigRoutes);
+app.use('/api/linkedin/accounts', authMiddleware, linkedinAccountsRoutes);
+app.use('/api/linkedin/posts', authMiddleware, linkedinPostsRoutes);
+app.use('/api/linkedin/publishing', authMiddleware, linkedinPublishingConfigRoutes);
 console.log('🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts');
 
 // Start server
@@ -256,8 +261,8 @@ async function startServer() {
     console.log(`   GET  /api/linkedin/progress`);
     console.log(`   GET  /api/linkedin/progress/stream`);
 
-    // Initialize WhatsApp after server is ready
-    whatsappService.initialize().catch((err) => {
+    // Initialize active WhatsApp tenants after server is ready (based on pending scheduled messages)
+    whatsappService.initializeActiveTenants().catch((err) => {
       console.error('WhatsApp initialization error:', err);
     });
   });
@@ -268,8 +273,8 @@ async function startServer() {
   const shutdown = async (signal: string) => {
     console.log(`\n🛑 Received ${signal} — shutting down gracefully...`);
     try {
-      await whatsappService.destroy();
-      console.log('✅ WhatsApp service destroyed cleanly');
+      await whatsappService.destroyAll();
+      console.log('✅ All WhatsApp tenants destroyed cleanly');
     } catch (err) {
       console.error('⚠️ Error during shutdown:', err);
     }
