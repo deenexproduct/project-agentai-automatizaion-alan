@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft, Sparkles, MessageCircle, Mic, Puzzle } from 'lucide-react';
+import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, LayoutDashboard, Database, CheckSquare, Columns3 } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
+import CRMDashboard from '../crm/CRMDashboard';
+import PipelineBoard from '../crm/PipelineBoard';
+import CompanyList from '../crm/CompanyList';
+import ContactList from '../crm/ContactList';
+import ContactDrawerV2 from './ContactDrawerV2';
+import TaskList from '../crm/TaskList';
+import PartnerList from '../crm/PartnerList';
 import CRMPage from './CRMPage';
 import ConfigPage from './ConfigPage';
 import PublicacionesPage from './PublicacionesPage';
@@ -10,35 +17,56 @@ import WhatsAppPage from './WhatsAppPage';
 import ExtensionPage from './ExtensionPage';
 import TeamPermissions from '../team/TeamPermissions';
 
-type SidebarTab = 'crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team';
+type SidebarTab = 'dashboard' | 'pipeline' | 'companies' | 'contacts' | 'tasks' | 'partners' | 'prospecting-crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team';
 
 interface SidebarItem {
     id: SidebarTab;
     Icon: React.ElementType;
     label: string;
     disabled?: boolean;
+    accentColor?: string;
 }
 
-const linkedInItems: SidebarItem[] = [
-    { id: 'crm', Icon: BarChart3, label: 'CRM' },
-    { id: 'publicaciones', Icon: Sparkles, label: 'Publicaciones' },
-    { id: 'prospecting', Icon: Target, label: 'Prospecting' },
-    { id: 'voice', Icon: Mic, label: 'Transcriptor' },
-    { id: 'team', Icon: Users, label: 'Equipo' },
-    { id: 'comments', Icon: MessageSquare, label: 'Comentarios', disabled: true },
-    { id: 'requests', Icon: Users, label: 'Solicitudes', disabled: true },
-    { id: 'config', Icon: Settings, label: 'Configuración' },
+const crmGroup: SidebarItem[] = [
+    { id: 'dashboard', Icon: LayoutDashboard, label: 'Dashboard CRM' },
+    { id: 'pipeline', Icon: Columns3, label: 'Pipeline Deals' },
+    { id: 'tasks', Icon: CheckSquare, label: 'Tareas y Actividad' },
+    { id: 'companies', Icon: Building2, label: 'Empresas' },
+    { id: 'contacts', Icon: User, label: 'Contactos' },
+    { id: 'partners', Icon: Handshake, label: 'Partners Oficiales' },
 ];
 
-const whatsappItem: SidebarItem = { id: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp' };
-const extensionItem: SidebarItem = { id: 'extension', Icon: Puzzle, label: 'Extensión' };
+const linkedinGroup: SidebarItem[] = [
+    { id: 'prospecting-crm', Icon: Target, label: 'Prospecting CRM', accentColor: '#3b82f6' },
+    { id: 'prospecting', Icon: Target, label: 'Prospecting Bots', accentColor: '#3b82f6' },
+    { id: 'publicaciones', Icon: Sparkles, label: 'Publicaciones AI', accentColor: '#3b82f6' },
+    { id: 'comments', Icon: MessageSquare, label: 'Comentarios', disabled: true, accentColor: '#3b82f6' },
+    { id: 'requests', Icon: Users, label: 'Solicitudes', disabled: true, accentColor: '#3b82f6' },
+];
+
+const whatsappGroup: SidebarItem[] = [
+    { id: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp', accentColor: '#25D366' },
+];
+
+const audioGroup: SidebarItem[] = [
+    { id: 'voice', Icon: Mic, label: 'Transcriptor de Audio', accentColor: '#f59e0b' },
+];
+
+const extensionGroup: SidebarItem[] = [
+    { id: 'extension', Icon: Puzzle, label: 'Extensión Web', accentColor: '#ec4899' },
+];
+
+const bottomGroup: SidebarItem[] = [
+    { id: 'team', Icon: Users, label: 'Equipo' },
+    { id: 'config', Icon: Settings, label: 'Configuración Extensión', accentColor: '#ec4899' },
+];
 
 export default function LinkedInApp() {
     const { tab } = useParams<{ tab: string }>();
     const navigate = useNavigate();
 
-    // Default to 'crm' if no tab or invalid tab is provided
-    const activeTab = (tab as SidebarTab) || 'crm';
+    // Default to 'dashboard' if no tab or invalid tab is provided
+    const activeTab = (tab as SidebarTab) || 'dashboard';
 
     return (
         <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'linear-gradient(135deg, #f8f7ff 0%, #f0ecff 50%, #ede9fe 100%)' }}>
@@ -50,10 +78,13 @@ export default function LinkedInApp() {
                     background: 'linear-gradient(180deg, #1a0533 0%, #2d1054 100%)',
                 }}
             >
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex-1 flex flex-col items-center gap-2 overflow-y-auto w-full custom-scrollbar-sidebar pb-4" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+                    <style>{`
+                        .custom-scrollbar-sidebar::-webkit-scrollbar { display: none; }
+                    `}</style>
                     {/* Logo */}
                     <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 cursor-pointer"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 cursor-pointer shrink-0 mt-2"
                         style={{
                             background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
                             boxShadow: '0 0 20px rgba(168, 85, 247, 0.4)',
@@ -63,48 +94,45 @@ export default function LinkedInApp() {
                         <span className="text-white text-lg font-bold">in</span>
                     </div>
 
-                    {/* LinkedIn Nav Items */}
-                    {linkedInItems.map((item) => (
-                        <SidebarButton
-                            key={item.id}
-                            Icon={item.Icon}
-                            label={item.label}
-                            active={activeTab === item.id}
-                            disabled={item.disabled}
-                            onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)}
-                        />
+                    {/* CRM Group */}
+                    {crmGroup.map((item) => (
+                        <SidebarButton key={item.id} {...item} active={activeTab === item.id} onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)} />
                     ))}
 
-                    {/* Separator */}
-                    <div className="w-8 my-2" style={{ height: 1, background: 'rgba(255,255,255,0.12)' }} />
+                    <div className="w-8 my-1 shrink-0" style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
 
-                    {/* WhatsApp */}
-                    <SidebarButton
-                        Icon={whatsappItem.Icon}
-                        label={whatsappItem.label}
-                        active={activeTab === 'whatsapp'}
-                        onClick={() => navigate('/linkedin/whatsapp')}
-                        accentColor="#25D366"
-                    />
+                    {/* LinkedIn Group */}
+                    {linkedinGroup.map((item) => (
+                        <SidebarButton key={item.id} {...item} active={activeTab === item.id} onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)} />
+                    ))}
 
-                    {/* Chrome Extension */}
-                    <SidebarButton
-                        Icon={extensionItem.Icon}
-                        label={extensionItem.label}
-                        active={activeTab === 'extension'}
-                        onClick={() => navigate('/linkedin/extension')}
-                        accentColor="#3b82f6"
-                    />
+                    <div className="w-8 my-1 shrink-0" style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
+
+                    {/* WhatsApp Group */}
+                    {whatsappGroup.map((item) => (
+                        <SidebarButton key={item.id} {...item} active={activeTab === item.id} onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)} />
+                    ))}
+
+                    <div className="w-8 my-1 shrink-0" style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
+
+                    {/* Audio Group */}
+                    {audioGroup.map((item) => (
+                        <SidebarButton key={item.id} {...item} active={activeTab === item.id} onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)} />
+                    ))}
+
+                    <div className="w-8 my-1 shrink-0" style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
+
+                    {/* Extension Group */}
+                    {extensionGroup.map((item) => (
+                        <SidebarButton key={item.id} {...item} active={activeTab === item.id} onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)} />
+                    ))}
                 </div>
 
-                {/* Bottom: Back button */}
-                <div className="flex flex-col items-center gap-2">
-                    <SidebarButton
-                        Icon={ArrowLeft}
-                        label="Volver"
-                        active={false}
-                        onClick={() => navigate('/')}
-                    />
+                {/* Bottom: Back button & Config */}
+                <div className="flex flex-col items-center gap-2 pt-4 border-t border-white/10 w-full mt-auto mb-4">
+                    {bottomGroup.map((item) => (
+                        <SidebarButton key={item.id} {...item} active={activeTab === item.id} onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)} />
+                    ))}
                 </div>
             </aside>
 
@@ -127,27 +155,21 @@ export default function LinkedInApp() {
                                 WebkitTextFillColor: 'transparent',
                             }}
                         >
-                            {activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
-                                activeTab === 'extension' ? 'Deenex Comercial' : 'LinkedIn Automation'}
+                            {activeTab === 'dashboard' ? 'Dashboard CRM' :
+                                activeTab === 'pipeline' ? 'Pipeline de Ventas' :
+                                    activeTab === 'companies' ? 'Directorio de Empresas' :
+                                        activeTab === 'contacts' ? 'Agenda de Contactos' :
+                                            activeTab === 'partners' ? 'Partners Officiales' :
+                                                activeTab === 'tasks' ? 'Centro de Tareas' :
+                                                    activeTab === 'prospecting-crm' ? 'Prospecting CRM' :
+                                                        activeTab === 'publicaciones' ? 'Publicaciones AI' :
+                                                            activeTab === 'prospecting' ? 'Prospecting Bots' :
+                                                                activeTab === 'voice' ? 'Transcriptor de Audio' :
+                                                                    activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
+                                                                        activeTab === 'extension' ? 'Extensión Deenex' :
+                                                                            activeTab === 'team' ? 'Equipo y Permisos' : 'Configuración'}
                         </h1>
-                        <span className="text-xs px-2 py-1 rounded-full font-medium"
-                            style={{
-                                background: activeTab === 'whatsapp' ? 'rgba(37, 211, 102, 0.1)' :
-                                    activeTab === 'extension' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(124, 58, 237, 0.1)',
-                                color: activeTab === 'whatsapp' ? '#25D366' :
-                                    activeTab === 'extension' ? '#3b82f6' : '#7c3aed',
-                            }}
-                        >
-                            {activeTab === 'crm' ? 'CRM Pipeline' :
-                                activeTab === 'publicaciones' ? 'Publicaciones AI' :
-                                    activeTab === 'prospecting' ? 'Prospecting' :
-                                        activeTab === 'comments' ? 'Comentarios' :
-                                            activeTab === 'voice' ? 'VoiceCommand' :
-                                                activeTab === 'requests' ? 'Solicitudes' :
-                                                    activeTab === 'whatsapp' ? 'Mensajes Programados' :
-                                                        activeTab === 'extension' ? 'Extensión Chrome' :
-                                                            activeTab === 'team' ? 'Permisos del Equipo' : 'Config'}
-                        </span>
+
                     </div>
 
                     {/* Portal Target for Page-specific Header Actions */}
@@ -155,8 +177,14 @@ export default function LinkedInApp() {
                 </header>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto p-6" style={activeTab === 'voice' || activeTab === 'extension' ? { padding: 0 } : {}}>
-                    {activeTab === 'crm' && <CRMPage />}
+                <div className="flex-1 overflow-y-auto p-6" style={activeTab === 'voice' || activeTab === 'extension' || activeTab === 'dashboard' || activeTab === 'pipeline' || activeTab === 'companies' || activeTab === 'contacts' || activeTab === 'partners' || activeTab === 'tasks' || activeTab === 'prospecting-crm' ? { padding: '0 24px' } : {}}>
+                    {activeTab === 'dashboard' && <CRMDashboard />}
+                    {activeTab === 'pipeline' && <PipelineBoard />}
+                    {activeTab === 'companies' && <CompanyList />}
+                    {activeTab === 'contacts' && <ContactList />}
+                    {activeTab === 'partners' && <PartnerList />}
+                    {activeTab === 'tasks' && <TaskList />}
+                    {activeTab === 'prospecting-crm' && <CRMPage />}
                     {activeTab === 'publicaciones' && <PublicacionesPage />}
                     {activeTab === 'prospecting' && <ProspectingPage />}
                     {activeTab === 'config' && <ConfigPage />}

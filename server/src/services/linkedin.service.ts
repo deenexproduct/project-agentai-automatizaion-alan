@@ -574,6 +574,62 @@ export class LinkedInTenant extends EventEmitter {
         return true;
     }
 
+    /**
+     * Injects a URL into the prospecting queue.
+     * If the bot is already running, it adds it to the end of the queue dynamically.
+     * If it's not running, it starts a new prospecting session for just this URL.
+     */
+    async enqueueUrl(url: string, noteText?: string): Promise<void> {
+        const normalizedUrl = this.normalizeUrl(url);
+
+        if (this.isRunning) {
+            // Check if already in queue
+            const exists = this.profiles.some(p => this.normalizeUrl(p.url) === normalizedUrl);
+            if (!exists) {
+                console.log(`\n➕ [Hot-Inject] Adding ${normalizedUrl} to running prospecting queue`);
+                this.profiles.push({
+                    index: this.profiles.length,
+                    url: normalizedUrl,
+                    status: 'pending',
+                    steps: { visit: 'pending', connect: 'pending', like: 'pending' },
+                });
+                // CRM registration
+                const batchId = this.currentBatchId?.split('T')[0] || new Date().toISOString().split('T')[0];
+                try {
+                    await LinkedInContact.findOneAndUpdate(
+                        { profileUrl: normalizedUrl },
+                        {
+                            $setOnInsert: {
+                                profileUrl: normalizedUrl,
+                                fullName: normalizedUrl.split('/in/')[1]?.replace(/\//g, '') || 'Pending',
+                                status: 'visitando',
+                                notes: [],
+                                experience: [],
+                                education: [],
+                                skills: [],
+                                prospectingBatchId: batchId,
+                            },
+                        },
+                        { upsert: true }
+                    );
+                } catch { /* ignore */ }
+
+                this.emitProgress();
+                // Optionally save state
+                await this.saveCurrentState({ urls: this.profiles.map(p => p.url), sendNote: !!noteText, noteText });
+            } else {
+                console.log(`\nℹ️ [Hot-Inject] ${normalizedUrl} is already in the queue. Ignored.`);
+            }
+        } else {
+            console.log(`\n🚀 [Cold-Start] Starting auto-prospecting for single URL: ${normalizedUrl}`);
+            await this.startProspecting({
+                urls: [normalizedUrl],
+                sendNote: !!noteText,
+                noteText
+            });
+        }
+    }
+
     // NEW: Save current state for crash recovery
     private async saveCurrentState(options: ProspectingOptions): Promise<void> {
         if (!this.currentBatchId) return;

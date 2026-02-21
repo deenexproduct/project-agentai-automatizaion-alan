@@ -16,6 +16,9 @@ import linkedinAccountsRoutes from './routes/linkedin-accounts.routes';
 import linkedinPostsRoutes from './routes/linkedin-posts.routes';
 import linkedinPublishingConfigRoutes from './routes/linkedin-publishing-config.routes';
 import authRoutes from './routes/auth.routes';
+import crmRoutes from './routes/crm.routes';
+import systemConfigRoutes from './routes/system-config.routes';
+import partnerRoutes from './routes/partner.routes';
 import { authMiddleware } from './middleware/auth.middleware';
 import { whatsappService } from './services/whatsapp.service';
 import { validateEncryptionKey } from './utils/crypto.service';
@@ -42,6 +45,10 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.use(cors());
+app.use((req, res, next) => {
+  console.log(`[REQUEST] ${req.method} ${req.url}`);
+  next();
+});
 app.use(express.json());
 
 import { Transcription } from './models/transcription.model';
@@ -240,6 +247,15 @@ app.use('/api/linkedin/accounts', authMiddleware, linkedinAccountsRoutes);
 app.use('/api/linkedin/posts', authMiddleware, linkedinPostsRoutes);
 app.use('/api/linkedin/publishing', authMiddleware, linkedinPublishingConfigRoutes);
 console.log('🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts');
+
+// CRM routes
+app.use('/api/crm', authMiddleware, crmRoutes);
+console.log('📋 CRM routes mounted at /api/crm');
+
+// System Settings & Partners
+app.use('/api/system-config', authMiddleware, systemConfigRoutes);
+app.use('/api/partners', authMiddleware, partnerRoutes);
+console.log('⚙️ System Config & Partners routes mounted');
 
 // Start server
 async function startServer() {

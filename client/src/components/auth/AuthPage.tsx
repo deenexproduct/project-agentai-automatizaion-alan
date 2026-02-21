@@ -12,7 +12,7 @@ export default function AuthPage() {
     const [email, setEmail] = useState('');
     const [otp, setOtp] = useState('');
 
-    const from = location.state?.from?.pathname || '/';
+    const from = location.state?.from?.pathname || '/linkedin/dashboard';
 
     // Redirect if already logged in (only after auth check is complete)
     useEffect(() => {

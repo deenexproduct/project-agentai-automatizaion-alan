@@ -204,4 +204,56 @@ router.post('/state/restore', async (req: Request, res: Response) => {
     }
 });
 
+// ── GET /scrape-profile — Quick scrape a single profile for CRM auto-fill ──
+router.get('/scrape-profile', async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?._id?.toString() || 'default';
+        const profileUrl = req.query.url as string;
+
+        if (!profileUrl || !profileUrl.includes('linkedin.com/in/')) {
+            return res.status(400).json({ error: 'A valid LinkedIn profile URL is required' });
+        }
+
+        const tenant = linkedinService.getTenant(userId);
+        const page = tenant.getActivePage();
+
+        if (!page) {
+            return res.status(503).json({ error: 'LinkedIn browser is not active. Please launch LinkedIn first.' });
+        }
+
+        const status = tenant.getStatus();
+        if (status.status !== 'logged-in') {
+            return res.status(503).json({ error: 'LinkedIn session is not logged in. Please log in first.' });
+        }
+
+        // Navigate to the profile
+        console.log(`🔍 Scraping profile for CRM auto-fill: ${profileUrl}`);
+        await page.goto(profileUrl, { waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {
+            // fallback — try load event only
+            return page.goto(profileUrl, { waitUntil: 'load', timeout: 15000 });
+        });
+
+        // Give page time to render
+        await new Promise(r => setTimeout(r, 2000));
+
+        const data = await tenant.scrapeProfileData(page);
+
+        if (!data) {
+            return res.status(404).json({ error: 'Could not extract profile data from this page.' });
+        }
+
+        res.json({
+            fullName: data.fullName,
+            headline: data.headline,
+            position: data.currentPosition || data.headline,
+            company: data.currentCompany,
+            profilePhotoUrl: data.profilePhotoUrl,
+            location: data.location,
+        });
+    } catch (err: any) {
+        console.error('Scrape profile error:', err.message);
+        res.status(500).json({ error: err.message || 'Failed to scrape profile' });
+    }
+});
+
 export default router;

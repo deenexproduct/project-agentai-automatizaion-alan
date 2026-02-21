@@ -1,0 +1,858 @@
+import { useState, useEffect, useRef } from 'react';
+import {
+    X, Phone, MessageCircle, Linkedin, Mail, Users, StickyNote,
+    CheckCircle2, Send, Clock, Pencil, Building2,
+    Loader2, PhoneOff, PhoneMissed, PhoneForwarded, CalendarClock,
+    Save, User, Briefcase, Tag, AlertTriangle,
+    ThumbsUp, ThumbsDown, Minus, Target, RotateCcw,
+    Eye, Reply, Ban, Star, Info, Bell, MessageSquare,
+    CheckCheck, CircleDot, HelpCircle, ArrowRightLeft, UserX, UserCheck, ArrowRight
+} from 'lucide-react';
+import {
+    getContact, createActivity, updateContact, deleteContact, createContact,
+    getCompanies, getSystemConfig, getPartners, addContactRole, addContactPosition,
+    ActivityData, ContactData, CompanyData, SystemConfig, PartnerData
+} from '../../services/crm.service';
+import AutocompleteInput from '../common/AutocompleteInput';
+import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
+
+// ── Activity Type Config ─────────────────────────────────────────
+
+type ActivityType = 'call' | 'whatsapp' | 'linkedin_message' | 'email' | 'meeting' | 'note' | 'referral';
+
+interface ActivityTypeOption {
+    value: ActivityType;
+    label: string;
+    icon: React.ElementType;
+    color: string;
+    bgColor: string;
+}
+
+const ACTIVITY_TYPES: ActivityTypeOption[] = [
+    { value: 'call', label: 'Llamada', icon: Phone, color: '#10b981', bgColor: '#ecfdf5' },
+    { value: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, color: '#25D366', bgColor: '#f0fdf4' },
+    { value: 'linkedin_message', label: 'LinkedIn', icon: Linkedin, color: '#0a66c2', bgColor: '#eff6ff' },
+    { value: 'email', label: 'Email', icon: Mail, color: '#f59e0b', bgColor: '#fffbeb' },
+    { value: 'meeting', label: 'Reunión', icon: Users, color: '#8b5cf6', bgColor: '#f5f3ff' },
+    { value: 'referral', label: 'Derivó', icon: ArrowRightLeft, color: '#ec4899', bgColor: '#fdf2f8' },
+    { value: 'note', label: 'Nota', icon: StickyNote, color: '#64748b', bgColor: '#f8fafc' },
+];
+
+const OUTCOMES_BY_TYPE: Record<ActivityType, { value: string; label: string; icon: React.ElementType }[]> = {
+    call: [
+        { value: 'no_answer', label: 'No respondió', icon: PhoneMissed },
+        { value: 'busy', label: 'Ocupado', icon: PhoneOff },
+        { value: 'talked', label: 'Hablamos', icon: PhoneForwarded },
+        { value: 'scheduled_callback', label: 'Callback agendado', icon: CalendarClock },
+    ],
+    whatsapp: [
+        { value: 'sent', label: 'Enviado', icon: Send },
+        { value: 'read', label: 'Leído', icon: CheckCheck },
+        { value: 'replied', label: 'Respondió', icon: Reply },
+        { value: 'no_response', label: 'Sin respuesta', icon: CircleDot },
+    ],
+    linkedin_message: [
+        { value: 'sent', label: 'Enviado', icon: Send },
+        { value: 'accepted', label: 'Aceptó conexión', icon: CheckCircle2 },
+        { value: 'replied', label: 'Respondió', icon: Reply },
+        { value: 'pending', label: 'Pendiente', icon: Clock },
+        { value: 'ignored', label: 'Sin respuesta', icon: CircleDot },
+    ],
+    email: [
+        { value: 'sent', label: 'Enviado', icon: Send },
+        { value: 'opened', label: 'Abierto', icon: Eye },
+        { value: 'replied', label: 'Respondió', icon: Reply },
+        { value: 'bounced', label: 'Rebotado', icon: Ban },
+        { value: 'no_response', label: 'Sin respuesta', icon: CircleDot },
+    ],
+    meeting: [
+        { value: 'excelente', label: 'Excelente', icon: Star },
+        { value: 'buena', label: 'Buena', icon: ThumbsUp },
+        { value: 'regular', label: 'Regular', icon: Minus },
+        { value: 'mala', label: 'Mala', icon: ThumbsDown },
+        { value: 'objetivo_cumplido', label: 'Objetivo cumplido', icon: Target },
+        { value: 'revisarlo', label: 'Revisarlo', icon: RotateCcw },
+    ],
+    note: [
+        { value: 'info', label: 'Informativo', icon: Info },
+        { value: 'seguimiento', label: 'Seguimiento', icon: Bell },
+        { value: 'alerta', label: 'Alerta', icon: AlertTriangle },
+    ],
+    referral: [
+        { value: 'no_era_el', label: 'No era él', icon: UserX },
+        { value: 'no_sigue_proceso', label: 'No sigue el proceso', icon: Ban },
+        { value: 'derivo_otro_contacto', label: 'Derivó a otro contacto', icon: ArrowRight },
+        { value: 'derivo_otra_area', label: 'Derivó a otra área', icon: ArrowRightLeft },
+        { value: 'contacto_correcto', label: 'Contacto correcto', icon: UserCheck },
+    ],
+};
+
+// Flat lookup for timeline outcome labels
+const ALL_OUTCOMES = Object.values(OUTCOMES_BY_TYPE).flat();
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+function formatActivityTime(dateStr: string): string {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    const time = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    if (isToday) return `Hoy ${time}`;
+    if (isYesterday) return `Ayer ${time}`;
+    return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) + ` ${time}`;
+}
+
+function getActivityIcon(type: string) {
+    const found = ACTIVITY_TYPES.find(t => t.value === type);
+    if (found) return found;
+    return { value: 'note' as ActivityType, label: 'Tarea', icon: CheckCircle2, color: '#10b981', bgColor: '#ecfdf5' };
+}
+
+// ── Props ────────────────────────────────────────────────────────
+
+interface Props {
+    contactId: string | null;
+    contactPreview?: ContactData | null;
+    open: boolean;
+    onClose: () => void;
+    onSaved?: (contact: ContactData & { _deleted?: boolean }) => void;
+}
+
+type DrawerTab = 'datos' | 'actividad';
+
+// ── Component ────────────────────────────────────────────────────
+
+export default function ContactActivityDrawer({ contactId, contactPreview, open, onClose, onSaved }: Props) {
+    const [activeTab, setActiveTab] = useState<DrawerTab>('datos');
+    const [contact, setContact] = useState<ContactData | null>(null);
+    const [activities, setActivities] = useState<ActivityData[]>([]);
+    const [loadingContact, setLoadingContact] = useState(false);
+
+    // ── Activity form state ──
+    const [showActivityForm, setShowActivityForm] = useState(false);
+    const [selectedType, setSelectedType] = useState<ActivityType>('call');
+    const [actDescription, setActDescription] = useState('');
+    const [outcome, setOutcome] = useState('');
+    const [savingActivity, setSavingActivity] = useState(false);
+
+    // ── Contact form state ──
+    const [formData, setFormData] = useState<Partial<ContactData>>({});
+    const [companies, setCompanies] = useState<CompanyData[]>([]);
+    const [companySearch, setCompanySearch] = useState('');
+    const [config, setConfig] = useState<SystemConfig | null>(null);
+    const [partners, setPartners] = useState<PartnerData[]>([]);
+    const [savingContact, setSavingContact] = useState(false);
+    const [extractingData, setExtractingData] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+    const drawerRef = useRef<HTMLDivElement>(null);
+    const descRef = useRef<HTMLTextAreaElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    // ── Load contact detail + activities ──
+    useEffect(() => {
+        if (!open || !contactId) return;
+        setLoadingContact(true);
+        getContact(contactId)
+            .then((data) => {
+                const c = data as ContactData;
+                setContact(c);
+                setActivities((data as any).activities || []);
+                // Init form data
+                setFormData({
+                    fullName: c.fullName || '',
+                    position: c.position || '',
+                    role: c.role || '',
+                    channel: c.channel || 'linkedin',
+                    email: c.email || '',
+                    phone: c.phone || '',
+                    linkedInProfileUrl: c.linkedInProfileUrl || '',
+                    profilePhotoUrl: c.profilePhotoUrl || '',
+                    company: c.company || undefined,
+                    tags: c.tags || [],
+                });
+                setCompanySearch(c.company?.name || '');
+            })
+            .catch(console.error)
+            .finally(() => setLoadingContact(false));
+    }, [open, contactId]);
+
+    // ── Load system config + partners ──
+    useEffect(() => {
+        if (!open) return;
+        Promise.all([getSystemConfig(), getPartners()])
+            .then(([cfg, parts]) => {
+                setConfig(cfg);
+                setPartners(parts.partners);
+            })
+            .catch(console.error);
+    }, [open]);
+
+    // ── Load companies for autocomplete ──
+    useEffect(() => {
+        if (!open || activeTab !== 'datos') return;
+        const timeoutId = setTimeout(async () => {
+            try {
+                const res = await getCompanies({ search: companySearch, limit: 10 });
+                setCompanies(res.companies);
+            } catch { /* ignore */ }
+        }, 300);
+        return () => clearTimeout(timeoutId);
+    }, [companySearch, open, activeTab]);
+
+    // Reset on close
+    useEffect(() => {
+        if (!open) {
+            setActiveTab('datos');
+            setShowActivityForm(false);
+            setActDescription('');
+            setOutcome('');
+            setShowDeleteConfirm(false);
+        }
+    }, [open]);
+
+    // Auto-extract LinkedIn data
+    useEffect(() => {
+        const url = formData.linkedInProfileUrl;
+        if (!url || !url.includes('linkedin.com/in/')) return;
+        const timeoutId = setTimeout(async () => {
+            try {
+                setExtractingData(true);
+                const { default: api } = await import('../../lib/axios');
+                const res = await api.get('/linkedin/scrape-profile', { params: { url } });
+                const data = res.data;
+                const nextData: Partial<ContactData> = {};
+                if (data.profilePhotoUrl && !formData.profilePhotoUrl) nextData.profilePhotoUrl = data.profilePhotoUrl;
+                if (data.fullName && !formData.fullName) nextData.fullName = data.fullName;
+                if (data.position && !formData.position) nextData.position = data.position;
+                if (Object.keys(nextData).length > 0) setFormData(prev => ({ ...prev, ...nextData }));
+            } catch (err: any) {
+                console.warn('Error auto-extracting LinkedIn data:', err?.response?.data?.error || err.message);
+            } finally {
+                setExtractingData(false);
+            }
+        }, 1500);
+        return () => clearTimeout(timeoutId);
+    }, [formData.linkedInProfileUrl]);
+
+    // Focus activity description
+    useEffect(() => {
+        if (showActivityForm && descRef.current) setTimeout(() => descRef.current?.focus(), 200);
+    }, [showActivityForm]);
+
+    // ESC to close
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [open, onClose]);
+
+    // ── Handlers ──
+
+    const handleSaveContact = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSavingContact(true);
+        try {
+            if (formData.role && config && !config.contactRoles.includes(formData.role)) {
+                await addContactRole(formData.role);
+            }
+            const payload: any = { ...formData, company: formData.company?._id as any };
+            if (payload.partner === '' || payload.channel !== 'partners') payload.partner = undefined;
+            if (payload.partner && typeof payload.partner === 'object' && '_id' in payload.partner) {
+                payload.partner = (payload.partner as any)._id;
+            }
+
+            let result;
+            if (contactId) {
+                result = await updateContact(contactId, payload);
+            } else {
+                result = await createContact(payload);
+            }
+            setContact(result);
+            onSaved?.(result);
+            onClose();
+        } catch (error) {
+            console.error('Error saving contact:', error);
+        } finally {
+            setSavingContact(false);
+        }
+    };
+
+    const handleSubmitActivity = async () => {
+        if (!actDescription.trim() || !contactId) return;
+        setSavingActivity(true);
+        try {
+            const newActivity = await createActivity({
+                type: selectedType,
+                description: actDescription.trim(),
+                outcome: outcome || undefined,
+                contact: contactId,
+                company: contact?.company?._id || undefined,
+            } as any);
+            setActivities(prev => [newActivity, ...prev]);
+            setActDescription('');
+            setOutcome('');
+            setShowActivityForm(false);
+            if (scrollRef.current) scrollRef.current.scrollTop = 0;
+        } catch (err) {
+            console.error('Failed to create activity:', err);
+        } finally {
+            setSavingActivity(false);
+        }
+    };
+
+    const handleDeleteContact = async () => {
+        if (!contactId) return;
+        try {
+            await deleteContact(contactId);
+            onSaved?.({ ...contact, _deleted: true } as any);
+            setShowDeleteConfirm(false);
+            onClose();
+        } catch (error) {
+            console.error('Error al eliminar contacto:', error);
+        }
+    };
+
+    const handleBackdropClick = (e: React.MouseEvent) => {
+        if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) onClose();
+    };
+
+    const handleSelectCompany = (comp: CompanyData) => {
+        setFormData({ ...formData, company: { _id: comp._id, name: comp.name } as any });
+        setCompanySearch(comp.name);
+    };
+
+    const displayContact = contact || contactPreview;
+
+    if (!open) return null;
+
+    return (
+        <div
+            onClick={handleBackdropClick}
+            className="fixed inset-0 z-[100] flex justify-end"
+            style={{
+                background: 'rgba(15, 23, 42, 0.4)',
+                backdropFilter: 'blur(8px)',
+                animation: 'fadeIn 0.3s ease-out',
+            }}
+        >
+            <div
+                ref={drawerRef}
+                className="h-full w-[480px] max-w-[100vw] bg-white/90 backdrop-blur-2xl border-l border-white/60 flex flex-col shadow-[-20px_0_40px_rgba(30,27,75,0.1)] relative"
+                style={{ animation: 'slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}
+            >
+                {/* Decorative Edge */}
+                <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-fuchsia-500/50 via-violet-500/50 to-transparent" />
+
+                {/* ── Header ───────────────────────────────── */}
+                <div className="shrink-0 p-5 pb-0 bg-white/50 backdrop-blur-md border-b border-slate-200/50">
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200/80 flex items-center justify-center overflow-hidden shadow-sm">
+                                {displayContact?.profilePhotoUrl ? (
+                                    <img src={displayContact.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="font-black text-violet-500 text-lg">
+                                        {displayContact?.fullName?.substring(0, 2).toUpperCase() || '??'}
+                                    </span>
+                                )}
+                            </div>
+                            <div>
+                                <h2 className="text-[17px] font-bold text-slate-800 leading-tight">
+                                    {displayContact?.fullName || 'Cargando...'}
+                                </h2>
+                                <p className="text-[12px] text-slate-500 font-medium mt-0.5">
+                                    {displayContact?.position || 'Sin cargo'}
+                                    {displayContact?.company && (
+                                        <span className="text-slate-400"> · {displayContact.company.name}</span>
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="w-8 h-8 rounded-[10px] flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700 bg-white border border-slate-200 shadow-sm"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="flex gap-1 bg-slate-100/80 rounded-xl p-1">
+                        <button
+                            onClick={() => setActiveTab('datos')}
+                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'datos'
+                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            <Pencil size={13} className="inline mr-1.5 -mt-0.5" />
+                            Datos
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('actividad')}
+                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'actividad'
+                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            <Clock size={13} className="inline mr-1.5 -mt-0.5" />
+                            Actividad
+                            {activities.length > 0 && (
+                                <span className="ml-1.5 text-[10px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full font-bold">
+                                    {activities.length}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                </div>
+
+                {/* ── Tab Content ───────────────────────────── */}
+
+                {activeTab === 'datos' ? (
+                    /* ════════════ DATOS TAB ════════════ */
+                    <form onSubmit={handleSaveContact} className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-6 space-y-5 hidden-scrollbar">
+                            {loadingContact ? (
+                                <div className="flex items-center justify-center py-16">
+                                    <Loader2 size={28} className="animate-spin text-violet-400" />
+                                </div>
+                            ) : (
+                                <>
+                                    {/* LinkedIn Auto-Fill */}
+                                    <div className="space-y-2 p-4 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 rounded-[16px] border border-blue-100 shadow-sm relative overflow-hidden">
+                                        <label className="text-[12px] font-bold text-blue-800 flex items-center justify-between uppercase tracking-wide">
+                                            <span className="flex items-center gap-1.5">
+                                                <Linkedin size={13} className="text-blue-600" />
+                                                LinkedIn (Auto-Completado)
+                                            </span>
+                                            {extractingData && (
+                                                <span className="text-[10px] font-bold text-blue-600 bg-blue-100/80 px-2 py-1 rounded-full animate-pulse flex items-center gap-1.5 border border-blue-200">
+                                                    <Loader2 size={10} className="animate-spin" /> Procesando...
+                                                </span>
+                                            )}
+                                        </label>
+                                        <input
+                                            type="url"
+                                            value={formData.linkedInProfileUrl || ''}
+                                            onChange={(e) => setFormData({ ...formData, linkedInProfileUrl: e.target.value })}
+                                            placeholder="Pegá la URL para auto-completar..."
+                                            className="w-full px-3 py-2.5 bg-white/80 border border-blue-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                        />
+                                    </div>
+
+                                    {/* Name */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                            <User size={13} className="text-fuchsia-500" /> Nombre Completo *
+                                        </label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={formData.fullName || ''}
+                                            onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                                            placeholder="Ej. Juan Pérez"
+                                            className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                        />
+                                    </div>
+
+                                    {/* Position */}
+                                    <div className="space-y-1.5">
+                                        <CreatableAutocompleteInput
+                                            label="Cargo"
+                                            icon={<Briefcase size={13} className="text-amber-500" />}
+                                            placeholder="Ej. Gerente de Ventas"
+                                            value={formData.position || ''}
+                                            onChangeSearch={(val) => setFormData(prev => ({ ...prev, position: val }))}
+                                            options={config?.contactPositions?.map(p => ({ id: p, title: p })) || []}
+                                            onSelect={(opt) => setFormData(prev => ({ ...prev, position: opt.title }))}
+                                            onCreate={async (newTitle) => {
+                                                await addContactPosition(newTitle);
+                                                setConfig(prev => prev ? { ...prev, contactPositions: [...prev.contactPositions, newTitle] } : null);
+                                            }}
+                                            colorTheme="amber"
+                                        />
+                                    </div>
+
+                                    {/* Company */}
+                                    <div className="space-y-1.5">
+                                        <AutocompleteInput
+                                            label="Empresa"
+                                            icon={<Building2 size={13} className="text-blue-500" />}
+                                            placeholder="Buscar empresa..."
+                                            value={companySearch}
+                                            onChangeSearch={(val) => { setCompanySearch(val); setFormData({ ...formData, company: undefined }); }}
+                                            options={companies.map(c => ({ _id: c._id, title: c.name, subtitle: c.sector || c.website, data: c }))}
+                                            onSelect={(opt) => handleSelectCompany(opt.data)}
+                                            colorTheme="indigo"
+                                        />
+                                    </div>
+
+                                    {/* Role + Channel */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <CreatableAutocompleteInput
+                                                label="Rol de Compra"
+                                                icon={<Tag size={13} className="text-slate-500" />}
+                                                placeholder="Ej. Decisor"
+                                                value={formData.role || ''}
+                                                onChangeSearch={(val) => setFormData(prev => ({ ...prev, role: val }))}
+                                                options={config?.contactRoles?.map(r => ({ id: r, title: r })) || []}
+                                                onSelect={(opt) => setFormData(prev => ({ ...prev, role: opt.title }))}
+                                                onCreate={async (newTitle) => {
+                                                    await addContactRole(newTitle);
+                                                    setConfig(prev => prev ? { ...prev, contactRoles: [...prev.contactRoles, newTitle] } : null);
+                                                }}
+                                                colorTheme="violet"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[12px] font-bold text-slate-700 uppercase tracking-wide">Canal de Origen</label>
+                                            <select
+                                                value={formData.channel || 'linkedin'}
+                                                onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
+                                                className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[13px] font-medium text-slate-700 appearance-none cursor-pointer"
+                                            >
+                                                <option value="linkedin">LinkedIn</option>
+                                                <option value="whatsapp">WhatsApp</option>
+                                                <option value="email">Email</option>
+                                                <option value="phone">Teléfono</option>
+                                                <option value="partners">Partners</option>
+                                                <option value="other">Otro</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Partner selector */}
+                                    {formData.channel === 'partners' && (
+                                        <div className="space-y-1.5 bg-emerald-50/50 p-4 rounded-[14px] border border-emerald-100">
+                                            <label className="text-[12px] font-bold text-emerald-800 flex items-center gap-1.5 uppercase tracking-wide">
+                                                <Building2 size={13} /> Seleccionar Partner
+                                            </label>
+                                            <select
+                                                value={(formData.partner as any)?._id || formData.partner || ''}
+                                                onChange={(e) => setFormData({ ...formData, partner: e.target.value as any })}
+                                                className="w-full px-3 py-2.5 bg-white/60 border border-emerald-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-emerald-500/10 text-[13px] font-medium text-slate-700 appearance-none cursor-pointer"
+                                            >
+                                                <option value="">Seleccione...</option>
+                                                {partners.map(p => (
+                                                    <option key={p._id} value={p._id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Photo URL */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                            <User size={13} className="text-pink-500" /> Foto de Perfil (URL)
+                                        </label>
+                                        <input
+                                            type="url"
+                                            value={formData.profilePhotoUrl || ''}
+                                            onChange={(e) => setFormData({ ...formData, profilePhotoUrl: e.target.value })}
+                                            placeholder="https://..."
+                                            className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-pink-500/10 focus:border-pink-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                        />
+                                    </div>
+
+                                    {/* Email + Phone */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                                <Mail size={13} className="text-teal-500" /> Email
+                                            </label>
+                                            <input
+                                                type="email"
+                                                value={formData.email || ''}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                placeholder="ejemplo@acme.com"
+                                                className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                                <Phone size={13} className="text-green-500" /> Teléfono
+                                            </label>
+                                            <input
+                                                type="tel"
+                                                value={formData.phone || ''}
+                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                                placeholder="+54 9 11 ..."
+                                                className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-green-500/10 focus:border-green-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Footer — Datos */}
+                        <div className="shrink-0 px-5 py-3 border-t border-slate-200/50 bg-white/80 backdrop-blur-md flex gap-2">
+                            {contactId && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="px-3 py-2 bg-white border border-red-100 text-red-500 rounded-[10px] hover:bg-red-50 hover:border-red-200 transition-all shadow-sm"
+                                    title="Eliminar"
+                                >
+                                    <AlertTriangle size={14} />
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 px-3 py-2 bg-white border border-slate-200/80 text-slate-600 rounded-[10px] text-[12px] font-bold hover:bg-slate-50 transition-all shadow-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={savingContact || !formData.fullName}
+                                className="flex-1 px-3 py-2 bg-gradient-to-r from-fuchsia-600 to-violet-600 text-white rounded-[10px] text-[12px] font-bold hover:shadow-[0_8px_24px_rgba(217,70,239,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 flex items-center justify-center gap-1.5 shadow-[0_4px_16px_rgba(217,70,239,0.3)]"
+                            >
+                                {savingContact ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                Guardar
+                            </button>
+                        </div>
+                    </form>
+                ) : (
+                    /* ════════════ ACTIVIDAD TAB ════════════ */
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        {/* Timeline */}
+                        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 hidden-scrollbar">
+                            {loadingContact ? (
+                                <div className="flex flex-col items-center justify-center py-16">
+                                    <Loader2 size={28} className="animate-spin text-violet-400" />
+                                    <p className="text-[13px] text-slate-400 mt-3 font-medium">Cargando historial...</p>
+                                </div>
+                            ) : activities.length === 0 && !showActivityForm ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-center">
+                                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 border border-slate-100">
+                                        <Clock size={28} className="text-slate-300" />
+                                    </div>
+                                    <h3 className="text-[15px] font-bold text-slate-600">Sin actividad registrada</h3>
+                                    <p className="text-[13px] text-slate-400 mt-1 max-w-xs">
+                                        Registra tu primera interacción con este contacto.
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Activity Form (inline, collapsible) */}
+                                    {showActivityForm && (
+                                        <div className="mb-6 p-4 bg-violet-50/50 rounded-[16px] border border-violet-100 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                            {/* Type Selector */}
+                                            <div className="flex gap-1.5 flex-wrap">
+                                                {ACTIVITY_TYPES.map(type => {
+                                                    const Icon = type.icon;
+                                                    const isActive = selectedType === type.value;
+                                                    return (
+                                                        <button
+                                                            key={type.value}
+                                                            onClick={() => { setSelectedType(type.value); setOutcome(''); }}
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all border"
+                                                            style={{
+                                                                background: isActive ? type.bgColor : 'white',
+                                                                borderColor: isActive ? type.color + '40' : '#e2e8f0',
+                                                                color: isActive ? type.color : '#64748b',
+                                                            }}
+                                                        >
+                                                            <Icon size={12} />
+                                                            {type.label}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Outcome Quick Select (per type) */}
+                                            {OUTCOMES_BY_TYPE[selectedType]?.length > 0 && (
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">¿Cómo fue?</p>
+                                                    <div className="flex gap-1.5 flex-wrap">
+                                                        {OUTCOMES_BY_TYPE[selectedType].map(o => {
+                                                            const Icon = o.icon;
+                                                            const isActive = outcome === o.value;
+                                                            const typeInfo = ACTIVITY_TYPES.find(t => t.value === selectedType);
+                                                            return (
+                                                                <button
+                                                                    key={o.value}
+                                                                    onClick={() => setOutcome(isActive ? '' : o.value)}
+                                                                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold transition-all border"
+                                                                    style={{
+                                                                        background: isActive ? (typeInfo?.bgColor || '#ecfdf5') : '#f8fafc',
+                                                                        borderColor: isActive ? (typeInfo?.color || '#10b981') + '40' : '#e2e8f0',
+                                                                        color: isActive ? (typeInfo?.color || '#10b981') : '#94a3b8',
+                                                                    }}
+                                                                >
+                                                                    <Icon size={11} />
+                                                                    {o.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Description */}
+                                            <textarea
+                                                ref={descRef}
+                                                value={actDescription}
+                                                onChange={e => setActDescription(e.target.value)}
+                                                placeholder={
+                                                    selectedType === 'call' ? 'Ej: Lo llamé y no respondió...' :
+                                                        selectedType === 'meeting' ? 'Ej: Nos reunimos para...' :
+                                                            selectedType === 'note' ? 'Escribe una nota...' :
+                                                                'Describe la interacción...'
+                                                }
+                                                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300 resize-none transition-all"
+                                                rows={3}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmitActivity();
+                                                }}
+                                            />
+
+                                            {/* Actions */}
+                                            <div className="flex items-center justify-between">
+                                                <button
+                                                    onClick={() => { setShowActivityForm(false); setActDescription(''); setOutcome(''); }}
+                                                    className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 transition-colors px-2 py-1"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    onClick={handleSubmitActivity}
+                                                    disabled={!actDescription.trim() || savingActivity}
+                                                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-[12px] font-bold shadow-lg shadow-violet-500/20 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                                >
+                                                    {savingActivity ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                                    Guardar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Timeline Items */}
+                                    <div className="space-y-2">
+                                        {activities.map((activity, idx) => {
+                                            const typeInfo = getActivityIcon(activity.type);
+                                            const Icon = typeInfo.icon;
+                                            const isFirst = idx === 0;
+                                            const outcomeData = (activity as any).outcome
+                                                ? ALL_OUTCOMES.find(o => o.value === (activity as any).outcome)
+                                                : null;
+                                            const OutcomeIcon = outcomeData?.icon;
+
+                                            return (
+                                                <div
+                                                    key={activity._id}
+                                                    className={`bg-white rounded-[12px] border border-slate-100 px-3 py-2.5 shadow-sm hover:shadow-md transition-all ${isFirst ? 'animate-in fade-in slide-in-from-top-2 duration-300' : ''}`}
+                                                >
+                                                    {/* Header: icon + type + outcome + time */}
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <div
+                                                            className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center border"
+                                                            style={{ background: typeInfo.bgColor, borderColor: typeInfo.color + '25' }}
+                                                        >
+                                                            <Icon size={13} style={{ color: typeInfo.color }} />
+                                                        </div>
+                                                        <span
+                                                            className="text-[10px] font-bold uppercase tracking-wider"
+                                                            style={{ color: typeInfo.color }}
+                                                        >
+                                                            {typeInfo.label}
+                                                        </span>
+                                                        {outcomeData && (() => {
+                                                            const OIcon = outcomeData.icon;
+                                                            return (
+                                                                <span
+                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border"
+                                                                    style={{
+                                                                        background: typeInfo.bgColor,
+                                                                        borderColor: typeInfo.color + '20',
+                                                                        color: typeInfo.color,
+                                                                    }}
+                                                                >
+                                                                    <OIcon size={10} />
+                                                                    {outcomeData.label}
+                                                                </span>
+                                                            );
+                                                        })()}
+                                                        {(activity as any).outcome && !outcomeData && (
+                                                            <span className="px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-[10px] font-semibold text-slate-500">
+                                                                {(activity as any).outcome}
+                                                            </span>
+                                                        )}
+                                                        <span className="ml-auto text-[10px] text-slate-400 font-medium whitespace-nowrap tabular-nums">
+                                                            {formatActivityTime(activity.createdAt)}
+                                                        </span>
+                                                    </div>
+                                                    {/* Description */}
+                                                    <p className="text-[12.5px] text-slate-600 leading-snug ml-9">
+                                                        {activity.description}
+                                                    </p>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Footer — Actividad */}
+                        <div className="shrink-0 px-5 py-3 border-t border-slate-200/50 bg-white/80 backdrop-blur-md">
+                            <button
+                                onClick={() => setShowActivityForm(!showActivityForm)}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-[13px] font-bold shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:-translate-y-0.5 transition-all"
+                            >
+                                <Send size={14} />
+                                {showActivityForm ? 'Cerrar Formulario' : 'Registrar Actividad'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Delete Confirmation Modal ─────────────── */}
+                {showDeleteConfirm && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                        <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-slate-100" onClick={e => e.stopPropagation()}>
+                            <div className="w-14 h-14 bg-red-50 text-red-500 rounded-[16px] flex items-center justify-center mb-5 border border-red-100 shadow-inner">
+                                <AlertTriangle size={28} />
+                            </div>
+                            <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Eliminar Contacto?</h3>
+                            <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                                Estás a punto de eliminar a <strong>{contact?.fullName}</strong>. Esta acción no se puede deshacer.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors text-[14px]"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleDeleteContact}
+                                    className="flex-1 py-3 px-4 bg-red-500 text-white font-bold rounded-[14px] hover:bg-red-600 transition-colors shadow-sm shadow-red-500/30 text-[14px]"
+                                >
+                                    Sí, eliminar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <style>{`
+                    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                    @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+                    .hidden-scrollbar::-webkit-scrollbar { display: none; }
+                    .hidden-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+                `}</style>
+            </div>
+        </div>
+    );
+}

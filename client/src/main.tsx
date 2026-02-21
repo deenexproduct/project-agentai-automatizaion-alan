@@ -1,7 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import App from './App.tsx'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LinkedInApp from './components/linkedin/LinkedInApp.tsx'
 import { ToastProvider } from './contexts/ToastContext.tsx'
 import { ToastContainer } from './components/ui/ToastContainer.tsx'
@@ -18,7 +17,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Routes>
                         <Route path="/login" element={<AuthPage />} />
                         <Route path="/linkedin/:tab?" element={<ProtectedRoute><LinkedInApp /></ProtectedRoute>} />
-                        <Route path="/:tab?" element={<ProtectedRoute><App /></ProtectedRoute>} />
+                        <Route path="/" element={<Navigate to="/linkedin/dashboard" replace />} />
+                        <Route path="*" element={<Navigate to="/linkedin/dashboard" replace />} />
                     </Routes>
                 </BrowserRouter>
                 <ToastContainer />
