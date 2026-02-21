@@ -14,10 +14,14 @@ export default function AuthPage() {
 
     const from = location.state?.from?.pathname || '/';
 
-    // Redirect if already logged in
+    // Redirect if already logged in (only after auth check is complete)
     useEffect(() => {
-        if (token) navigate(from, { replace: true });
-    }, [token, navigate, from]);
+        // Only redirect if we have a token AND auth check is complete
+        // This prevents redirect loop when token is being validated/removed
+        if (token && !isLoading) {
+            navigate(from, { replace: true });
+        }
+    }, [token, isLoading, navigate, from]);
 
     // Handle initial Email request
     const handleRequestOTP = async (e: React.FormEvent) => {

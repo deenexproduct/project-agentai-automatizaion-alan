@@ -13,7 +13,6 @@ interface TeamMember {
 
 export default function TeamPermissions() {
     const { user } = useAuth();
-    const isAdmin = (user as any)?.role === 'admin';
 
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -24,10 +23,8 @@ export default function TeamPermissions() {
     const [inviteMessage, setInviteMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
-        if (isAdmin) {
-            loadMembers();
-        }
-    }, [isAdmin]);
+        loadMembers();
+    }, []);
 
     const loadMembers = async () => {
         setIsLoading(true);
@@ -64,19 +61,7 @@ export default function TeamPermissions() {
         }
     };
 
-    if (!isAdmin) {
-        return (
-            <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
-                    <Shield className="w-8 h-8 text-red-500" />
-                </div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-2">Acceso Restringido</h2>
-                <p className="text-slate-500 max-w-md">
-                    No tienes permisos de Administrador para ver o invitar miembros al equipo. Contacta al dueño de la plataforma.
-                </p>
-            </div>
-        );
-    }
+
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 py-6">

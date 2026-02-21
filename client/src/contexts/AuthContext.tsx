@@ -30,7 +30,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Initial check for existing token validity
     useEffect(() => {
         const fetchMe = async () => {
-            if (!token) {
+            const storedToken = localStorage.getItem('token');
+            
+            if (!storedToken) {
+                setToken(null);
+                setUser(null);
                 setIsLoading(false);
                 return;
             }
@@ -39,6 +43,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 // api interceptor already adds Bearer
                 const response = await api.get('/auth/me');
                 setUser(response.data);
+                setToken(storedToken);
             } catch (err) {
                 console.error('Failed to validate existing token:', err);
                 localStorage.removeItem('token');
@@ -50,7 +55,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
 
         fetchMe();
-    }, [token]);
+        // Only run on mount - token changes are handled by login/logout
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const requestOTP = async (email: string): Promise<boolean> => {
         setIsLoading(true);

@@ -1,4 +1,4 @@
-import { API_BASE } from '../config';
+import api from '../lib/axios';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -98,8 +98,6 @@ export interface StatusCounts {
 
 // ── API Functions ────────────────────────────────────────────
 
-const CRM_BASE = `${API_BASE}/api/linkedin/crm`;
-
 export async function getContacts(
     status?: ContactStatus,
     search?: string,
@@ -112,82 +110,93 @@ export async function getContacts(
     params.set('page', String(page));
     params.set('limit', String(limit));
 
-    const res = await fetch(`${CRM_BASE}/contacts?${params}`);
-    if (!res.ok) throw new Error('Failed to fetch contacts');
-    return res.json();
+    try {
+        const res = await api.get(`/linkedin/crm/contacts?${params}`);
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to fetch contacts');
+    }
 }
 
 export async function getCounts(): Promise<StatusCounts> {
-    const res = await fetch(`${CRM_BASE}/contacts/counts`);
-    if (!res.ok) throw new Error('Failed to fetch counts');
-    return res.json();
+    try {
+        const res = await api.get('/linkedin/crm/contacts/counts');
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to fetch counts');
+    }
 }
 
 export async function getContact(id: string): Promise<LinkedInContact> {
-    const res = await fetch(`${CRM_BASE}/contacts/${id}`);
-    if (!res.ok) throw new Error('Failed to fetch contact');
-    return res.json();
+    try {
+        const res = await api.get(`/linkedin/crm/contacts/${id}`);
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to fetch contact');
+    }
 }
 
 export async function updateContactStatus(id: string, status: ContactStatus): Promise<void> {
-    const res = await fetch(`${CRM_BASE}/contacts/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-    });
-    if (!res.ok) throw new Error('Failed to update status');
+    try {
+        await api.patch(`/linkedin/crm/contacts/${id}/status`, { status });
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to update status');
+    }
 }
 
 export async function addNote(id: string, text: string): Promise<INote[]> {
-    const res = await fetch(`${CRM_BASE}/contacts/${id}/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-    });
-    if (!res.ok) throw new Error('Failed to add note');
-    const data = await res.json();
-    return data.notes;
+    try {
+        const res = await api.post(`/linkedin/crm/contacts/${id}/notes`, { text });
+        return res.data.notes;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to add note');
+    }
 }
 
 export async function checkAccepted(): Promise<{ found: number; updated: number }> {
-    const res = await fetch(`${CRM_BASE}/check-accepted`, { method: 'POST' });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Check failed' }));
-        throw new Error(err.error || 'Check failed');
+    try {
+        const res = await api.post('/linkedin/crm/check-accepted');
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Check failed');
     }
-    return res.json();
 }
 
 export async function getLastCheckStatus(): Promise<{ lastCheck: string | null }> {
-    const res = await fetch(`${CRM_BASE}/check-accepted/status`);
-    if (!res.ok) throw new Error('Failed to fetch check status');
-    return res.json();
+    try {
+        const res = await api.get('/linkedin/crm/check-accepted/status');
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to fetch check status');
+    }
 }
 
 // ── Enrichment Functions ─────────────────────────────────────
 
 export async function enrichContact(id: string): Promise<any> {
-    const res = await fetch(`${CRM_BASE}/contacts/${id}/enrich`, { method: 'POST' });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Enrichment failed' }));
-        throw new Error(err.error || 'Enrichment failed');
+    try {
+        const res = await api.post(`/linkedin/crm/contacts/${id}/enrich`);
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Enrichment failed');
     }
-    return res.json();
 }
 
 export async function getEnrichmentConfig(): Promise<any> {
-    const res = await fetch(`${CRM_BASE}/enrichment/config`);
-    if (!res.ok) throw new Error('Failed to fetch config');
-    return res.json();
+    try {
+        const res = await api.get('/linkedin/crm/enrichment/config');
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to fetch config');
+    }
 }
 
 export async function updateEnrichmentConfig(config: any): Promise<void> {
-    const res = await fetch(`${CRM_BASE}/enrichment/config`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-    });
-    if (!res.ok) throw new Error('Failed to update config');
+    try {
+        await api.patch('/linkedin/crm/enrichment/config', config);
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to update config');
+    }
 }
 
 // ── Bulk Operations ──────────────────────────────────────────
@@ -199,30 +208,28 @@ export interface BulkEnrichResult {
 }
 
 export async function bulkEnrichContacts(ids: string[]): Promise<BulkEnrichResult> {
-    const res = await fetch(`${CRM_BASE}/contacts/bulk/enrich`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-    });
-    if (!res.ok) throw new Error('Failed to bulk enrich');
-    return res.json();
+    try {
+        const res = await api.post('/linkedin/crm/contacts/bulk/enrich', { ids });
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to bulk enrich');
+    }
 }
 
 export async function bulkUpdateStatus(ids: string[], status: ContactStatus): Promise<{ success: boolean; modified: number }> {
-    const res = await fetch(`${CRM_BASE}/contacts/bulk/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, status }),
-    });
-    if (!res.ok) throw new Error('Failed to bulk update status');
-    return res.json();
+    try {
+        const res = await api.post('/linkedin/crm/contacts/bulk/status', { ids, status });
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to bulk update status');
+    }
 }
 
 export function exportContactsUrl(status?: ContactStatus, search?: string): string {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
     if (search) params.set('search', search);
-    return `${CRM_BASE}/contacts/export?${params}`;
+    return `/api/linkedin/crm/contacts/export?${params}`;
 }
 
 // ── Stats ────────────────────────────────────────────────────
@@ -235,7 +242,10 @@ export interface ContactStats {
 }
 
 export async function getContactStats(): Promise<ContactStats> {
-    const res = await fetch(`${CRM_BASE}/contacts/stats`);
-    if (!res.ok) throw new Error('Failed to fetch stats');
-    return res.json();
+    try {
+        const res = await api.get('/linkedin/crm/contacts/stats');
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to fetch stats');
+    }
 }

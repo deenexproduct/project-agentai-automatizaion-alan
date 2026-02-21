@@ -1,0 +1,26 @@
+{
+  "batchId": "2026-02-20T23:48:36.508Z",
+  "accountEmail": "unknown",
+  "profiles": [
+    {
+      "url": "linkedin.com/in/fernando-canovas-860b8536/?skipRedirect=true",
+      "status": "pending",
+      "attempts": 0
+    }
+  ],
+  "currentIndex": 0,
+  "startTime": "2026-02-20T23:48:36.576Z",
+  "isPaused": false,
+  "options": {
+    "totalLimit": 1,
+    "dailyLimit": 1
+  },
+  "stats": {
+    "processed": 0,
+    "successful": 0,
+    "failed": 0,
+    "pending": 1
+  },
+  "lastUpdate": "2026-02-20T23:48:36.576Z",
+  "version": 1
+}

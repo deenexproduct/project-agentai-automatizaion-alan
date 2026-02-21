@@ -25,33 +25,39 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
         }
 
         if (!token) {
+            console.log('[authMiddleware] No token provided');
             res.status(401).json({ error: 'No token provided or invalid format.' });
             return;
         }
 
+        console.log('[authMiddleware] Veryfying token signature');
         // Verify token
         let decoded: any;
         try {
             decoded = jwt.verify(token, JWT_SECRET);
         } catch (err) {
-            console.warn(`Invalid JWT signature: ${(err as Error).message}`);
+            console.warn(`[authMiddleware] Invalid JWT signature: ${(err as Error).message}`);
             res.status(401).json({ error: 'Invalid or expired token.' });
             return;
         }
 
         if (!decoded || !decoded.userId) {
+            console.log('[authMiddleware] Malformed token');
             res.status(401).json({ error: 'Malformed token.' });
             return;
         }
 
+        console.log(`[authMiddleware] Finding user by ID: ${decoded.userId}`);
         // Find user
         const user = await UserModel.findById(decoded.userId).select('-otpCode'); // don't push OTP back into req.user
 
         if (!user) {
+            console.log('[authMiddleware] User not found');
             res.status(401).json({ error: 'User associated with token no longer exists.' });
             return;
         }
 
+        console.log(`[authMiddleware] User found, injecting to req then calling next()`);
         // Inject user into request object
         req.user = user;
 

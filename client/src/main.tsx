@@ -17,8 +17,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <BrowserRouter>
                     <Routes>
                         <Route path="/login" element={<AuthPage />} />
-                        <Route path="/" element={<ProtectedRoute><App /></ProtectedRoute>} />
-                        <Route path="/linkedin" element={<ProtectedRoute><LinkedInApp /></ProtectedRoute>} />
+                        <Route path="/linkedin/:tab?" element={<ProtectedRoute><LinkedInApp /></ProtectedRoute>} />
+                        <Route path="/:tab?" element={<ProtectedRoute><App /></ProtectedRoute>} />
                     </Routes>
                 </BrowserRouter>
                 <ToastContainer />

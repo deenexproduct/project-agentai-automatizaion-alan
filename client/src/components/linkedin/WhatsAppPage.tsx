@@ -167,11 +167,22 @@ export default function WhatsAppPage() {
 // ══════════════════════════════════════════════════
 function SchedulerPanel() {
     const [selectedChat, setSelectedChat] = useState<ChatItem | null>(null);
+    const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
     const [messageType, setMessageType] = useState<'text' | 'audio' | 'file'>('text');
     const [audioMode, setAudioMode] = useState<'record' | 'upload'>('record');
     const [textContent, setTextContent] = useState('');
     const [file, setFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    useEffect(() => {
+        if (!selectedChat) {
+            setProfilePicUrl(null);
+            return;
+        }
+        api.get(`${API_URL}/contact/${selectedChat.id}/profile-pic`)
+            .then(res => setProfilePicUrl(res.data.url))
+            .catch(() => setProfilePicUrl(null));
+    }, [selectedChat]);
 
     const getTodayDate = () => {
         const d = new Date();
@@ -482,7 +493,16 @@ function SchedulerPanel() {
                     {/* Header */}
                     <div className="px-4 py-3 flex items-center gap-3 relative z-10" style={{ background: '#075E54' }}>
                         <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
-                            <span className="text-xl">{selectedChat ? (selectedChat.isGroup ? '👥' : '👤') : '👤'}</span>
+                            {profilePicUrl ? (
+                                <img
+                                    src={profilePicUrl}
+                                    alt="Avatar"
+                                    className="w-full h-full object-cover"
+                                    onError={() => setProfilePicUrl(null)}
+                                />
+                            ) : (
+                                <span className="text-xl">{selectedChat ? (selectedChat.isGroup ? '👥' : '👤') : '👤'}</span>
+                            )}
                         </div>
                         <div className="min-w-0 flex-1">
                             <h3 className="text-white font-medium truncate text-[15px] leading-tight mb-0.5">

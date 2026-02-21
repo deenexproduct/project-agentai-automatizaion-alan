@@ -1,13 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft, Sparkles, MessageCircle } from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { BarChart3, Target, MessageSquare, Users, Settings, ArrowLeft, Sparkles, MessageCircle, Mic, Puzzle } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
 import CRMPage from './CRMPage';
 import ConfigPage from './ConfigPage';
 import PublicacionesPage from './PublicacionesPage';
+import VoiceCommandPage from './VoiceCommandPage';
 import WhatsAppPage from './WhatsAppPage';
+import ExtensionPage from './ExtensionPage';
+import TeamPermissions from '../team/TeamPermissions';
 
-type SidebarTab = 'crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp';
+type SidebarTab = 'crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team';
 
 interface SidebarItem {
     id: SidebarTab;
@@ -20,16 +23,22 @@ const linkedInItems: SidebarItem[] = [
     { id: 'crm', Icon: BarChart3, label: 'CRM' },
     { id: 'publicaciones', Icon: Sparkles, label: 'Publicaciones' },
     { id: 'prospecting', Icon: Target, label: 'Prospecting' },
+    { id: 'voice', Icon: Mic, label: 'Transcriptor' },
+    { id: 'team', Icon: Users, label: 'Equipo' },
     { id: 'comments', Icon: MessageSquare, label: 'Comentarios', disabled: true },
     { id: 'requests', Icon: Users, label: 'Solicitudes', disabled: true },
     { id: 'config', Icon: Settings, label: 'Configuración' },
 ];
 
 const whatsappItem: SidebarItem = { id: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp' };
+const extensionItem: SidebarItem = { id: 'extension', Icon: Puzzle, label: 'Extensión' };
 
 export default function LinkedInApp() {
-    const [activeTab, setActiveTab] = useState<SidebarTab>('crm');
+    const { tab } = useParams<{ tab: string }>();
     const navigate = useNavigate();
+
+    // Default to 'crm' if no tab or invalid tab is provided
+    const activeTab = (tab as SidebarTab) || 'crm';
 
     return (
         <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'linear-gradient(135deg, #f8f7ff 0%, #f0ecff 50%, #ede9fe 100%)' }}>
@@ -62,7 +71,7 @@ export default function LinkedInApp() {
                             label={item.label}
                             active={activeTab === item.id}
                             disabled={item.disabled}
-                            onClick={() => !item.disabled && setActiveTab(item.id)}
+                            onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)}
                         />
                     ))}
 
@@ -74,8 +83,17 @@ export default function LinkedInApp() {
                         Icon={whatsappItem.Icon}
                         label={whatsappItem.label}
                         active={activeTab === 'whatsapp'}
-                        onClick={() => setActiveTab('whatsapp')}
+                        onClick={() => navigate('/linkedin/whatsapp')}
                         accentColor="#25D366"
+                    />
+
+                    {/* Chrome Extension */}
+                    <SidebarButton
+                        Icon={extensionItem.Icon}
+                        label={extensionItem.label}
+                        active={activeTab === 'extension'}
+                        onClick={() => navigate('/linkedin/extension')}
+                        accentColor="#3b82f6"
                     />
                 </div>
 
@@ -96,7 +114,7 @@ export default function LinkedInApp() {
                 <header
                     className="px-6 py-4 flex items-center justify-between shrink-0"
                     style={{
-                        background: 'rgba(255,255,255,0.7)',
+                        background: 'rgba(255, 255, 255, 0.7)',
                         backdropFilter: 'blur(20px)',
                         borderBottom: '1px solid rgba(124, 58, 237, 0.1)',
                     }}
@@ -105,36 +123,47 @@ export default function LinkedInApp() {
                         <h1
                             className="text-xl font-bold"
                             style={{
-                                background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                                WebkitBackgroundClip: 'text',
+                                background: 'linear-gradient(90deg, rgb(124, 58, 237), rgb(168, 85, 247)) text',
                                 WebkitTextFillColor: 'transparent',
                             }}
                         >
-                            {activeTab === 'whatsapp' ? 'WhatsApp Scheduler' : 'LinkedIn Automation'}
+                            {activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
+                                activeTab === 'extension' ? 'Deenex Comercial' : 'LinkedIn Automation'}
                         </h1>
                         <span className="text-xs px-2 py-1 rounded-full font-medium"
                             style={{
-                                background: activeTab === 'whatsapp' ? 'rgba(37, 211, 102, 0.1)' : 'rgba(124, 58, 237, 0.1)',
-                                color: activeTab === 'whatsapp' ? '#25D366' : '#7c3aed',
+                                background: activeTab === 'whatsapp' ? 'rgba(37, 211, 102, 0.1)' :
+                                    activeTab === 'extension' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(124, 58, 237, 0.1)',
+                                color: activeTab === 'whatsapp' ? '#25D366' :
+                                    activeTab === 'extension' ? '#3b82f6' : '#7c3aed',
                             }}
                         >
                             {activeTab === 'crm' ? 'CRM Pipeline' :
                                 activeTab === 'publicaciones' ? 'Publicaciones AI' :
                                     activeTab === 'prospecting' ? 'Prospecting' :
                                         activeTab === 'comments' ? 'Comentarios' :
-                                            activeTab === 'requests' ? 'Solicitudes' :
-                                                activeTab === 'whatsapp' ? 'Mensajes Programados' : 'Config'}
+                                            activeTab === 'voice' ? 'VoiceCommand' :
+                                                activeTab === 'requests' ? 'Solicitudes' :
+                                                    activeTab === 'whatsapp' ? 'Mensajes Programados' :
+                                                        activeTab === 'extension' ? 'Extensión Chrome' :
+                                                            activeTab === 'team' ? 'Permisos del Equipo' : 'Config'}
                         </span>
                     </div>
+
+                    {/* Portal Target for Page-specific Header Actions */}
+                    <div id="header-actions" className="flex items-center gap-4"></div>
                 </header>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-6" style={activeTab === 'voice' || activeTab === 'extension' ? { padding: 0 } : {}}>
                     {activeTab === 'crm' && <CRMPage />}
                     {activeTab === 'publicaciones' && <PublicacionesPage />}
                     {activeTab === 'prospecting' && <ProspectingPage />}
                     {activeTab === 'config' && <ConfigPage />}
                     {activeTab === 'whatsapp' && <WhatsAppPage />}
+                    {activeTab === 'voice' && <VoiceCommandPage />}
+                    {activeTab === 'extension' && <ExtensionPage />}
+                    {activeTab === 'team' && <TeamPermissions />}
                 </div>
             </main>
         </div>

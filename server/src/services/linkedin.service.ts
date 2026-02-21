@@ -354,6 +354,8 @@ export class LinkedInTenant extends EventEmitter {
 
         try {
             await sessionManager.onLoginSuccess(this.page, this.activeAccount);
+            // NEW: Fetch the fresh account document so that activeAccount has the correct `status` ('active') and `expiresAt`
+            this.activeAccount = await sessionManager.getActiveAccount(this.userId);
         } catch (err) {
             console.error('[LinkedInService] ❌ Error saving cookies via SessionManager:', err);
         }
@@ -387,8 +389,17 @@ export class LinkedInTenant extends EventEmitter {
     }
 
     getStatus(): { status: ServiceStatus; isRunning: boolean; isPaused: boolean; isBusy: boolean; profilesTotal: number; profilesDone: number; lastAcceptedCheck: string | null } {
+        // Dynamic state resolution: if the browser page is null, we are disconnected
+        // regardless of what the internal string state says.
+        const actualStatus = this.page ? this.status : 'disconnected';
+
+        // Auto-correct internal string state if out of sync
+        if (!this.page && this.status !== 'disconnected') {
+            this.status = 'disconnected';
+        }
+
         return {
-            status: this.status,
+            status: actualStatus,
             isRunning: this.isRunning,
             isPaused: this.isPaused,
             isBusy: this.isBusy,
@@ -421,35 +432,54 @@ export class LinkedInTenant extends EventEmitter {
         // NEW: Use operation manager for mutual exclusion
         if (!await this.operationManager.acquire('prospecting', { urlCount: options.urls.length })) {
             const current = this.operationManager.getCurrent();
-            console.error(`❌ Cannot start prospecting — operation '${current}' in progress`);
-            return false;
+            const msg = `Cannot start prospecting — operation '${current}' in progress`;
+            console.error(`❌ ${msg}`);
+            throw new Error(msg);
+        }
+
+        // Lazy Initialization (Self-Healing): If the browser was closed/killed but user clicks Start
+        if (!this.page) {
+            console.log('🔄 Browser is not open. Attempting lazy auto-initialization...');
+            try {
+                await this.initialize();
+            } catch (err) {
+                this.operationManager.release();
+                throw new Error(`Failed to initialize browser automatically: ${(err as Error).message}`);
+            }
         }
 
         if (!this.page || this.status !== 'logged-in') {
             this.operationManager.release();
-            console.error('❌ Cannot start prospecting — not logged in');
-            return false;
+            const msg = !this.page
+                ? 'Puppeteer browser page is null even after lazy launch attempt.'
+                : `Status is not logged-in (current: ${this.status}). Please launch and manual login.`;
+            console.error(`❌ Cannot start prospecting: ${msg}`);
+            throw new Error(`Cannot start prospecting: ${msg}`);
         }
 
         if (this.isRunning) {
             this.operationManager.release();
             console.error('❌ Prospecting already running');
-            return false;
+            throw new Error('Prospecting is already running');
         }
 
         // Phase 2: Session pre-check before starting a long operation
+        // NEW: Ensure we have the latest account state from DB before checking
+        this.activeAccount = await sessionManager.getActiveAccount(this.userId);
+
         if (this.activeAccount) {
             // Check circuit breaker first
             if (!circuitBreaker.canProceed((this.activeAccount._id as any).toString())) {
                 this.operationManager.release();
                 const status = circuitBreaker.getStatus((this.activeAccount._id as any).toString());
-                console.error(`❌ Circuit breaker OPEN for account — cooldown: ${Math.round((status.cooldownRemainingMs ?? 0) / 60000)}min`);
+                const msg = `Circuit breaker OPEN for account — cooldown: ${Math.round((status.cooldownRemainingMs ?? 0) / 60000)}min`;
+                console.error(`❌ ${msg}`);
                 this.emit('circuit-open', {
                     accountId: (this.activeAccount._id as any).toString(),
                     cooldownRemainingMs: status.cooldownRemainingMs,
                     reason: status.lastFailureReason,
                 });
-                return false;
+                throw new Error(msg);
             }
 
             try {
@@ -462,7 +492,7 @@ export class LinkedInTenant extends EventEmitter {
                     accountId: (this.activeAccount._id as any).toString(),
                     message: 'Session invalid — please re-authenticate before starting',
                 });
-                return false;
+                throw new Error(`Session invalid: ${(err as Error).message}`);
             }
         }
 
@@ -474,7 +504,7 @@ export class LinkedInTenant extends EventEmitter {
         if (urls.length === 0) {
             this.operationManager.release();
             console.error('❌ No valid LinkedIn URLs provided');
-            return false;
+            throw new Error('No valid LinkedIn URLs provided');
         }
 
         console.log(`\n🎯 Starting prospecting for ${urls.length} profiles`);

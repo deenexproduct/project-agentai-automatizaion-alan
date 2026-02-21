@@ -1,2 +1,3 @@
-2026/02/20-17:00:14.786 18772d Creating DB /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/GCM Store since it was missing.
-2026/02/20-17:00:14.793 18772d Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/GCM Store/MANIFEST-000001
+2026/02/21-00:19:56.923 1fa51c Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/GCM Store/MANIFEST-000001
+2026/02/21-00:19:56.924 1fa51c Recovering log #3
+2026/02/21-00:19:56.957 1fa51c Reusing old log /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/GCM Store/000003.log 

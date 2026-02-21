@@ -44,8 +44,7 @@ const upload = multer({ storage });
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage for now (replace with MongoDB later)
-let transcriptionHistory: any[] = [];
+import { Transcription } from './models/transcription.model';
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -57,9 +56,19 @@ app.get('/api/whatsapp/health', (req, res) => {
   res.json(whatsappService.getHealthInfo());
 });
 
-// Get transcription history
-app.get('/api/history', (req, res) => {
-  res.json(transcriptionHistory);
+// Get transcription history (Multi-Tenant Protected)
+app.get('/api/history', authMiddleware, async (req: any, res) => {
+  try {
+    const history = await Transcription.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    // Map _id to id to maintain backwards compatibility with the frontend React components
+    const formattedHistory = history.map(doc => ({
+      ...doc.toObject(),
+      id: doc._id
+    }));
+    res.json(formattedHistory);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch history' });
+  }
 });
 
 // Transcribe audio using Whisper
@@ -104,8 +113,8 @@ async function transcribeWithWhisper(audioPath: string): Promise<string> {
   }
 }
 
-// Transcribe audio file
-app.post('/api/transcribe/file', upload.array('files'), async (req, res) => {
+// Transcribe audio file (Multi-Tenant Protected)
+app.post('/api/transcribe/file', authMiddleware, upload.array('files'), async (req: any, res: any) => {
   try {
     const files = req.files as Express.Multer.File[];
     if (!files || files.length === 0) {
@@ -114,18 +123,20 @@ app.post('/api/transcribe/file', upload.array('files'), async (req, res) => {
 
     const results = await Promise.all(files.map(async (file, index) => {
       const text = await transcribeWithWhisper(file.path);
-      return {
-        id: Date.now() + index,
-        filename: file.originalname,
+
+      const transDoc = await Transcription.create({
+        userId: req.user._id,
         text,
-        duration: 0,
         source: 'file',
-        createdAt: new Date().toISOString()
+        filename: file.originalname,
+        duration: 0
+      });
+
+      return {
+        ...transDoc.toObject(),
+        id: transDoc._id
       };
     }));
-
-    // Add to history
-    transcriptionHistory = [...results, ...transcriptionHistory];
 
     res.json(results);
   } catch (error) {
@@ -134,29 +145,30 @@ app.post('/api/transcribe/file', upload.array('files'), async (req, res) => {
   }
 });
 
-// Transcribe audio blob (from recording)
-app.post('/api/transcribe/blob', upload.single('audio'), async (req, res) => {
+// Transcribe audio blob (from recording) (Multi-Tenant Protected)
+app.post('/api/transcribe/blob', authMiddleware, upload.single('audio'), async (req: any, res: any) => {
   try {
     const file = req.file;
     if (!file) {
       return res.status(400).json({ error: 'No audio uploaded' });
     }
 
-    console.log('Transcribing audio file:', file.path);
+    console.log('Transcribing audio blob:', file.path);
     const text = await transcribeWithWhisper(file.path);
     console.log('Transcription result:', text);
 
-    const result = {
-      id: Date.now(),
-      filename: 'recording.webm',
+    const transDoc = await Transcription.create({
+      userId: req.user._id,
       text,
-      duration: 0,
       source: 'dictation',
-      createdAt: new Date().toISOString()
-    };
+      filename: 'recording.webm',
+      duration: 0
+    });
 
-    // Add to history
-    transcriptionHistory = [result, ...transcriptionHistory];
+    const result = {
+      ...transDoc.toObject(),
+      id: transDoc._id
+    };
 
     // Cleanup uploaded file
     try { fs.unlinkSync(file.path); } catch { }
@@ -168,17 +180,25 @@ app.post('/api/transcribe/blob', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Delete transcription from history
-app.delete('/api/history/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  transcriptionHistory = transcriptionHistory.filter(item => item.id !== id);
-  res.json({ success: true });
+// Delete transcription from history (Multi-Tenant Protected)
+app.delete('/api/history/:id', authMiddleware, async (req: any, res: any) => {
+  try {
+    const id = req.params.id;
+    await Transcription.deleteOne({ _id: id, userId: req.user._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
 });
 
-// Clear all history
-app.delete('/api/history', (req, res) => {
-  transcriptionHistory = [];
-  res.json({ success: true });
+// Clear all history (Multi-Tenant Protected)
+app.delete('/api/history', authMiddleware, async (req: any, res: any) => {
+  try {
+    await Transcription.deleteMany({ userId: req.user._id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear history' });
+  }
 });
 
 // Settings endpoint (for future use)

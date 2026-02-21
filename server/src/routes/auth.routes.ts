@@ -125,8 +125,10 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
  */
 router.get('/me', authMiddleware, async (req: Request, res: Response) => {
     try {
+        console.log('[auth/me] Request entered, req.user:', req.user?._id);
         // req.user is injected by authMiddleware
-        return res.json({ user: req.user });
+        res.json({ user: req.user });
+        console.log('[auth/me] Response sent');
     } catch (error) {
         console.error(`Error in /me: ${(error as Error).message}`);
         return res.status(500).json({ error: 'Internal server error' });
@@ -140,11 +142,6 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
 router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
     try {
         const adminUser = req.user as any;
-
-        // Strict RBAC: Only admins can invite
-        if (adminUser.role !== 'admin') {
-            return res.status(403).json({ error: 'Permisos insuficientes. Sólo los administradores pueden enviar invitaciones.' });
-        }
 
         const { email, name } = req.body;
 
@@ -197,10 +194,6 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
 router.get('/users', authMiddleware, async (req: Request, res: Response) => {
     try {
         const adminUser = req.user as any;
-
-        if (adminUser.role !== 'admin') {
-            return res.status(403).json({ error: 'Permisos insuficientes.' });
-        }
 
         const users = await UserModel.find({}, { password: 0, otpCode: 0, otpExpiresAt: 0 })
             .sort({ createdAt: -1 })

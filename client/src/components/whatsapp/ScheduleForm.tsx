@@ -130,234 +130,321 @@ export default function ScheduleForm() {
     }
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-6">
             {/* Success Banner */}
             {success && (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 flex items-center gap-2 animate-in">
-                    <span className="text-xl">✅</span>
-                    <span className="font-medium">¡Mensaje programado exitosamente!</span>
+                <div className="p-4 rounded-[16px] flex items-center gap-3 animate-[fadeInSlideDown_0.4s_ease-out]"
+                    style={{
+                        background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(16,185,129,0.1))',
+                        border: '1px solid rgba(34,197,94,0.2)',
+                        boxShadow: '0 4px 12px rgba(34,197,94,0.05)',
+                    }}>
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                        <span className="text-xl">✅</span>
+                    </div>
+                    <span className="font-bold text-green-700 text-[14px]">¡Mensaje programado exitosamente!</span>
                 </div>
             )}
 
             {/* Error Banner */}
             {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 flex items-center gap-2">
-                    <span className="text-xl">⚠️</span>
-                    <span>{error}</span>
-                    <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+                <div className="p-4 rounded-[16px] flex items-center gap-3 animate-[fadeInSlideDown_0.4s_ease-out]"
+                    style={{
+                        background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(220,38,38,0.1))',
+                        border: '1px solid rgba(239,68,68,0.2)',
+                        boxShadow: '0 4px 12px rgba(239,68,68,0.05)',
+                    }}>
+                    <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                        <span className="text-xl">⚠️</span>
+                    </div>
+                    <span className="font-bold text-red-600 text-[14px] flex-1">{error}</span>
+                    <button onClick={() => setError(null)} className="w-8 h-8 rounded-full hover:bg-red-500/10 flex items-center justify-center text-red-500 transition-colors">✕</button>
                 </div>
             )}
 
-            {/* Contact/Group Selector — shared ChatPicker */}
-            <ChatPicker
-                selected={selectedChat}
-                onSelect={setSelectedChat}
-                filter="all"
-                label="Contacto o Grupo"
-                disabled={submitting}
-            />
+            <div className="rounded-[24px] p-6 sm:p-8 bg-white/40 backdrop-blur-xl border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
 
-            {/* Message Type */}
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo de mensaje</label>
-                <div className="flex gap-2">
-                    {[
-                        { type: 'text' as const, icon: '💬', label: 'Texto' },
-                        { type: 'audio' as const, icon: '🎵', label: 'Audio' },
-                        { type: 'file' as const, icon: '📎', label: 'Archivo' },
-                    ].map(({ type, icon, label }) => (
-                        <button
-                            key={type}
-                            onClick={() => { setMessageType(type); setFile(null); }}
-                            className={`flex-1 py-2.5 px-4 rounded-xl border-2 transition-all font-medium text-sm ${messageType === type
-                                ? 'border-violet-500 bg-violet-50 text-violet-700'
-                                : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                                }`}
-                        >
-                            {icon} {label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Text Content */}
-            {messageType === 'text' && (
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Mensaje</label>
-                    <textarea
-                        value={textContent}
-                        onChange={(e) => setTextContent(e.target.value)}
-                        placeholder="Escribí tu mensaje..."
-                        rows={4}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none resize-none"
+                <div className="space-y-6">
+                    {/* Contact/Group Selector — shared ChatPicker */}
+                    <ChatPicker
+                        selected={selectedChat}
+                        onSelect={setSelectedChat}
+                        filter="all"
+                        label="Contacto o Grupo"
+                        disabled={submitting}
                     />
-                </div>
-            )}
 
-            {/* Audio Section */}
-            {messageType === 'audio' && (
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Audio</label>
+                    {/* Message Type */}
+                    <div>
+                        <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">Tipo de mensaje</label>
+                        <div className="flex gap-2 p-1.5 bg-white/50 rounded-[16px] border border-white/60 shadow-inner">
+                            {[
+                                { type: 'text' as const, icon: '💬', label: 'Texto' },
+                                { type: 'audio' as const, icon: '🎵', label: 'Audio' },
+                                { type: 'file' as const, icon: '📎', label: 'Archivo' },
+                            ].map(({ type, icon, label }) => (
+                                <button
+                                    key={type}
+                                    onClick={() => { setMessageType(type); setFile(null); }}
+                                    className={`flex-1 py-2.5 px-4 rounded-[12px] font-bold text-[13px] transition-all duration-300 ${messageType === type
+                                        ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-[0_4px_12px_rgba(139,92,246,0.2)]'
+                                        : 'text-slate-600 hover:bg-white/60 hover:text-violet-600'
+                                        }`}
+                                >
+                                    {icon} {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-                    {/* Record / Upload toggle */}
-                    {!file && (
-                        <div className="flex gap-2 mb-3">
-                            <button
-                                onClick={() => setAudioMode('record')}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${audioMode === 'record'
-                                    ? 'bg-red-500 text-white shadow-md shadow-red-500/20'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                    }`}
-                            >
-                                🎙️ Grabar
-                            </button>
-                            <button
-                                onClick={() => setAudioMode('upload')}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${audioMode === 'upload'
-                                    ? 'bg-violet-500 text-white shadow-md shadow-violet-500/20'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                    }`}
-                            >
-                                📁 Subir archivo
-                            </button>
+                    {/* Text Content */}
+                    {messageType === 'text' && (
+                        <div className="animate-[fadeInSlideDown_0.3s_ease]">
+                            <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">Mensaje</label>
+                            <div className="relative group/textarea">
+                                <textarea
+                                    value={textContent}
+                                    onChange={(e) => setTextContent(e.target.value)}
+                                    placeholder="Escribí tu mensaje..."
+                                    rows={4}
+                                    className="w-full rounded-[16px] p-5 text-[14px] resize-none transition-all outline-none text-slate-700 placeholder-slate-400"
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.6)',
+                                        border: '1px solid rgba(255, 255, 255, 0.8)',
+                                        boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.02)',
+                                    }}
+                                />
+                                <div className="absolute inset-0 rounded-[16px] pointer-events-none border-2 border-transparent group-focus-within/textarea:border-violet-400 transition-colors" />
+                            </div>
                         </div>
                     )}
 
-                    {file ? (
-                        <div className="flex items-center gap-3 p-3 bg-violet-50 rounded-xl border border-violet-200">
-                            <span className="text-2xl">🎵</span>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
-                                <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
-                            </div>
-                            <button onClick={() => setFile(null)} className="text-slate-400 hover:text-red-500">🗑️</button>
+                    {/* Audio Section */}
+                    {messageType === 'audio' && (
+                        <div className="animate-[fadeInSlideDown_0.3s_ease]">
+                            <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">Audio</label>
+
+                            {/* Record / Upload toggle */}
+                            {!file && (
+                                <div className="flex gap-2 mb-4">
+                                    <button
+                                        onClick={() => setAudioMode('record')}
+                                        className={`flex-1 py-2.5 px-4 rounded-[12px] text-[13px] font-bold transition-all duration-300 ${audioMode === 'record'
+                                            ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-[0_4px_12px_rgba(239,68,68,0.2)]'
+                                            : 'bg-white/50 text-slate-600 border border-white/60 hover:bg-white/80'
+                                            }`}
+                                    >
+                                        🎙️ Grabar
+                                    </button>
+                                    <button
+                                        onClick={() => setAudioMode('upload')}
+                                        className={`flex-1 py-2.5 px-4 rounded-[12px] text-[13px] font-bold transition-all duration-300 ${audioMode === 'upload'
+                                            ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-[0_4px_12px_rgba(139,92,246,0.2)]'
+                                            : 'bg-white/50 text-slate-600 border border-white/60 hover:bg-white/80'
+                                            }`}
+                                    >
+                                        📁 Subir archivo
+                                    </button>
+                                </div>
+                            )}
+
+                            {file ? (
+                                <div className="flex items-center gap-4 p-4 rounded-[16px] bg-white/60 border border-white/80 shadow-sm relative overflow-hidden group">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 to-fuchsia-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="w-10 h-10 rounded-[12px] bg-violet-100 text-violet-600 flex items-center justify-center text-xl relative z-10">🎵</div>
+                                    <div className="flex-1 min-w-0 relative z-10">
+                                        <p className="text-[14px] font-bold text-slate-800 truncate">{file.name}</p>
+                                        <p className="text-[12px] font-medium text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+                                    </div>
+                                    <button onClick={() => setFile(null)} className="w-8 h-8 rounded-full hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors relative z-10">
+                                        🗑️
+                                    </button>
+                                </div>
+                            ) : audioMode === 'record' ? (
+                                <AudioRecorder onAudioReady={(f) => setFile(f)} />
+                            ) : (
+                                <>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="audio/*"
+                                        onChange={(e) => setFile(e.target.files?.[0] || null)}
+                                        className="hidden"
+                                    />
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="w-full py-10 rounded-[20px] transition-all duration-300 group hover:-translate-y-1 relative overflow-hidden text-center"
+                                        style={{
+                                            background: 'rgba(255,255,255,0.4)',
+                                            border: '2px dashed rgba(139,92,246,0.3)',
+                                        }}
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/0 to-fuchsia-500/0 group-hover:from-violet-500/5 group-hover:to-fuchsia-500/5 transition-colors" />
+                                        <div className="w-14 h-14 rounded-full bg-violet-100 flex items-center justify-center mx-auto mb-3 shadow-inner group-hover:scale-110 transition-transform">
+                                            <span className="text-2xl block relative z-10">🎵</span>
+                                        </div>
+                                        <p className="text-[14px] font-bold text-slate-600 relative z-10">Click para seleccionar audio</p>
+                                        <p className="text-[12px] text-slate-400 mt-1 relative z-10">MP3, WAV, OGG</p>
+                                    </button>
+                                </>
+                            )}
                         </div>
-                    ) : audioMode === 'record' ? (
-                        <AudioRecorder onAudioReady={(f) => setFile(f)} />
-                    ) : (
-                        <>
+                    )}
+
+                    {/* File Upload (non-audio) */}
+                    {messageType === 'file' && (
+                        <div className="animate-[fadeInSlideDown_0.3s_ease]">
+                            <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">Archivo adjunto</label>
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept="audio/*"
                                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                                 className="hidden"
                             />
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="w-full py-8 border-2 border-dashed border-slate-300 rounded-xl hover:border-violet-400 hover:bg-violet-50 transition-all"
-                            >
-                                <div className="text-center">
-                                    <span className="text-3xl block mb-2">🎵</span>
-                                    <p className="text-sm text-slate-500">Click para seleccionar archivo de audio</p>
+                            {file ? (
+                                <div className="flex items-center gap-4 p-4 rounded-[16px] bg-white/60 border border-white/80 shadow-sm relative overflow-hidden group">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 to-fuchsia-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="w-10 h-10 rounded-[12px] bg-blue-100 text-blue-600 flex items-center justify-center text-xl relative z-10">📄</div>
+                                    <div className="flex-1 min-w-0 relative z-10">
+                                        <p className="text-[14px] font-bold text-slate-800 truncate">{file.name}</p>
+                                        <p className="text-[12px] font-medium text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+                                    </div>
+                                    <button onClick={() => setFile(null)} className="w-8 h-8 rounded-full hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors relative z-10">
+                                        🗑️
+                                    </button>
                                 </div>
-                            </button>
-                        </>
-                    )}
-                </div>
-            )}
+                            ) : (
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full py-10 rounded-[20px] transition-all duration-300 group hover:-translate-y-1 relative overflow-hidden text-center"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.4)',
+                                        border: '2px dashed rgba(139,92,246,0.3)',
+                                    }}
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/0 to-fuchsia-500/0 group-hover:from-violet-500/5 group-hover:to-fuchsia-500/5 transition-colors" />
+                                    <div className="w-14 h-14 rounded-full bg-violet-100 flex items-center justify-center mx-auto mb-3 shadow-inner group-hover:scale-110 transition-transform">
+                                        <span className="text-2xl block relative z-10">📎</span>
+                                    </div>
+                                    <p className="text-[14px] font-bold text-slate-600 relative z-10">Click para seleccionar archivo</p>
+                                    <p className="text-[12px] text-slate-400 mt-1 relative z-10">Cualquier formato admitido por WhatsApp</p>
+                                </button>
+                            )}
 
-            {/* File Upload (non-audio) */}
-            {messageType === 'file' && (
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Archivo adjunto</label>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        onChange={(e) => setFile(e.target.files?.[0] || null)}
-                        className="hidden"
-                    />
-                    {file ? (
-                        <div className="flex items-center gap-3 p-3 bg-violet-50 rounded-xl border border-violet-200">
-                            <span className="text-2xl">📄</span>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
-                                <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
-                            </div>
-                            <button onClick={() => setFile(null)} className="text-slate-400 hover:text-red-500">🗑️</button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="w-full py-8 border-2 border-dashed border-slate-300 rounded-xl hover:border-violet-400 hover:bg-violet-50 transition-all"
-                        >
-                            <div className="text-center">
-                                <span className="text-3xl block mb-2">📎</span>
-                                <p className="text-sm text-slate-500">Click para seleccionar archivo</p>
-                            </div>
-                        </button>
-                    )}
-
-                    {/* Caption for file */}
-                    {file && (
-                        <div className="mt-3">
-                            <label className="block text-sm font-medium text-slate-700 mb-1.5">Caption (opcional)</label>
-                            <input
-                                type="text"
-                                value={textContent}
-                                onChange={(e) => setTextContent(e.target.value)}
-                                placeholder="Agregar un texto al archivo..."
-                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none"
-                            />
+                            {/* Caption for file */}
+                            {file && (
+                                <div className="mt-4 animate-[fadeInSlideDown_0.3s_ease]">
+                                    <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">Caption (opcional)</label>
+                                    <div className="relative group/caption">
+                                        <input
+                                            type="text"
+                                            value={textContent}
+                                            onChange={(e) => setTextContent(e.target.value)}
+                                            placeholder="Agregar un texto al archivo..."
+                                            className="w-full rounded-[16px] p-4 text-[14px] transition-all outline-none text-slate-700 placeholder-slate-400"
+                                            style={{
+                                                background: 'rgba(255, 255, 255, 0.6)',
+                                                border: '1px solid rgba(255, 255, 255, 0.8)',
+                                                boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.02)',
+                                            }}
+                                        />
+                                        <div className="absolute inset-0 rounded-[16px] pointer-events-none border-2 border-transparent group-focus-within/caption:border-violet-400 transition-colors" />
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
-                </div>
-            )}
 
-            {/* Date & Time */}
-            <div className="grid grid-cols-2 gap-3">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">📅 Fecha</label>
-                    <input
-                        type="date"
-                        value={scheduledDate}
-                        onChange={(e) => setScheduledDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none"
-                    />
+                    {/* Date & Time */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">📅 Fecha</label>
+                            <div className="relative group/date">
+                                <input
+                                    type="date"
+                                    value={scheduledDate}
+                                    onChange={(e) => setScheduledDate(e.target.value)}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="w-full rounded-[16px] p-4 text-[14px] transition-all outline-none text-slate-700"
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.6)',
+                                        border: '1px solid rgba(255, 255, 255, 0.8)',
+                                        boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.02)',
+                                    }}
+                                />
+                                <div className="absolute inset-0 rounded-[16px] pointer-events-none border-2 border-transparent group-focus-within/date:border-violet-400 transition-colors" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">🕐 Hora</label>
+                            <div className="relative group/time">
+                                <input
+                                    type="time"
+                                    value={scheduledTime}
+                                    onChange={(e) => setScheduledTime(e.target.value)}
+                                    className="w-full rounded-[16px] p-4 text-[14px] transition-all outline-none text-slate-700"
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.6)',
+                                        border: '1px solid rgba(255, 255, 255, 0.8)',
+                                        boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.02)',
+                                    }}
+                                />
+                                <div className="absolute inset-0 rounded-[16px] pointer-events-none border-2 border-transparent group-focus-within/time:border-violet-400 transition-colors" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Recurrence */}
+                    <div>
+                        <label className="block text-[13px] font-bold text-slate-700 mb-2 uppercase tracking-wide">🔁 Repetición</label>
+                        <div className="relative group/recurrence">
+                            <select
+                                value={recurrence}
+                                onChange={(e) => setRecurrence(e.target.value)}
+                                className="w-full rounded-[16px] p-4 text-[14px] transition-all outline-none text-slate-700 appearance-none"
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.6)',
+                                    border: '1px solid rgba(255, 255, 255, 0.8)',
+                                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.02)',
+                                }}
+                            >
+                                {RECURRENCE_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                            </select>
+                            <div className="absolute inset-0 rounded-[16px] pointer-events-none border-2 border-transparent group-focus-within/recurrence:border-violet-400 transition-colors" />
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                ▼
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">🕐 Hora</label>
-                    <input
-                        type="time"
-                        value={scheduledTime}
-                        onChange={(e) => setScheduledTime(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none"
-                    />
+
+                {/* Submit */}
+                <div className="mt-8 pt-6 border-t border-slate-200/50">
+                    <button
+                        onClick={handleSubmit}
+                        disabled={submitting}
+                        className="w-full py-4 rounded-[16px] text-white font-bold text-[15px] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-1 relative overflow-hidden group/submit"
+                        style={{
+                            background: submitting ? 'rgba(139,92,246,0.6)' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                            boxShadow: submitting ? 'none' : '0 8px 24px -6px rgba(124,58,237,0.5)',
+                        }}
+                    >
+                        {!submitting && <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/submit:translate-y-0 transition-transform duration-300" />}
+                        <span className="relative flex justify-center items-center gap-2">
+                            {submitting ? (
+                                <>
+                                    <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                    <span>Programando...</span>
+                                </>
+                            ) : (
+                                '📅 Programar Mensaje'
+                            )}
+                        </span>
+                    </button>
                 </div>
             </div>
-
-            {/* Recurrence */}
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">🔁 Repetición</label>
-                <select
-                    value={recurrence}
-                    onChange={(e) => setRecurrence(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none bg-white"
-                >
-                    {RECURRENCE_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Submit */}
-            <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className={`w-full py-3.5 rounded-xl font-semibold text-white transition-all ${submitting
-                    ? 'bg-violet-400 cursor-not-allowed'
-                    : 'bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-600/20 hover:shadow-violet-600/30'
-                    }`}
-            >
-                {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                        <span className="animate-spin">⏳</span> Programando...
-                    </span>
-                ) : (
-                    '📅 Programar Mensaje'
-                )}
-            </button>
         </div>
     )
 }

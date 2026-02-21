@@ -95,19 +95,19 @@ export default function ScheduledList() {
     if (loading) {
         return (
             <div className="flex justify-center py-12">
-                <div className="animate-spin w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full" style={{ borderWidth: '3px' }}></div>
+                <div className="animate-spin w-8 h-8 rounded-full" style={{ border: '3px solid rgba(139,92,246,0.2)', borderTopColor: '#8b5cf6' }}></div>
             </div>
         )
     }
 
     if (messages.length === 0) {
         return (
-            <div className="text-center py-16">
-                <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="text-center py-16 bg-white/40 backdrop-blur-md rounded-[24px] border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
+                <div className="w-16 h-16 bg-slate-100/50 rounded-[20px] shadow-inner flex items-center justify-center mx-auto mb-4">
                     <span className="text-3xl">📭</span>
                 </div>
-                <p className="text-slate-500 font-medium">No hay mensajes pendientes</p>
-                <p className="text-sm text-slate-400 mt-1">Programá un mensaje desde la pestaña "Programar"</p>
+                <p className="text-slate-600 font-bold text-[15px]">No hay mensajes pendientes</p>
+                <p className="text-[13px] text-slate-500 mt-1 font-medium">Programá un mensaje desde la pestaña "Programar"</p>
             </div>
         )
     }
@@ -116,133 +116,161 @@ export default function ScheduledList() {
     const failedCount = messages.filter(m => m.status === 'failed').length
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                     {pendingCount > 0 && (
-                        <span className="text-sm text-slate-500">
-                            {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
-                        </span>
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                            <span className="text-[12px] font-bold text-slate-600 uppercase tracking-widest">
+                                {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
+                            </span>
+                        </div>
                     )}
                     {failedCount > 0 && (
-                        <span className="text-sm text-red-500 font-medium">
-                            ⚠️ {failedCount} fallido{failedCount !== 1 ? 's' : ''}
-                        </span>
+                        <div className="flex items-center gap-2 bg-red-50 border border-red-200 px-3 py-1.5 rounded-full shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-[12px] font-bold text-red-600 uppercase tracking-widest">
+                                {failedCount} fallido{failedCount !== 1 ? 's' : ''}
+                            </span>
+                        </div>
                     )}
                 </div>
             </div>
 
-            {messages.map(msg => {
-                const isFailed = msg.status === 'failed'
-                const isRetrying = retrying === msg._id
+            <div className="grid gap-4">
+                {messages.map(msg => {
+                    const isFailed = msg.status === 'failed'
+                    const isRetrying = retrying === msg._id
 
-                return (
-                    <div
-                        key={msg._id}
-                        className={`group bg-white rounded-xl shadow-sm border overflow-hidden transition-all hover:shadow-md ${isFailed
-                            ? 'border-red-200 bg-red-50/30'
-                            : 'border-slate-200'
-                            }`}
-                    >
-                        <div className="p-4">
-                            <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isFailed ? 'bg-red-100' : 'bg-violet-100'
-                                        }`}>
-                                        <span className="text-lg">{msg.isGroup ? '👥' : '👤'}</span>
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <p className="font-medium text-slate-800 truncate">{msg.chatName}</p>
-                                            <span className="text-sm">{getTypeIcon(msg.messageType)}</span>
-                                            {isFailed && (
-                                                <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-semibold">
-                                                    Fallido
-                                                </span>
-                                            )}
+                    return (
+                        <div
+                            key={msg._id}
+                            className={`group relative overflow-hidden rounded-[20px] transition-all duration-300 animate-[fadeInSlideDown_0.3s_ease-out] ${isFailed
+                                ? 'bg-red-50/40 border border-red-200/60 shadow-[0_8px_24px_rgba(239,68,68,0.08)]'
+                                : 'bg-white/60 border border-white/80 shadow-[0_8px_32px_rgba(30,27,75,0.03)] backdrop-blur-md hover:shadow-[0_12px_40px_rgba(30,27,75,0.08)] hover:-translate-y-0.5'
+                                }`}
+                        >
+                            {!isFailed && (
+                                <div className="absolute inset-0 bg-gradient-to-r from-violet-500/0 to-fuchsia-500/0 group-hover:from-violet-500/5 group-hover:to-fuchsia-500/5 transition-colors pointer-events-none" />
+                            )}
+
+                            <div className="p-5 relative z-10">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                                        <div className={`w-12 h-12 rounded-[16px] flex items-center justify-center flex-shrink-0 shadow-inner ${isFailed ? 'bg-red-100/80 text-red-600' : 'bg-violet-100/80 text-violet-600'
+                                            }`}>
+                                            <span className="text-xl">{msg.isGroup ? '👥' : '👤'}</span>
                                         </div>
-                                        <p className={`text-sm font-medium ${isFailed ? 'text-red-500' : 'text-violet-600'}`}>
-                                            {formatDate(msg.scheduledAt)}
-                                        </p>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <p className="font-bold text-[15px] text-slate-800 truncate">{msg.chatName}</p>
+                                                <span className="text-sm bg-white/50 px-2 py-0.5 rounded-md shadow-sm border border-slate-100">{getTypeIcon(msg.messageType)}</span>
+                                                {isFailed && (
+                                                    <span className="text-[10px] uppercase tracking-wider font-bold bg-gradient-to-r from-red-500 to-rose-500 text-white px-2 py-0.5 rounded-full shadow-sm">
+                                                        Fallido
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-[12px] opacity-70">🕜</span>
+                                                <p className={`text-[13px] font-bold ${isFailed ? 'text-red-500' : 'text-violet-600'}`}>
+                                                    {formatDate(msg.scheduledAt)}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
+
+                                    {!isFailed && (
+                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => retryMessage(msg._id)}
+                                                disabled={isRetrying}
+                                                className={`text-[12px] py-2 px-4 rounded-[12px] font-bold transition-all duration-300 ${isRetrying
+                                                    ? 'bg-green-300 text-white cursor-not-allowed'
+                                                    : 'bg-green-500 hover:bg-green-600 text-white shadow-[0_4px_12px_rgba(34,197,94,0.3)] hover:-translate-y-0.5'
+                                                    }`}
+                                                title="Enviar ahora"
+                                            >
+                                                {isRetrying ? '⏳...' : '▶️ Enviar ya'}
+                                            </button>
+                                            <button
+                                                onClick={() => cancelMessage(msg._id)}
+                                                className="text-[12px] py-2 px-3 rounded-[12px] font-bold bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-300 shadow-sm"
+                                                title="Cancelar envío"
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {!isFailed && (
-                                    <div className="flex items-center gap-1.5">
-                                        <button
-                                            onClick={() => retryMessage(msg._id)}
-                                            disabled={isRetrying}
-                                            className={`text-xs py-1.5 px-3 rounded-lg font-semibold transition-all ${isRetrying
-                                                ? 'bg-green-300 text-white cursor-not-allowed'
-                                                : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
-                                                }`}
-                                            title="Enviar ahora"
-                                        >
-                                            {isRetrying ? '⏳ Enviando...' : '▶️ Enviar'}
-                                        </button>
-                                        <button
-                                            onClick={() => cancelMessage(msg._id)}
-                                            className="text-xs py-1.5 px-3 rounded-lg font-medium border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                                            title="Cancelar envío"
-                                        >
-                                            🗑️ Cancelar
-                                        </button>
+                                {/* Message preview */}
+                                <div className="mt-4 pl-[64px]">
+                                    {msg.textContent && (
+                                        <div className="bg-white/50 p-3 rounded-[12px] border border-white/60 shadow-inner">
+                                            <p className="text-[13px] text-slate-700 line-clamp-2 leading-relaxed">{msg.textContent}</p>
+                                        </div>
+                                    )}
+                                    {msg.fileName && (
+                                        <div className="flex items-center gap-2 mt-2 bg-white/50 p-2.5 rounded-[12px] border border-white/60 shadow-inner w-fit">
+                                            <span className="text-lg">{getTypeIcon(msg.messageType)}</span>
+                                            <p className="text-[13px] font-medium text-slate-700 truncate max-w-[200px]">{msg.fileName}</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Recurring badge */}
+                                {msg.isRecurring && (
+                                    <div className="mt-3 ml-[64px]">
+                                        <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider bg-violet-100 text-violet-700 px-3 py-1 rounded-full font-bold shadow-sm border border-violet-200">
+                                            <span>🔁</span> {msg.recurringLabel || 'Recurrente'}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Error details + Retry */}
+                                {isFailed && (
+                                    <div className="mt-4 ml-[64px] space-y-3">
+                                        <div className="bg-white/60 border border-red-100 rounded-[12px] p-4 shadow-inner">
+                                            <div className="flex items-center gap-2 mb-1.5">
+                                                <span className="text-red-500 text-sm">❌</span>
+                                                <p className="text-[12px] font-bold text-red-600 uppercase tracking-wider">Detalle del Error</p>
+                                            </div>
+                                            <p className="text-[13px] font-medium text-red-500/90 pl-6">{msg.error || 'Error desconocido'}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => retryMessage(msg._id)}
+                                                disabled={isRetrying}
+                                                className={`flex-1 py-2.5 px-4 rounded-[12px] text-[13px] font-bold transition-all duration-300 ${isRetrying
+                                                    ? 'bg-violet-300 text-white cursor-not-allowed'
+                                                    : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:shadow-[0_4px_16px_rgba(139,92,246,0.3)] hover:-translate-y-0.5'
+                                                    }`}
+                                            >
+                                                {isRetrying ? '⏳ Reintentando...' : '🔄 Reintentar Ahora'}
+                                            </button>
+                                            <button
+                                                onClick={() => cancelMessage(msg._id)}
+                                                className="py-2.5 px-4 rounded-[12px] text-[13px] font-bold bg-white/50 border border-white/80 text-slate-600 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all duration-300 shadow-sm"
+                                            >
+                                                🗑️ Descartar
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
-
-                            {/* Message preview */}
-                            <div className="mt-3 pl-[52px]">
-                                {msg.textContent && (
-                                    <p className="text-sm text-slate-600 line-clamp-2">{msg.textContent}</p>
-                                )}
-                                {msg.fileName && (
-                                    <p className="text-sm text-slate-500 flex items-center gap-1">
-                                        {getTypeIcon(msg.messageType)} {msg.fileName}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Recurring badge */}
-                            {msg.isRecurring && (
-                                <div className="mt-2 ml-[52px]">
-                                    <span className="inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-600 px-2.5 py-1 rounded-full font-medium">
-                                        🔁 {msg.recurringLabel || 'Recurrente'}
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Error details + Retry */}
-                            {isFailed && (
-                                <div className="mt-3 ml-[52px] space-y-2">
-                                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                        <p className="text-xs font-semibold text-red-600 mb-1">❌ Error:</p>
-                                        <p className="text-xs text-red-500">{msg.error || 'Error desconocido'}</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => retryMessage(msg._id)}
-                                            disabled={isRetrying}
-                                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all ${isRetrying
-                                                ? 'bg-violet-300 text-white cursor-not-allowed'
-                                                : 'bg-violet-600 text-white hover:bg-violet-700 shadow-md shadow-violet-600/20'
-                                                }`}
-                                        >
-                                            {isRetrying ? '⏳ Reintentando...' : '🔄 Reintentar Ahora'}
-                                        </button>
-                                        <button
-                                            onClick={() => cancelMessage(msg._id)}
-                                            className="py-2 px-3 rounded-lg text-sm font-medium border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 transition-all"
-                                        >
-                                            🗑️ Descartar
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
                         </div>
-                    </div>
-                )
-            })}
+                    )
+                })}
+            </div>
+
+            <style>{`
+                @keyframes fadeInSlideDown {
+                    from { opacity: 0; transform: translateY(-8px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
         </div>
     )
 }

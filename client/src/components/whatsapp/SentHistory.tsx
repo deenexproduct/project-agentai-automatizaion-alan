@@ -55,79 +55,111 @@ export default function SentHistory() {
     if (loading) {
         return (
             <div className="flex justify-center py-12">
-                <div className="animate-spin w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full" style={{ borderWidth: '3px' }}></div>
+                <div className="animate-spin w-8 h-8 rounded-full" style={{ border: '3px solid rgba(139,92,246,0.2)', borderTopColor: '#8b5cf6' }}></div>
             </div>
         )
     }
 
     if (messages.length === 0) {
         return (
-            <div className="text-center py-16">
-                <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="text-center py-16 bg-white/40 backdrop-blur-md rounded-[24px] border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
+                <div className="w-16 h-16 bg-slate-100/50 rounded-[20px] shadow-inner flex items-center justify-center mx-auto mb-4">
                     <span className="text-3xl">📬</span>
                 </div>
-                <p className="text-slate-500 font-medium">No hay mensajes enviados</p>
-                <p className="text-sm text-slate-400 mt-1">Los mensajes enviados aparecerán aquí</p>
+                <p className="text-slate-600 font-bold text-[15px]">No hay mensajes enviados</p>
+                <p className="text-[13px] text-slate-500 mt-1 font-medium">Los mensajes enviados aparecerán aquí</p>
             </div>
         )
     }
 
     return (
-        <div className="space-y-3">
-            <p className="text-sm text-slate-500 mb-2">{messages.length} mensaje{messages.length !== 1 ? 's' : ''}</p>
+        <div className="space-y-4">
+            <p className="text-[13px] font-bold text-slate-500 mb-2 uppercase tracking-wide px-2">
+                {messages.length} mensaje{messages.length !== 1 ? 's' : ''}
+            </p>
 
-            {messages.map(msg => (
-                <div key={msg._id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="p-4">
-                        <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${msg.status === 'sent' ? 'bg-green-100' : 'bg-red-100'
-                                    }`}>
-                                    <span className="text-lg">{msg.status === 'sent' ? '✅' : '❌'}</span>
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <p className="font-medium text-slate-800 truncate">{msg.chatName}</p>
-                                        <span className="text-sm">{getTypeIcon(msg.messageType)}</span>
-                                        {msg.isGroup && (
-                                            <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">Grupo</span>
-                                        )}
+            <div className="grid gap-4">
+                {messages.map(msg => {
+                    const isSuccess = msg.status === 'sent'
+
+                    return (
+                        <div
+                            key={msg._id}
+                            className={`group relative overflow-hidden rounded-[20px] transition-all duration-300 animate-[fadeInSlideDown_0.3s_ease-out] ${isSuccess
+                                ? 'bg-white/60 border border-white/80 shadow-[0_8px_32px_rgba(30,27,75,0.03)] backdrop-blur-md hover:shadow-[0_12px_40px_rgba(30,27,75,0.08)] hover:-translate-y-0.5'
+                                : 'bg-red-50/40 border border-red-200/60 shadow-[0_8px_24px_rgba(239,68,68,0.08)]'
+                                }`}
+                        >
+                            {isSuccess && (
+                                <div className="absolute inset-0 bg-gradient-to-r from-green-500/0 to-emerald-500/0 group-hover:from-green-500/5 group-hover:to-emerald-500/5 transition-colors pointer-events-none" />
+                            )}
+
+                            <div className="p-5 relative z-10">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                                        <div className={`w-12 h-12 rounded-[16px] flex items-center justify-center flex-shrink-0 shadow-inner ${isSuccess ? 'bg-green-100/80 text-green-600' : 'bg-red-100/80 text-red-600'
+                                            }`}>
+                                            <span className="text-xl">{isSuccess ? '✅' : '❌'}</span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <p className="font-bold text-[15px] text-slate-800 truncate">{msg.chatName}</p>
+                                                <span className="text-sm bg-white/50 px-2 py-0.5 rounded-md shadow-sm border border-slate-100">{getTypeIcon(msg.messageType)}</span>
+                                                {msg.isGroup && (
+                                                    <span className="text-[10px] uppercase tracking-wider font-bold bg-slate-200/50 text-slate-500 px-2 py-1 rounded-[8px]">
+                                                        Grupo
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className={`text-[12px] font-bold ${isSuccess ? 'text-green-600' : 'text-red-500'}`}>
+                                                {isSuccess ? `Enviado ${formatDate(msg.sentAt)}` : `Falló ${formatDate(msg.scheduledAt)}`}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <p className="text-sm text-slate-500">
-                                        {msg.status === 'sent' ? `Enviado ${formatDate(msg.sentAt)}` : `Falló ${formatDate(msg.scheduledAt)}`}
-                                    </p>
                                 </div>
+
+                                {/* Message content */}
+                                <div className="mt-4 pl-[64px]">
+                                    {msg.textContent && (
+                                        <div className="bg-white/50 p-3 rounded-[12px] border border-white/60 shadow-inner">
+                                            <p className="text-[13px] text-slate-700 line-clamp-2 leading-relaxed">{msg.textContent}</p>
+                                        </div>
+                                    )}
+                                    {msg.fileName && (
+                                        <div className="flex items-center gap-2 mt-2 bg-white/50 p-2.5 rounded-[12px] border border-white/60 shadow-inner w-fit">
+                                            <span className="text-lg">{getTypeIcon(msg.messageType)}</span>
+                                            <p className="text-[13px] font-medium text-slate-700 truncate max-w-[200px]">{msg.fileName}</p>
+                                        </div>
+                                    )}
+                                    {!isSuccess && msg.error && (
+                                        <div className="mt-2 bg-white/60 border border-red-100 rounded-[12px] p-3 shadow-inner">
+                                            <p className="text-[12px] font-bold text-red-600 flex items-center gap-1.5">
+                                                <span>⚠️</span> {msg.error}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Recurring badge */}
+                                {msg.isRecurring && (
+                                    <div className="mt-3 ml-[64px]">
+                                        <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider bg-violet-100 text-violet-700 px-3 py-1 rounded-full font-bold shadow-sm border border-violet-200">
+                                            <span>🔁</span> Recurrente
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         </div>
+                    )
+                })}
+            </div>
 
-                        {/* Message content */}
-                        <div className="mt-3 pl-[52px]">
-                            {msg.textContent && (
-                                <p className="text-sm text-slate-600 line-clamp-2">{msg.textContent}</p>
-                            )}
-                            {msg.fileName && (
-                                <p className="text-sm text-slate-500 flex items-center gap-1">
-                                    {getTypeIcon(msg.messageType)} {msg.fileName}
-                                </p>
-                            )}
-                            {msg.status === 'failed' && msg.error && (
-                                <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
-                                    ⚠️ {msg.error}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Recurring badge */}
-                        {msg.isRecurring && (
-                            <div className="mt-2 pl-[52px]">
-                                <span className="inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-600 px-2.5 py-1 rounded-full font-medium">
-                                    🔁 Recurrente
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            ))}
+            <style>{`
+                @keyframes fadeInSlideDown {
+                    from { opacity: 0; transform: translateY(-8px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
         </div>
     )
 }

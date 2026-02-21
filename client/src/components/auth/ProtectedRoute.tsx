@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -6,6 +6,7 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
     const { token, isLoading } = useAuth();
     const location = useLocation();
 
+    // Show loading spinner while validating token
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -17,6 +18,7 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
         );
     }
 
+    // Only redirect after loading is complete and we confirmed no valid token
     if (!token) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }

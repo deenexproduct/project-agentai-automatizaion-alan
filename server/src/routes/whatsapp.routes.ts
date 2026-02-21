@@ -62,21 +62,42 @@ router.get('/debug', (req: Request, res: Response) => {
 
 router.get('/chats', async (req: Request, res: Response) => {
     try {
+        console.log(`📡 [HTTP GET /chats] Request received from token ${req.user?._id}`);
         const userId = req.user?._id?.toString();
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
         const tenant = whatsappService.getTenant(userId);
+        console.log(`📡 [HTTP GET /chats] Tenant retrieved, isConnected: ${tenant.isConnected()}`);
 
         // Force refresh if ?refresh=true or cache is empty
         const forceRefresh = req.query.refresh === 'true';
         if (forceRefresh) {
+            console.log(`📡 [HTTP GET /chats] Forcing refreshChats()...`);
             await tenant.refreshChats();
+            console.log(`📡 [HTTP GET /chats] refreshChats() completed.`);
         }
 
         const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
         const search = req.query.search ? (req.query.search as string) : undefined;
 
+        console.log(`📡 [HTTP GET /chats] Calling getChats() with limit=${limit}, search=${search}`);
         const chats = await tenant.getChats(limit, search);
+        console.log(`📡 [HTTP GET /chats] Returning ${chats.length} elements to client.`);
         res.json(chats);
+    } catch (error: any) {
+        console.error(`❌ [HTTP GET /chats] Error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/contact/:id/profile-pic', async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?._id?.toString();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const tenant = whatsappService.getTenant(userId);
+
+        const url = await tenant.getContactProfilePic(req.params.id);
+        res.json({ url });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -197,6 +218,21 @@ router.delete('/scheduled/:id', async (req: Request, res: Response) => {
         }
 
         res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ── Reset Session / Logout ────────────────────────────────
+router.post('/reset', async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?._id?.toString();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+        const tenant = whatsappService.getTenant(userId);
+        await tenant.resetSession();
+
+        res.json({ success: true, message: 'La sesión fue reseteada correctamente' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

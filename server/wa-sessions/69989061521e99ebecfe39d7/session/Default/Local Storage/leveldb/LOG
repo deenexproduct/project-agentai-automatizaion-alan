@@ -1,2 +1,3 @@
-2026/02/20-17:00:09.836 187797 Creating DB /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Local Storage/leveldb since it was missing.
-2026/02/20-17:00:09.850 187797 Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/02/21-00:19:53.783 1fa575 Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/02/21-00:19:53.787 1fa575 Recovering log #4
+2026/02/21-00:19:53.788 1fa575 Reusing old log /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Local Storage/leveldb/000004.log 

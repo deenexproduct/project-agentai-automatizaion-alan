@@ -5,10 +5,7 @@
  * Manages post generation, approval, rejection, and metrics.
  */
 
-import { API_BASE } from '../config';
-
-const POSTS_URL = `${API_BASE}/api/linkedin/posts`;
-const CONFIG_URL = `${API_BASE}/api/linkedin/publishing`;
+import api from '../lib/axios';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -106,100 +103,105 @@ export async function generatePost(
     options?: { context?: string; pilar?: string; formato?: string; includeTrends?: boolean },
     workspaceId = 'default'
 ): Promise<{ post: ScheduledPost; draft: PostDraft; validation: ValidationResult }> {
-    const res = await fetch(`${POSTS_URL}/generate?workspaceId=${workspaceId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    try {
+        const res = await api.post(`/linkedin/posts/generate?workspaceId=${workspaceId}`, {
             idea,
             accountId,
             ...options,
-        }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || data.details || 'Failed to generate post');
-    return data;
+        });
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || err.response?.data?.details || 'Failed to generate post');
+    }
 }
 
 export async function getDrafts(workspaceId = 'default'): Promise<ScheduledPost[]> {
-    const res = await fetch(`${POSTS_URL}/drafts?workspaceId=${workspaceId}`);
-    const data = await res.json();
-    return data.drafts ?? [];
+    try {
+        const res = await api.get(`/linkedin/posts/drafts?workspaceId=${workspaceId}`);
+        return res.data.drafts ?? [];
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to get drafts');
+    }
 }
 
 export async function getScheduledPosts(workspaceId = 'default'): Promise<ScheduledPost[]> {
-    const res = await fetch(`${POSTS_URL}/scheduled?workspaceId=${workspaceId}`);
-    const data = await res.json();
-    return data.posts ?? [];
+    try {
+        const res = await api.get(`/linkedin/posts/scheduled?workspaceId=${workspaceId}`);
+        return res.data.posts ?? [];
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to get scheduled posts');
+    }
 }
 
 export async function getPublishedPosts(workspaceId = 'default', limit = 20): Promise<ScheduledPost[]> {
-    const res = await fetch(`${POSTS_URL}/published?workspaceId=${workspaceId}&limit=${limit}`);
-    const data = await res.json();
-    return data.posts ?? [];
+    try {
+        const res = await api.get(`/linkedin/posts/published?workspaceId=${workspaceId}&limit=${limit}`);
+        return res.data.posts ?? [];
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to get published posts');
+    }
 }
 
 export async function approvePost(id: string, scheduledAt?: string): Promise<ScheduledPost> {
-    const res = await fetch(`${POSTS_URL}/${id}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduledAt }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to approve post');
-    return data.post;
+    try {
+        const res = await api.post(`/linkedin/posts/${id}/approve`, { scheduledAt });
+        return res.data.post;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to approve post');
+    }
 }
 
 export async function rejectPost(id: string, reason?: string): Promise<ScheduledPost> {
-    const res = await fetch(`${POSTS_URL}/${id}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to reject post');
-    return data.post;
+    try {
+        const res = await api.post(`/linkedin/posts/${id}/reject`, { reason });
+        return res.data.post;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to reject post');
+    }
 }
 
 export async function regeneratePost(id: string, feedback: string): Promise<{ post: ScheduledPost; draft: PostDraft; validation: ValidationResult }> {
-    const res = await fetch(`${POSTS_URL}/${id}/regenerate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedback }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || data.details || 'Failed to regenerate post');
-    return data;
+    try {
+        const res = await api.post(`/linkedin/posts/${id}/regenerate`, { feedback });
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || err.response?.data?.details || 'Failed to regenerate post');
+    }
 }
 
 export async function editPost(id: string, updates: { content?: string; hashtags?: string[]; scheduledAt?: string }): Promise<ScheduledPost> {
-    const res = await fetch(`${POSTS_URL}/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to edit post');
-    return data.post;
+    try {
+        const res = await api.put(`/linkedin/posts/${id}`, updates);
+        return res.data.post;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to edit post');
+    }
 }
 
 export async function deletePost(id: string): Promise<void> {
-    const res = await fetch(`${POSTS_URL}/${id}`, { method: 'DELETE' });
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to delete post');
+    try {
+        await api.delete(`/linkedin/posts/${id}`);
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to delete post');
     }
 }
 
 // ── Config API ────────────────────────────────────────────────
 
 export async function getPilares(workspaceId = 'default'): Promise<ContentPilar[]> {
-    const res = await fetch(`${CONFIG_URL}/pilares?workspaceId=${workspaceId}`);
-    const data = await res.json();
-    return data.pilares ?? [];
+    try {
+        const res = await api.get(`/linkedin/publishing/pilares?workspaceId=${workspaceId}`);
+        return res.data.pilares ?? [];
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to get pilares');
+    }
 }
 
 export async function getAIHealth(): Promise<AIHealthStatus> {
-    const res = await fetch(`${CONFIG_URL}/ai/health`);
-    const data = await res.json();
-    return data;
+    try {
+        const res = await api.get(`/linkedin/publishing/ai/health`);
+        return res.data;
+    } catch (err: any) {
+        throw new Error(err.response?.data?.error || 'Failed to get AI health');
+    }
 }

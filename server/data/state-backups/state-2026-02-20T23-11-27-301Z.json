@@ -1,0 +1,26 @@
+{
+  "batchId": "2026-02-20T23:07:15.349Z",
+  "accountEmail": "unknown",
+  "profiles": [
+    {
+      "url": "https://www.linkedin.com/in/tomaspereyrairaola/",
+      "status": "pending",
+      "attempts": 0
+    }
+  ],
+  "currentIndex": 0,
+  "startTime": "2026-02-20T23:07:15.415Z",
+  "isPaused": false,
+  "options": {
+    "totalLimit": 1,
+    "dailyLimit": 1
+  },
+  "stats": {
+    "processed": 0,
+    "successful": 0,
+    "failed": 0,
+    "pending": 1
+  },
+  "lastUpdate": "2026-02-20T23:07:15.416Z",
+  "version": 1
+}

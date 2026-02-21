@@ -45,6 +45,6 @@ const UserSchema = new Schema<IUser>({
 
 // Indexes for fast lookup
 UserSchema.index({ email: 1 });
-UserSchema.index({ otpExpiresAt: 1 }, { expireAfterSeconds: 0 }); // Automatic cleanup of expired OTPs optional, but we just want the index for fast query
+UserSchema.index({ otpExpiresAt: 1 });
 
 export const UserModel = mongoose.model<IUser>('User', UserSchema);

@@ -38,20 +38,17 @@ router.post('/start-prospecting', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'urls must be a non-empty array of strings' });
         }
 
-        const started = await tenant.startProspecting({
+        await tenant.startProspecting({
             urls,
             sendNote: !!sendNote,
             noteText: noteText || undefined,
         });
 
-        if (started) {
-            res.json({ success: true, message: `Prospecting started for ${urls.length} profiles` });
-        } else {
-            res.status(400).json({ error: 'Cannot start prospecting — check session status' });
-        }
+        res.json({ success: true, message: `Prospecting started for ${urls.length} profiles` });
     } catch (err: any) {
-        console.error('Start prospecting error:', err);
-        res.status(500).json({ error: err.message || 'Failed to start prospecting' });
+        // Log the specific error and return it to the client
+        console.error('Start prospecting error:', err.message);
+        res.status(400).json({ error: err.message || 'Cannot start prospecting — check session status' });
     }
 });
 

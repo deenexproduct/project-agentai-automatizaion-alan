@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Eye, Link, Hand, Microscope, Clock, CheckCircle, Send, Search, RefreshCw, Loader2, X, Download, Mail } from 'lucide-react';
 import ContactCard from './ContactCard';
@@ -25,13 +26,13 @@ interface ColumnConfig {
 }
 
 const COLUMNS: ColumnConfig[] = [
-    { id: 'visitando', label: 'Visitando', Icon: Eye, color: '#06b6d4', accentBg: 'rgba(6,182,212,0.08)' },
-    { id: 'conectando', label: 'Conectando', Icon: Link, color: '#eab308', accentBg: 'rgba(234,179,8,0.08)' },
-    { id: 'interactuando', label: 'Interactuando', Icon: Hand, color: '#f97316', accentBg: 'rgba(249,115,22,0.08)' },
-    { id: 'enriqueciendo', label: 'Enriqueciendo', Icon: Microscope, color: '#a855f7', accentBg: 'rgba(168,85,247,0.08)' },
-    { id: 'esperando_aceptacion', label: 'Esperando Aceptación', Icon: Clock, color: '#f59e0b', accentBg: 'rgba(245,158,11,0.08)' },
-    { id: 'aceptado', label: 'Aceptado', Icon: CheckCircle, color: '#10b981', accentBg: 'rgba(16,185,129,0.08)' },
-    { id: 'mensaje_enviado', label: 'Mensaje Enviado', Icon: Send, color: '#8b5cf6', accentBg: 'rgba(139,92,246,0.08)' },
+    { id: 'visitando', label: 'Visitando', Icon: Eye, color: '#06b6d4', accentBg: 'rgba(6,182,212,0.1)' },
+    { id: 'conectando', label: 'Conectando', Icon: Link, color: '#eab308', accentBg: 'rgba(234,179,8,0.1)' },
+    { id: 'interactuando', label: 'Interactuando', Icon: Hand, color: '#f97316', accentBg: 'rgba(249,115,22,0.1)' },
+    { id: 'enriqueciendo', label: 'Enriqueciendo', Icon: Microscope, color: '#a855f7', accentBg: 'rgba(168,85,247,0.1)' },
+    { id: 'esperando_aceptacion', label: 'En Espera', Icon: Clock, color: '#f59e0b', accentBg: 'rgba(245,158,11,0.1)' },
+    { id: 'aceptado', label: 'Aceptado', Icon: CheckCircle, color: '#10b981', accentBg: 'rgba(16,185,129,0.1)' },
+    { id: 'mensaje_enviado', label: 'Completado', Icon: Send, color: '#8b5cf6', accentBg: 'rgba(139,92,246,0.1)' },
 ];
 
 // Valid drag transitions (only forward)
@@ -62,6 +63,11 @@ export default function CRMPage() {
     const [loading, setLoading] = useState(true);
 
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
+
+    useEffect(() => {
+        setHeaderTarget(document.getElementById('header-actions'));
+    }, []);
 
     // ── Load data ──────────────────────────────────────────────
 
@@ -77,8 +83,8 @@ export default function CRMPage() {
         } catch { /* ignore */ }
     }, [search]);
 
-    const loadAll = useCallback(async () => {
-        setLoading(true);
+    const loadAll = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const [visData, conxData, intData, enrData, espData, acpData, msgData, countsData] = await Promise.all([
                 getContacts('visitando', search || undefined, 1, 50),
@@ -112,10 +118,19 @@ export default function CRMPage() {
                 mensaje_enviado: 1 < msgData.pages,
             });
         } catch { /* ignore */ }
-        setLoading(false);
+        if (!silent) setLoading(false);
     }, [search]);
 
-    useEffect(() => { loadAll(); }, [loadAll]);
+    // Initial load
+    useEffect(() => { loadAll(false); }, [loadAll]);
+
+    // Auto-refresh (Real-time movement effect)
+    useEffect(() => {
+        const interval = setInterval(() => {
+            loadAll(true);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [loadAll]);
 
     // ── Search with debounce ─────────────────────────────────
 
@@ -123,7 +138,7 @@ export default function CRMPage() {
         setSearch(value);
         if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
         searchTimeoutRef.current = setTimeout(() => {
-            // loadAll is memoized with search dependency, so it will trigger via useEffect
+            // loadAll is memoized with search dependency
         }, 300);
     };
 
@@ -203,7 +218,6 @@ export default function CRMPage() {
             const result = await checkAccepted();
             setCheckResult(result);
             if (result.updated > 0) {
-                // Reload to reflect changes
                 await loadAll();
             }
         } catch (err: any) {
@@ -215,199 +229,279 @@ export default function CRMPage() {
 
     // ── Render ────────────────────────────────────────────────
 
-    const totalContacts = counts.conectando + counts.esperando_aceptacion + counts.interactuando + counts.aceptado + counts.mensaje_enviado + counts.enriqueciendo;
+    const totalContacts = Object.values(counts).reduce((a, b) => a + b, 0);
 
-    return (
-        <div className="flex flex-col h-full">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                    <h2
-                        className="text-lg font-bold"
-                        style={{
-                            background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                        }}
-                    >
-                        Pipeline CRM
-                    </h2>
-                    <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-600 font-medium">
-                        {totalContacts} contactos
-                    </span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    {/* Search */}
-                    <div className="relative">
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => handleSearchChange(e.target.value)}
-                            placeholder="Buscar nombre, cargo, empresa..."
-                            className="text-sm pl-9 pr-4 py-2 rounded-xl border border-purple-100 focus:border-purple-300 focus:outline-none bg-white/70 backdrop-blur-sm w-64"
-                        />
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                    </div>
-
-                    {/* Export button */}
-                    <button
-                        onClick={() => window.open(exportContactsUrl(), '_blank')}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all"
-                        style={{
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            color: '#3b82f6',
-                            border: '1px solid rgba(59, 130, 246, 0.2)',
-                        }}
-                        title="Exportar contactos a CSV"
-                    >
-                        <Download size={16} />
-                        Exportar
-                    </button>
-
-                    {/* Check accepted */}
-                    <button
-                        onClick={handleCheckAccepted}
-                        disabled={checking}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50"
-                        style={{
-                            background: checking
-                                ? '#94a3b8'
-                                : 'linear-gradient(135deg, #10b981, #059669)',
-                            boxShadow: !checking ? '0 2px 10px rgba(16,185,129,0.3)' : 'none',
-                        }}
-                    >
-                        {checking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                        {checking ? 'Verificando...' : 'Verificar aceptados'}
-                    </button>
-                </div>
-            </div>
-
-            {/* Check result toast */}
+    const headerContent = (
+        <div className="flex flex-wrap items-center gap-3">
+            {/* Check result toast inside header */}
             {checkResult && (
                 <div
-                    className="mb-3 px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
+                    className="px-4 py-2 rounded-full text-[13px] font-semibold flex items-center gap-2 shadow-sm"
                     style={{
                         background: checkResult.found === -1
-                            ? 'rgba(239,68,68,0.1)'
+                            ? 'linear-gradient(135deg, #fecaca, #fca5a5)'
                             : checkResult.updated > 0
-                                ? 'rgba(16,185,129,0.1)'
-                                : 'rgba(245,158,11,0.1)',
+                                ? 'linear-gradient(135deg, #a7f3d0, #6ee7b7)'
+                                : 'linear-gradient(135deg, #fef3c7, #fde68a)',
                         color: checkResult.found === -1
-                            ? '#dc2626'
+                            ? '#991b1b'
                             : checkResult.updated > 0
-                                ? '#059669'
-                                : '#d97706',
-                        animation: 'fadeIn 0.3s ease',
+                                ? '#065f46'
+                                : '#92400e',
+                        animation: 'fadeInSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                     }}
                 >
                     {checkResult.found === -1 ? (
-                        <><X size={16} /> Error al verificar — ¿browser activo y logueado?</>
+                        <><X size={14} /> Error verificar</>
                     ) : checkResult.updated > 0 ? (
-                        <><CheckCircle size={16} /> {checkResult.updated} conexiones aceptadas actualizadas</>
+                        <><CheckCircle size={14} /> {checkResult.updated} nuevos aceptados!</>
                     ) : (
-                        <><Mail size={16} /> Sin nuevas aceptaciones encontradas</>
+                        <><Mail size={14} /> Sin nuevos aceptados</>
                     )}
                 </div>
             )}
 
-            {/* Kanban Board */}
-            {loading ? (
-                <div className="flex-1 flex items-center justify-center">
-                    <div className="text-center">
-                        <div className="animate-spin w-10 h-10 border-3 border-purple-200 border-t-purple-600 rounded-full mx-auto mb-3" />
-                        <p className="text-sm text-slate-400">Cargando contactos...</p>
-                    </div>
+            {/* Status Badge */}
+            <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/60 backdrop-blur-md border border-white/80 shadow-sm mr-2">
+                <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                <span className="text-[13px] font-bold text-slate-700">
+                    {totalContacts} Perfiles en Funnel
+                </span>
+            </div>
+
+            {/* Search - Glass Input */}
+            <div className="relative group/search">
+                <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    placeholder="Buscar leads..."
+                    className="w-48 lg:w-64 text-[13px] pl-10 pr-4 py-2 rounded-full border border-white/60 bg-white/40 backdrop-blur-md text-slate-800 focus:bg-white/80 focus:border-violet-300 focus:outline-none transition-all duration-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)] group-hover/search:shadow-[0_4px_12px_rgba(124,58,237,0.06)] placeholder-slate-500 font-medium"
+                />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-hover/search:text-violet-500 transition-colors" size={15} />
+            </div>
+
+            {/* Export button */}
+            <button
+                onClick={() => window.open(exportContactsUrl(), '_blank')}
+                className="group flex items-center justify-center gap-2 px-5 py-2 rounded-full text-[13px] font-bold transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                style={{
+                    background: 'rgba(255, 255, 255, 0.6)',
+                    backdropFilter: 'blur(10px)',
+                    color: '#4f46e5', // Indigo
+                    border: '1px solid rgba(255, 255, 255, 0.8)',
+                }}
+            >
+                <Download size={15} className="group-hover:translate-y-[1px] transition-transform" />
+                Exportar CSV
+            </button>
+
+            {/* Check accepted - Glowing Action Button */}
+            <button
+                onClick={handleCheckAccepted}
+                disabled={checking}
+                className="group relative overflow-hidden flex items-center justify-center gap-2 px-5 py-2 rounded-full text-[13px] font-bold text-white transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0 border border-white/20"
+                style={{
+                    background: checking
+                        ? '#cbd5e1'
+                        : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    boxShadow: !checking ? '0 4px 14px rgba(16,185,129,0.3)' : 'none',
+                }}
+            >
+                {!checking && (
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                )}
+                <div className="relative flex items-center gap-2">
+                    {checking ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} className="group-hover:rotate-180 transition-transform duration-500" />}
+                    {checking ? 'Sincronizando...' : 'Verificar Acuerdos'}
                 </div>
-            ) : (
-                <DragDropContext onDragEnd={onDragEnd}>
-                    <div className="flex gap-4 overflow-x-auto pb-2" style={{ minWidth: 'max-content' }}>
-                        {COLUMNS.map((col) => (
-                            <div
-                                key={col.id}
-                                className="flex flex-col min-w-[280px] max-w-[320px] rounded-2xl"
-                                style={{ background: col.accentBg }}
-                            >
-                                {/* Column Header */}
-                                <div className="flex items-center justify-between px-4 pt-4 pb-2">
-                                    <div className="flex items-center gap-2">
-                                        <col.Icon size={18} color={col.color} />
-                                        <h3 className="text-sm font-semibold text-slate-700">{col.label}</h3>
-                                    </div>
-                                    <span
-                                        className="text-xs font-bold px-2 py-0.5 rounded-full"
-                                        style={{ background: `${col.color}20`, color: col.color }}
-                                    >
-                                        {counts[col.id]}
-                                    </span>
-                                </div>
+            </button>
+        </div>
+    );
 
-                                {/* Droppable area */}
-                                <Droppable droppableId={col.id}>
-                                    {(provided, snapshot) => (
-                                        <div
-                                            ref={provided.innerRef}
-                                            {...provided.droppableProps}
-                                            onScroll={(e) => handleScroll(col.id, e)}
-                                            className="flex-1 overflow-y-auto px-3 pb-3 min-h-[100px]"
-                                            style={{
-                                                transition: 'background 0.2s ease',
-                                                background: snapshot.isDraggingOver
-                                                    ? `${col.color}10`
-                                                    : 'transparent',
-                                                borderRadius: '0 0 16px 16px',
-                                            }}
-                                        >
-                                            {columns[col.id].length === 0 && !snapshot.isDraggingOver && (
-                                                <div className="flex flex-col items-center justify-center py-12 text-slate-300">
-                                                    <col.Icon size={32} opacity={0.3} />
-                                                    <p className="text-xs mt-2">Sin contactos</p>
-                                                </div>
-                                            )}
+    return (
+        <div className="relative flex flex-col h-full overflow-hidden bg-slate-50">
 
-                                            {columns[col.id].map((contact, index) => (
-                                                <Draggable
-                                                    key={contact._id}
-                                                    draggableId={contact._id}
-                                                    index={index}
-                                                >
-                                                    {(dragProvided) => (
-                                                        <ContactCard
-                                                            contact={contact}
-                                                            onClick={() => setDrawerContactId(contact._id)}
-                                                            provided={dragProvided}
-                                                            onEnriched={() => loadAll()}
-                                                        />
-                                                    )}
-                                                </Draggable>
-                                            ))}
+            {/* Atmospheric Background Effects */}
+            <div className="absolute pointer-events-none inset-0 overflow-hidden z-0">
+                <div className="absolute -top-40 -right-40 w-96 h-96 bg-violet-400/20 rounded-full blur-3xl opacity-60 animate-pulse" style={{ animationDuration: '8s' }} />
+                <div className="absolute -bottom-40 -left-20 w-[500px] h-[500px] bg-cyan-400/20 rounded-full blur-3xl opacity-50 animate-pulse" style={{ animationDuration: '12s' }} />
+                <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-fuchsia-400/10 rounded-full blur-3xl opacity-40 animate-pulse" style={{ animationDuration: '10s' }} />
+            </div>
 
-                                            {provided.placeholder}
+            {/* Render header actions into the portal */}
+            {headerTarget && createPortal(headerContent, headerTarget)}
 
-                                            {hasMore[col.id] && (
-                                                <div className="flex justify-center py-2">
-                                                    <span className="text-xs text-slate-400">Scroll para más...</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </Droppable>
+            {/* Main Board Area */}
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0 pr-2 pt-2 pb-6 relative z-10">
+
+                {/* Kanban Board */}
+                {loading ? (
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="flex flex-col items-center p-8 rounded-3xl bg-white/40 backdrop-blur-lg border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.05)]">
+                            <div className="relative">
+                                <div className="absolute inset-0 border-4 border-violet-200 rounded-full opacity-20"></div>
+                                <div className="animate-spin w-12 h-12 border-4 border-transparent border-t-violet-600 rounded-full" />
                             </div>
-                        ))}
+                            <h3 className="mt-4 font-bold text-slate-700 text-lg">Cargando Funnel</h3>
+                            <p className="text-sm text-slate-500 font-medium">Sincronizando contactos...</p>
+                        </div>
                     </div>
-                </DragDropContext>
-            )}
+                ) : (
+                    <div className="flex-1 overflow-x-auto overflow-y-hidden crm-scroll-container">
+                        <DragDropContext onDragEnd={onDragEnd}>
+                            <div className="flex gap-4 h-full pl-6 pr-6" style={{ minWidth: 'max-content' }}>
+                                {COLUMNS.map((col) => (
+                                    <div
+                                        key={col.id}
+                                        className="flex flex-col min-w-[290px] max-w-[320px] rounded-[24px] h-full transition-all duration-300 border border-white/60 relative overflow-hidden group/board"
+                                        style={{
+                                            background: 'rgba(255, 255, 255, 0.4)',
+                                            backdropFilter: 'blur(16px)',
+                                            WebkitBackdropFilter: 'blur(16px)',
+                                            boxShadow: '0 4px 24px -6px rgba(0,0,0,0.03), inset 0 0 0 1px rgba(255,255,255,0.4)'
+                                        }}
+                                    >
+                                        {/* Column Header */}
+                                        <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0 relative z-10 border-b border-white/30">
+                                            <div className="flex items-center gap-2.5">
+                                                <div
+                                                    className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm"
+                                                    style={{ background: `linear-gradient(135deg, ${col.color}, ${col.color}CC)` }}
+                                                >
+                                                    <col.Icon size={16} color="white" />
+                                                </div>
+                                                <h3 className="text-[14px] font-bold text-slate-800 tracking-tight">{col.label}</h3>
+                                            </div>
+                                            <div
+                                                className="text-[11px] font-black px-2.5 py-1 rounded-full border"
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.8)',
+                                                    color: col.color,
+                                                    borderColor: `${col.color}30`,
+                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                                                }}
+                                            >
+                                                {counts[col.id]}
+                                            </div>
+                                        </div>
 
-            {/* Contact Drawer */}
-            <ContactDrawer
-                contactId={drawerContactId}
-                onClose={() => setDrawerContactId(null)}
-            />
+                                        {/* Droppable area */}
+                                        <Droppable droppableId={col.id}>
+                                            {(provided, snapshot) => (
+                                                <div
+                                                    ref={provided.innerRef}
+                                                    {...provided.droppableProps}
+                                                    onScroll={(e) => handleScroll(col.id, e)}
+                                                    className="flex-1 overflow-y-auto overflow-x-hidden px-3 pt-4 pb-4 relative custom-scrollbar"
+                                                    style={{
+                                                        transition: 'background 0.3s ease',
+                                                        background: snapshot.isDraggingOver
+                                                            ? `${col.color}15`
+                                                            : 'transparent',
+                                                    }}
+                                                >
+                                                    {/* Empty State */}
+                                                    {columns[col.id].length === 0 && !snapshot.isDraggingOver && (
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
+                                                            <div
+                                                                className="w-16 h-16 rounded-3xl flex items-center justify-center mb-3 mb-2 opacity-50"
+                                                                style={{
+                                                                    border: `2px dashed ${col.color}`,
+                                                                    background: `${col.color}10`
+                                                                }}
+                                                            >
+                                                                <col.Icon size={24} color={col.color} opacity={0.6} />
+                                                            </div>
+                                                            <p className="text-[13px] font-bold text-slate-400">Sin leads aquí</p>
+                                                            <p className="text-[11px] text-slate-400 mt-1 font-medium">Arrastra perfiles a esta fase</p>
+                                                        </div>
+                                                    )}
 
-            {/* Global animation styles */}
-            <style>{`
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-            `}</style>
+                                                    {/* Contacts */}
+                                                    {columns[col.id].map((contact, index) => (
+                                                        <Draggable
+                                                            key={contact._id}
+                                                            draggableId={contact._id}
+                                                            index={index}
+                                                        >
+                                                            {(dragProvided) => (
+                                                                <ContactCard
+                                                                    contact={contact}
+                                                                    onClick={() => setDrawerContactId(contact._id)}
+                                                                    provided={dragProvided}
+                                                                    onEnriched={() => loadAll()}
+                                                                />
+                                                            )}
+                                                        </Draggable>
+                                                    ))}
+
+                                                    {provided.placeholder}
+
+                                                    {hasMore[col.id] && (
+                                                        <div className="flex justify-center py-3 shrink-0">
+                                                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 bg-white/50 px-3 py-1.5 rounded-full border border-white/60">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                                                                Scroll para cargar más...
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </Droppable>
+                                    </div>
+                                ))}
+                            </div>
+                        </DragDropContext>
+                    </div>
+                )}
+
+                {/* Contact Drawer */}
+                <ContactDrawer
+                    contactId={drawerContactId}
+                    onClose={() => setDrawerContactId(null)}
+                />
+
+                {/* Global animation and custom scrollbar styles */}
+                <style>{`
+                    @keyframes fadeInSlideDown { 
+                        from { opacity: 0; transform: translateY(-10px); } 
+                        to { opacity: 1; transform: translateY(0); } 
+                    }
+                    
+                    /* Custom elegant scrollbars for columns */
+                    .custom-scrollbar::-webkit-scrollbar {
+                        width: 4px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-track {
+                        background: transparent;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: rgba(148, 163, 184, 0.2);
+                        border-radius: 10px;
+                    }
+                    .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+                        background: rgba(148, 163, 184, 0.4);
+                    }
+
+                    /* Horizontal scrollbar for the board */
+                    .crm-scroll-container::-webkit-scrollbar {
+                        height: 6px;
+                    }
+                    .crm-scroll-container::-webkit-scrollbar-track {
+                        background: rgba(255, 255, 255, 0.2);
+                        border-radius: 10px;
+                        margin: 0 24px;
+                    }
+                    .crm-scroll-container::-webkit-scrollbar-thumb {
+                        background: rgba(124, 58, 237, 0.2);
+                        border-radius: 10px;
+                    }
+                    .crm-scroll-container:hover::-webkit-scrollbar-thumb {
+                        background: rgba(124, 58, 237, 0.4);
+                    }
+                `}</style>
+            </div>
         </div>
     );
 }

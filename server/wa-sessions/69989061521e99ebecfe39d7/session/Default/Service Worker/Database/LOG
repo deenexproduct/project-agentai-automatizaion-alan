@@ -1,2 +1,3 @@
-2026/02/20-17:00:23.396 18772e Creating DB /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Service Worker/Database since it was missing.
-2026/02/20-17:00:23.408 18772e Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Service Worker/Database/MANIFEST-000001
+2026/02/21-00:19:53.739 1fa51b Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Service Worker/Database/MANIFEST-000001
+2026/02/21-00:19:53.745 1fa51b Recovering log #3
+2026/02/21-00:19:53.745 1fa51b Reusing old log /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/69989061521e99ebecfe39d7/session/Default/Service Worker/Database/000003.log 

@@ -34,6 +34,17 @@ export class WhatsAppTenant {
         this.userId = userId;
     }
 
+    public async getContactProfilePic(contactId: string): Promise<string | null> {
+        if (!this.client || !this.isConnected()) return null;
+        try {
+            const url = await this.client.getProfilePicUrl(contactId);
+            return url || null;
+        } catch (error: any) {
+            console.error(`[User ${this.userId}] Error fetching profile pic for ${contactId}:`, error.message);
+            return null;
+        }
+    }
+
     // ── Initialization ──────────────────────────────────────────
 
     async initialize(): Promise<void> {
@@ -113,6 +124,7 @@ export class WhatsAppTenant {
         this.client.on('auth_failure', (msg: string) => {
             console.error(`❌ [User ${this.userId}] WhatsApp auth failure:`, msg);
             this.status = 'disconnected';
+            this.deleteSessionData();
         });
 
         // Disconnected — trigger auto-reconnect
@@ -123,6 +135,11 @@ export class WhatsAppTenant {
             this.connectedSince = null;
             this.stopKeepAlive();
             this.stopScheduler();
+
+            if (reason === 'NAVIGATION' || reason === 'LOGOUT' || reason.toLowerCase().includes('logout')) {
+                this.deleteSessionData();
+            }
+
             this.attemptReconnect(reason);
         });
 
@@ -133,6 +150,7 @@ export class WhatsAppTenant {
                 console.warn(`⚠️ [User ${this.userId}] Problematic state detected: ${state} — triggering reconnect`);
                 this.stopKeepAlive();
                 this.stopScheduler();
+                if (state === 'UNPAIRED') this.deleteSessionData();
                 this.attemptReconnect(state);
             }
         });
@@ -143,6 +161,40 @@ export class WhatsAppTenant {
             console.error(`❌ [User ${this.userId}] WhatsApp init error:`, error.message);
             this.status = 'disconnected';
         }
+    }
+
+    // ── Session Cleanup ─────────────────────────────────────────
+
+    public deleteSessionData() {
+        const sessionPath = path.join(__dirname, '../../wa-sessions', this.userId);
+        if (fs.existsSync(sessionPath)) {
+            try {
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+                console.log(`🗑️ [User ${this.userId}] Local session data cleared.`);
+            } catch (err) {
+                console.error(`❌ [User ${this.userId}] Failed to clear session data:`, err);
+            }
+        }
+    }
+
+    public async resetSession(): Promise<void> {
+        console.log(`♻️ [User ${this.userId}] Forcing session reset...`);
+        this.stopPreventiveRestart();
+        this.stopKeepAlive();
+        this.stopScheduler();
+        if (this.client) {
+            try { await this.client.destroy(); } catch (err) { }
+            this.client = null;
+        }
+        this.status = 'disconnected';
+        this.connectedSince = null;
+        this.isReconnecting = false;
+        this.reconnectAttempts = 0;
+        this.deleteSessionData();
+
+        // Wait a bit before forcing re-init
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await this.initialize();
     }
 
     // ── Status & QR ─────────────────────────────────────────────
@@ -176,40 +228,50 @@ export class WhatsAppTenant {
         if (this.isFetchingChats || !this.client || !this.isConnected()) return;
 
         this.isFetchingChats = true;
-        console.log(`🔄 [User ${this.userId}] Refreshing chats...`);
+        console.log(`🔄 [User ${this.userId}] Refreshing contacts...`);
 
         try {
-            const chats = await this.client.getChats();
-            const mapped = chats
-                .filter((chat: Chat) => chat.name && chat.name.trim() !== '')
-                .map((chat: Chat) => ({
-                    id: chat.id._serialized,
-                    name: chat.name,
-                    isGroup: chat.isGroup,
-                    timestamp: chat.timestamp || 0,
+            // Use getContacts to get the full address book instead of just active chats
+            const contacts = await this.client.getContacts();
+            console.log(`📡 [User ${this.userId}] RAW contacts fetched: ${contacts.length}`);
+
+            const mapped = contacts
+                // Exclude status updates
+                .filter(contact => contact.id._serialized !== 'status@broadcast')
+                // Require them to be a saved contact, a group, o...
+                .filter(contact => contact.isMyContact || contact.isGroup || (contact.name && contact.name.trim() !== '') || (contact.pushname && contact.pushname.trim() !== ''))
+                .map(contact => ({
+                    id: contact.id._serialized,
+                    name: contact.name || contact.pushname || contact.number || 'Desconocido',
+                    isGroup: contact.isGroup,
+                    timestamp: 0, // Contacts don't have a recent timestamp like chats
                 }))
-                .sort((a, b) => b.timestamp - a.timestamp); // Most recent first
+                .filter(c => c.name !== 'Desconocido')
+                // Sort alphabetically
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            console.log(`🔍 [User ${this.userId}] Filtered mapped contacts: ${mapped.length}`);
 
             if (mapped.length > 0) {
                 this.chatsCache = mapped;
-                console.log(`✅ [User ${this.userId}] Cached ${this.chatsCache.length} chats`);
+                console.log(`✅ [User ${this.userId}] Cached ${this.chatsCache.length} contacts/groups`);
             } else {
-                console.log(`⚠️ [User ${this.userId}] No chats returned by WhatsApp client.`);
+                console.log(`⚠️ [User ${this.userId}] No contacts returned by WhatsApp client.`);
             }
         } catch (error: any) {
-            console.error(`❌ [User ${this.userId}] Error refreshing chats:`, error.message);
+            console.error(`❌ [User ${this.userId}] Error refreshing contacts:`, error.message);
         } finally {
             this.isFetchingChats = false;
         }
     }
 
-    async getChats(limit: number = 20, search?: string): Promise<{ id: string; name: string; isGroup: boolean }[]> {
+    async getChats(limit: number = 50, search?: string): Promise<{ id: string; name: string; isGroup: boolean }[]> {
         if (!this.client || !this.isConnected()) return [];
 
         if (!this.chatsCache || this.chatsCache.length === 0) {
             if (!this.isFetchingChats) this.refreshChats();
             let retries = 0;
-            // Wait up to 60 seconds for massive chat histories
+            // Wait up to 60 seconds for massive contact histories
             while (this.isFetchingChats && retries < 60) {
                 await this.delay(1000);
                 if (this.chatsCache && this.chatsCache.length > 0) break;
