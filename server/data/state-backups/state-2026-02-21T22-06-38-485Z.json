@@ -1,15 +1,15 @@
 {
-  "batchId": "2026-02-19T17:19:32.087Z",
+  "batchId": "2026-02-21T22:03:38.672Z",
   "accountEmail": "unknown",
   "profiles": [
     {
-      "url": "https://www.linkedin.com/in/juan-manuel-navarro-navarro-590b911ab/",
+      "url": "https://www.linkedin.com/in/jose-mar%c3%ada-alfaro-agente-inmobiliario",
       "status": "pending",
       "attempts": 0
     }
   ],
   "currentIndex": 0,
-  "startTime": "2026-02-19T17:19:32.142Z",
+  "startTime": "2026-02-21T22:03:38.711Z",
   "isPaused": false,
   "options": {
     "totalLimit": 1,
@@ -21,6 +21,6 @@
     "failed": 0,
     "pending": 1
   },
-  "lastUpdate": "2026-02-19T17:19:32.142Z",
+  "lastUpdate": "2026-02-21T22:03:38.711Z",
   "version": 1
 }

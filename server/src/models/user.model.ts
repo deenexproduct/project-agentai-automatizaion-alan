@@ -3,6 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IUser extends Document {
     email: string;
     name?: string;
+    profilePhotoUrl?: string;
     role: 'admin' | 'user';
     invitedBy?: mongoose.Types.ObjectId;
     otpCode?: string;
@@ -22,6 +23,9 @@ const UserSchema = new Schema<IUser>({
     name: {
         type: String,
         trim: true,
+    },
+    profilePhotoUrl: {
+        type: String,
     },
     role: {
         type: String,

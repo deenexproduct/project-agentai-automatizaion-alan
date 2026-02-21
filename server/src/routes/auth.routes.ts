@@ -193,15 +193,43 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/users', authMiddleware, async (req: Request, res: Response) => {
     try {
-        const adminUser = req.user as any;
-
-        const users = await UserModel.find({}, { password: 0, otpCode: 0, otpExpiresAt: 0 })
+        const users = await UserModel.find({}, { otpCode: 0, otpExpiresAt: 0 })
             .sort({ createdAt: -1 })
             .lean();
 
         return res.json(users);
     } catch (error) {
         console.error(`Error in /users: ${(error as Error).message}`);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * @route   PUT /api/auth/profile
+ * @desc    Update the current user's profile (name, photo)
+ */
+router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id;
+        const { name, profilePhotoUrl } = req.body;
+
+        const updateFields: any = {};
+        if (name !== undefined) updateFields.name = name.trim();
+        if (profilePhotoUrl !== undefined) updateFields.profilePhotoUrl = profilePhotoUrl;
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            { $set: updateFields },
+            { new: true, select: '-otpCode -otpExpiresAt' }
+        ).lean();
+
+        if (!updatedUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        return res.json({ user: updatedUser });
+    } catch (error) {
+        console.error(`Error in /profile: ${(error as Error).message}`);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });

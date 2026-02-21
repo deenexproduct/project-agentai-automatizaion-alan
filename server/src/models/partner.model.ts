@@ -6,6 +6,7 @@ export interface IPartner extends Document {
     phone?: string;
     commissionPercentage?: number;
     notes?: string;
+    assignedTo?: mongoose.Types.ObjectId;
     userId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -17,6 +18,7 @@ const PartnerSchema = new Schema({
     phone: { type: String },
     commissionPercentage: { type: Number, default: 0 },
     notes: { type: String },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
 }, { timestamps: true });
 

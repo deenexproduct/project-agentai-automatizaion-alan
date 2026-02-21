@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, User, Building2, Briefcase, Mail, Phone, Tag, AlertTriangle, Loader2 } from 'lucide-react';
+import { X, Save, User, Building2, Briefcase, Mail, Phone, Tag, AlertTriangle, Loader2, Camera, ImagePlus, Trash2 } from 'lucide-react';
 import { ContactData, createContact, updateContact, deleteContact, getCompanies, CompanyData, getSystemConfig, getPartners, SystemConfig, PartnerData, addContactRole, addContactPosition } from '../../services/crm.service';
 import api from '../../lib/axios';
 import AutocompleteInput from '../common/AutocompleteInput';
@@ -28,12 +28,13 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
     const [companies, setCompanies] = useState<CompanyData[]>([]);
     const [companySearch, setCompanySearch] = useState('');
     const [saving, setSaving] = useState(false);
-    const [extractingData, setExtractingData] = useState(false);
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [extractingPhoto, setExtractingPhoto] = useState(false);
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [lastScrapedUrl, setLastScrapedUrl] = useState('');
     const drawerRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Fetch config and partners
     useEffect(() => {
@@ -75,12 +76,11 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
             }
         } else if (open && !contact) {
             setShowDeleteConfirm(false);
-            setLastScrapedUrl('');
             setFormData({
                 fullName: '',
                 position: '',
-                role: 'decision_maker',
-                channel: 'linkedin',
+                role: '',
+                channel: '',
                 email: '',
                 phone: '',
                 linkedInProfileUrl: '',
@@ -112,38 +112,74 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
         return () => window.removeEventListener('keydown', handler);
     }, [open, onClose]);
 
-    // Auto-extract LinkedIn Data using our authenticated backend scraper
+    // Compress and convert image to base64 data URL
+    const compressImage = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 200;
+                    let w = img.width;
+                    let h = img.height;
+                    // Scale down to MAX_SIZE keeping aspect ratio
+                    if (w > h) { h = (h / w) * MAX_SIZE; w = MAX_SIZE; }
+                    else { w = (w / h) * MAX_SIZE; h = MAX_SIZE; }
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d')!;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/webp', 0.8));
+                };
+                img.onerror = reject;
+                img.src = e.target?.result as string;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setUploadingPhoto(true);
+            const compressed = await compressImage(file);
+            setFormData(prev => ({ ...prev, profilePhotoUrl: compressed }));
+        } catch (err) {
+            console.error('Error compressing photo:', err);
+        } finally {
+            setUploadingPhoto(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    // Auto-extract profile photo from LinkedIn URL
     useEffect(() => {
-        const url = formData.linkedInProfileUrl;
-        if (!url || !url.includes('linkedin.com/in/') || url === lastScrapedUrl) {
+        const linkedInUrl = formData.linkedInProfileUrl;
+        if (!linkedInUrl || !linkedInUrl.includes('linkedin.com/in/') || formData.profilePhotoUrl) {
             return;
         }
-
-        const fetchData = async () => {
+        const fetchPhoto = async () => {
             try {
-                setExtractingData(true);
-                setLastScrapedUrl(url); // Mark as scraped immediately to prevent re-triggers
-                console.log('[ContactForm] Scraping LinkedIn profile:', url);
-                const res = await api.get('/linkedin/scrape-profile', { params: { url } });
-                const data = res.data;
-                console.log('[ContactForm] Scraped data:', data);
-
-                setFormData(prev => ({
-                    ...prev,
-                    fullName: prev.fullName || data.fullName || '',
-                    position: prev.position || data.position || '',
-                    profilePhotoUrl: prev.profilePhotoUrl || data.profilePhotoUrl || '',
-                }));
+                setExtractingPhoto(true);
+                const res = await api.get('/linkedin/scrape-profile', { params: { url: linkedInUrl } });
+                if (res.data?.profilePhotoUrl) {
+                    setFormData(prev => {
+                        if (prev.profilePhotoUrl) return prev; // Don't overwrite if user already uploaded
+                        return { ...prev, profilePhotoUrl: res.data.profilePhotoUrl };
+                    });
+                }
             } catch (err: any) {
-                console.warn('[ContactForm] Error extracting LinkedIn data:', err?.response?.data?.error || err.message);
+                console.warn('Could not extract LinkedIn photo:', err?.response?.data?.error || err.message);
             } finally {
-                setExtractingData(false);
+                setExtractingPhoto(false);
             }
         };
-
-        const timeoutId = setTimeout(fetchData, 2000);
+        const timeoutId = setTimeout(fetchPhoto, 1500);
         return () => clearTimeout(timeoutId);
-    }, [formData.linkedInProfileUrl, lastScrapedUrl]);
+    }, [formData.linkedInProfileUrl]);
 
     const handleBackdropClick = (e: React.MouseEvent) => {
         if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
@@ -165,8 +201,9 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                 await addContactRole(formData.role);
             }
 
-            // Just send company ID 
-            const payload: any = { ...formData, company: formData.company?._id as any };
+            // Send company ID (handle both object with _id and direct string ID)
+            const companyId = formData.company?._id || formData.company;
+            const payload: any = { ...formData, company: companyId || undefined };
 
             // Cleanup partner 
             if (payload.partner === '' || payload.channel !== 'partners') payload.partner = undefined;
@@ -240,27 +277,68 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="p-6 flex-1 flex flex-col gap-6">
 
-                    {/* Auto-Prospección LinkedIn (Moved to top) */}
-                    <div className="space-y-2 p-5 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 rounded-[16px] border border-blue-100 shadow-sm relative overflow-hidden group">
-                        <div className="absolute inset-0 bg-blue-400/5 group-hover:bg-blue-400/10 transition-colors pointer-events-none" />
-                        <label className="text-[13px] font-bold text-blue-800 flex items-center justify-between uppercase tracking-wide relative z-10">
-                            <span className="flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
-                                Perfil de LinkedIn (Auto-Completado)
-                            </span>
-                            {extractingData && (
-                                <span className="text-[10px] font-bold text-blue-600 bg-blue-100/80 px-2 py-1 rounded-full animate-pulse flex items-center gap-1.5 border border-blue-200 shadow-sm">
-                                    <Loader2 size={10} className="animate-spin" /> Procesando...
-                                </span>
+                    {/* Foto de Perfil Upload */}
+                    <div className="flex items-center gap-5">
+                        <div className="relative group">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/png,image/jpeg,image/jpg,image/webp"
+                                onChange={handlePhotoUpload}
+                                className="hidden"
+                            />
+                            {formData.profilePhotoUrl ? (
+                                <div className="relative">
+                                    <img
+                                        src={formData.profilePhotoUrl}
+                                        alt="Foto de perfil"
+                                        className="w-20 h-20 rounded-[16px] object-cover border-2 border-white shadow-lg ring-2 ring-fuchsia-200"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({ ...prev, profilePhotoUrl: '' }))}
+                                        className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploadingPhoto || extractingPhoto}
+                                    className={`w-20 h-20 rounded-[16px] bg-gradient-to-br ${extractingPhoto ? 'from-blue-50 to-indigo-50 border-blue-300' : 'from-slate-100 to-slate-50 border-slate-300 hover:border-fuchsia-400 hover:from-fuchsia-50 hover:to-violet-50'} border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group/btn shadow-inner`}
+                                >
+                                    {(uploadingPhoto || extractingPhoto) ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                            <Loader2 size={20} className={`${extractingPhoto ? 'text-blue-500' : 'text-fuchsia-400'} animate-spin`} />
+                                            <span className="text-[8px] font-bold text-blue-500 uppercase">{extractingPhoto ? 'LinkedIn' : 'Subiendo'}</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <Camera size={20} className="text-slate-400 group-hover/btn:text-fuchsia-500 transition-colors" />
+                                            <span className="text-[9px] font-bold text-slate-400 group-hover/btn:text-fuchsia-500 uppercase">Foto</span>
+                                        </>
+                                    )}
+                                </button>
                             )}
-                        </label>
-                        <input
-                            type="url"
-                            value={formData.linkedInProfileUrl}
-                            onChange={(e) => setFormData({ ...formData, linkedInProfileUrl: e.target.value })}
-                            placeholder="Pegá la URL para auto-completar nombre, cargo y foto..."
-                            className="w-full relative z-10 px-4 py-3 bg-white/80 backdrop-blur-sm border border-blue-200 rounded-[12px] focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-400 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner"
-                        />
+                        </div>
+                        <div className="flex-1 space-y-1">
+                            <p className="text-[13px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                                <ImagePlus size={14} className="text-fuchsia-500" />
+                                Foto de Perfil
+                            </p>
+                            <p className="text-[11px] text-slate-400 leading-snug">Subí una imagen o pegá el link de LinkedIn abajo para extraerla automáticamente.</p>
+                            {!formData.profilePhotoUrl && (
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="mt-1.5 text-[12px] font-bold text-fuchsia-600 hover:text-fuchsia-700 flex items-center gap-1 transition-colors"
+                                >
+                                    <Camera size={12} /> Seleccionar archivo
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="space-y-2">
@@ -368,19 +446,18 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                         </div>
                     )}
 
-                    {/* Rest of the form space where the LinkedIn Profile Input used to be is now empty */}
-
+                    {/* LinkedIn Profile URL */}
                     <div className="space-y-2">
                         <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                            <User size={14} className="text-pink-500" />
-                            Foto de Perfil (URL)
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+                            Perfil de LinkedIn
                         </label>
                         <input
                             type="url"
-                            value={formData.profilePhotoUrl}
-                            onChange={(e) => setFormData({ ...formData, profilePhotoUrl: e.target.value })}
-                            placeholder="https://..."
-                            className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-pink-500/10 focus:border-pink-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner"
+                            value={formData.linkedInProfileUrl}
+                            onChange={(e) => setFormData({ ...formData, linkedInProfileUrl: e.target.value })}
+                            placeholder="https://www.linkedin.com/in/..."
+                            className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner"
                         />
                     </div>
 
@@ -402,7 +479,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                         <div className="space-y-2">
                             <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
                                 <Phone size={14} className="text-green-500" />
-                                Teléfono
+                                WhatsApp
                             </label>
                             <input
                                 type="tel"

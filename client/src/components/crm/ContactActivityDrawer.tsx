@@ -6,13 +6,17 @@ import {
     Save, User, Briefcase, Tag, AlertTriangle,
     ThumbsUp, ThumbsDown, Minus, Target, RotateCcw,
     Eye, Reply, Ban, Star, Info, Bell, MessageSquare,
-    CheckCheck, CircleDot, HelpCircle, ArrowRightLeft, UserX, UserCheck, ArrowRight
+    CheckCheck, CircleDot, HelpCircle, ArrowRightLeft, UserX, UserCheck, ArrowRight,
+    ListTodo, Plus, Calendar, Flag, Trash2, Circle, GitBranch, DollarSign, TrendingUp, CheckSquare, History
 } from 'lucide-react';
 import {
     getContact, createActivity, updateContact, deleteContact, createContact,
     getCompanies, getSystemConfig, getPartners, addContactRole, addContactPosition,
-    ActivityData, ContactData, CompanyData, SystemConfig, PartnerData
+    createTask, completeTask, deleteTask as deleteTaskApi, getTasks,
+    getPipelineConfig, getDealsPipeline,
+    ActivityData, ContactData, CompanyData, SystemConfig, PartnerData, TaskData, DealData, PipelineStage
 } from '../../services/crm.service';
+import OwnerAvatar from '../common/OwnerAvatar';
 import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
 
@@ -123,7 +127,23 @@ interface Props {
     onSaved?: (contact: ContactData & { _deleted?: boolean }) => void;
 }
 
-type DrawerTab = 'datos' | 'actividad';
+type DrawerTab = 'datos' | 'actividad' | 'tareas' | 'trazabilidad';
+
+const TASK_TYPES = [
+    { value: 'call', label: 'Llamada', icon: Phone },
+    { value: 'meeting', label: 'Reunión', icon: Users },
+    { value: 'follow_up', label: 'Seguimiento', icon: RotateCcw },
+    { value: 'proposal', label: 'Propuesta', icon: Mail },
+    { value: 'research', label: 'Investigación', icon: Eye },
+    { value: 'other', label: 'Otro', icon: StickyNote },
+];
+
+const TASK_PRIORITIES = [
+    { value: 'low', label: 'Baja', color: '#64748b' },
+    { value: 'medium', label: 'Media', color: '#f59e0b' },
+    { value: 'high', label: 'Alta', color: '#f97316' },
+    { value: 'urgent', label: 'Urgente', color: '#ef4444' },
+];
 
 // ── Component ────────────────────────────────────────────────────
 
@@ -147,8 +167,20 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
     const [savingContact, setSavingContact] = useState(false);
-    const [extractingData, setExtractingData] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+    // ── Task state ──
+    const [tasks, setTasks] = useState<TaskData[]>([]);
+    const [showTaskForm, setShowTaskForm] = useState(false);
+    const [taskTitle, setTaskTitle] = useState('');
+    const [taskType, setTaskType] = useState('follow_up');
+    const [taskPriority, setTaskPriority] = useState('medium');
+    const [taskDueDate, setTaskDueDate] = useState('');
+
+    // ── Deal / Trazabilidad state ──
+    const [deals, setDeals] = useState<DealData[]>([]);
+    const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
+    const [savingTask, setSavingTask] = useState(false);
 
     const drawerRef = useRef<HTMLDivElement>(null);
     const descRef = useRef<HTMLTextAreaElement>(null);
@@ -163,6 +195,16 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                 const c = data as ContactData;
                 setContact(c);
                 setActivities((data as any).activities || []);
+                // Load tasks via separate endpoint for reliability
+                getTasks({ contact: contactId, limit: 100 })
+                    .then(res => setTasks(res.tasks || []))
+                    .catch(err => { console.error('Failed to load tasks:', err); setTasks([]); });
+                // Load deals from contact data
+                setDeals((data as any).deals || []);
+                // Load pipeline stages for label/color mapping
+                getPipelineConfig()
+                    .then(config => setPipelineStages(config.stages || []))
+                    .catch(() => { });
                 // Init form data
                 setFormData({
                     fullName: c.fullName || '',
@@ -213,32 +255,14 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
             setActDescription('');
             setOutcome('');
             setShowDeleteConfirm(false);
+            setShowTaskForm(false);
+            setTaskTitle('');
+            setTaskType('follow_up');
+            setTaskPriority('medium');
+            setTaskDueDate('');
         }
     }, [open]);
 
-    // Auto-extract LinkedIn data
-    useEffect(() => {
-        const url = formData.linkedInProfileUrl;
-        if (!url || !url.includes('linkedin.com/in/')) return;
-        const timeoutId = setTimeout(async () => {
-            try {
-                setExtractingData(true);
-                const { default: api } = await import('../../lib/axios');
-                const res = await api.get('/linkedin/scrape-profile', { params: { url } });
-                const data = res.data;
-                const nextData: Partial<ContactData> = {};
-                if (data.profilePhotoUrl && !formData.profilePhotoUrl) nextData.profilePhotoUrl = data.profilePhotoUrl;
-                if (data.fullName && !formData.fullName) nextData.fullName = data.fullName;
-                if (data.position && !formData.position) nextData.position = data.position;
-                if (Object.keys(nextData).length > 0) setFormData(prev => ({ ...prev, ...nextData }));
-            } catch (err: any) {
-                console.warn('Error auto-extracting LinkedIn data:', err?.response?.data?.error || err.message);
-            } finally {
-                setExtractingData(false);
-            }
-        }, 1500);
-        return () => clearTimeout(timeoutId);
-    }, [formData.linkedInProfileUrl]);
 
     // Focus activity description
     useEffect(() => {
@@ -262,7 +286,8 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
             if (formData.role && config && !config.contactRoles.includes(formData.role)) {
                 await addContactRole(formData.role);
             }
-            const payload: any = { ...formData, company: formData.company?._id as any };
+            const companyId = formData.company?._id || formData.company;
+            const payload: any = { ...formData, company: companyId || undefined };
             if (payload.partner === '' || payload.channel !== 'partners') payload.partner = undefined;
             if (payload.partner && typeof payload.partner === 'object' && '_id' in payload.partner) {
                 payload.partner = (payload.partner as any)._id;
@@ -410,6 +435,36 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                 </span>
                             )}
                         </button>
+                        <button
+                            onClick={() => setActiveTab('tareas')}
+                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'tareas'
+                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            <ListTodo size={13} className="inline mr-1.5 -mt-0.5" />
+                            Tareas
+                            {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length > 0 && (
+                                <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-bold">
+                                    {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('trazabilidad')}
+                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'trazabilidad'
+                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            <GitBranch size={13} className="inline mr-1.5 -mt-0.5" />
+                            Traza
+                            {deals.length > 0 && (
+                                <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-bold">
+                                    {deals.length}
+                                </span>
+                            )}
+                        </button>
                     </div>
                 </div>
 
@@ -425,25 +480,17 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                 </div>
                             ) : (
                                 <>
-                                    {/* LinkedIn Auto-Fill */}
-                                    <div className="space-y-2 p-4 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 rounded-[16px] border border-blue-100 shadow-sm relative overflow-hidden">
-                                        <label className="text-[12px] font-bold text-blue-800 flex items-center justify-between uppercase tracking-wide">
-                                            <span className="flex items-center gap-1.5">
-                                                <Linkedin size={13} className="text-blue-600" />
-                                                LinkedIn (Auto-Completado)
-                                            </span>
-                                            {extractingData && (
-                                                <span className="text-[10px] font-bold text-blue-600 bg-blue-100/80 px-2 py-1 rounded-full animate-pulse flex items-center gap-1.5 border border-blue-200">
-                                                    <Loader2 size={10} className="animate-spin" /> Procesando...
-                                                </span>
-                                            )}
+                                    {/* LinkedIn Profile URL */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                            <Linkedin size={13} className="text-blue-600" /> Perfil de LinkedIn
                                         </label>
                                         <input
                                             type="url"
                                             value={formData.linkedInProfileUrl || ''}
                                             onChange={(e) => setFormData({ ...formData, linkedInProfileUrl: e.target.value })}
-                                            placeholder="Pegá la URL para auto-completar..."
-                                            className="w-full px-3 py-2.5 bg-white/80 border border-blue-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                            placeholder="https://www.linkedin.com/in/..."
+                                            className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
                                         />
                                     </div>
 
@@ -578,7 +625,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                                                <Phone size={13} className="text-green-500" /> Teléfono
+                                                <Phone size={13} className="text-green-500" /> WhatsApp
                                             </label>
                                             <input
                                                 type="tel"
@@ -622,7 +669,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                             </button>
                         </div>
                     </form>
-                ) : (
+                ) : activeTab === 'actividad' ? (
                     /* ════════════ ACTIVIDAD TAB ════════════ */
                     <div className="flex-1 flex flex-col overflow-hidden">
                         {/* Timeline */}
@@ -815,7 +862,501 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                             </button>
                         </div>
                     </div>
-                )}
+                ) : activeTab === 'tareas' ? (
+                    /* ════════════ TAREAS TAB ════════════ */
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 overflow-y-auto px-5 py-4 hidden-scrollbar">
+                            {loadingContact ? (
+                                <div className="flex flex-col items-center justify-center py-16">
+                                    <Loader2 size={28} className="animate-spin text-violet-400" />
+                                    <p className="text-[13px] text-slate-400 mt-3 font-medium">Cargando tareas...</p>
+                                </div>
+                            ) : tasks.length === 0 && !showTaskForm ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-center">
+                                    <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mb-4 border border-amber-100">
+                                        <ListTodo size={28} className="text-amber-300" />
+                                    </div>
+                                    <h3 className="text-[15px] font-bold text-slate-600">Sin tareas</h3>
+                                    <p className="text-[13px] text-slate-400 mt-1 max-w-xs">
+                                        Creá una tarea para hacer seguimiento de este contacto.
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Task Form (inline) */}
+                                    {showTaskForm && (
+                                        <div className="mb-4 p-3.5 bg-gradient-to-br from-amber-50/80 to-orange-50/40 rounded-[16px] border border-amber-200/60 space-y-3">
+                                            <input
+                                                type="text"
+                                                value={taskTitle}
+                                                onChange={e => setTaskTitle(e.target.value)}
+                                                placeholder="¿Qué hay que hacer?"
+                                                className="w-full px-3 py-2.5 rounded-xl border border-amber-200 bg-white text-[13px] text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all shadow-sm"
+                                                autoFocus
+                                            />
+                                            {/* Type */}
+                                            <div>
+                                                <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mb-1.5">Tipo</p>
+                                                <div className="flex gap-1.5 flex-wrap">
+                                                    {TASK_TYPES.map(t => {
+                                                        const TIcon = t.icon;
+                                                        const isActive = taskType === t.value;
+                                                        return (
+                                                            <button
+                                                                key={t.value}
+                                                                type="button"
+                                                                onClick={() => setTaskType(t.value)}
+                                                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border"
+                                                                style={{
+                                                                    background: isActive ? '#fffbeb' : 'white',
+                                                                    borderColor: isActive ? '#f59e0b50' : '#e2e8f0',
+                                                                    color: isActive ? '#d97706' : '#64748b',
+                                                                    boxShadow: isActive ? '0 2px 8px rgba(245,158,11,0.15)' : 'none',
+                                                                }}
+                                                            >
+                                                                <TIcon size={11} />
+                                                                {t.label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            {/* Priority */}
+                                            <div>
+                                                <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mb-1.5">Prioridad</p>
+                                                <div className="flex gap-1.5">
+                                                    {TASK_PRIORITIES.map(p => {
+                                                        const isActive = taskPriority === p.value;
+                                                        return (
+                                                            <button
+                                                                key={p.value}
+                                                                type="button"
+                                                                onClick={() => setTaskPriority(p.value)}
+                                                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border"
+                                                                style={{
+                                                                    background: isActive ? p.color + '15' : 'white',
+                                                                    borderColor: isActive ? p.color + '40' : '#e2e8f0',
+                                                                    color: isActive ? p.color : '#94a3b8',
+                                                                    boxShadow: isActive ? `0 2px 8px ${p.color}20` : 'none',
+                                                                }}
+                                                            >
+                                                                <Flag size={10} />
+                                                                {p.label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            {/* Due Date */}
+                                            <div>
+                                                <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mb-1.5">Fecha límite</p>
+                                                <input
+                                                    type="date"
+                                                    value={taskDueDate}
+                                                    onChange={e => setTaskDueDate(e.target.value)}
+                                                    className="w-full px-3 py-2 rounded-xl border border-amber-200 bg-white text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all shadow-sm"
+                                                />
+                                            </div>
+                                            {/* Actions */}
+                                            <div className="flex items-center justify-between pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowTaskForm(false); setTaskTitle(''); setTaskDueDate(''); }}
+                                                    className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/60"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        if (!taskTitle.trim() || !contactId) return;
+                                                        setSavingTask(true);
+                                                        try {
+                                                            const newTask = await createTask({
+                                                                title: taskTitle.trim(),
+                                                                type: taskType as any,
+                                                                priority: taskPriority as any,
+                                                                dueDate: taskDueDate || undefined,
+                                                                contact: contactId as any,
+                                                                company: contact?.company?._id as any,
+                                                            });
+                                                            setTasks(prev => [newTask, ...prev]);
+                                                            setTaskTitle('');
+                                                            setTaskDueDate('');
+                                                            setShowTaskForm(false);
+                                                        } catch (err) {
+                                                            console.error('Failed to create task:', err);
+                                                        } finally {
+                                                            setSavingTask(false);
+                                                        }
+                                                    }}
+                                                    disabled={!taskTitle.trim() || savingTask}
+                                                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[12px] font-bold shadow-lg shadow-amber-500/20 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                                >
+                                                    {savingTask ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                                                    Crear Tarea
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Task Lists */}
+                                    {(() => {
+                                        const pending = tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
+                                        const completed = tasks.filter(t => t.status === 'completed');
+
+                                        const formatDueDate = (d: string) => {
+                                            const date = new Date(d);
+                                            const now = new Date();
+                                            const isToday = date.toDateString() === now.toDateString();
+                                            const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
+                                            const isTomorrow = date.toDateString() === tomorrow.toDateString();
+                                            if (isToday) return 'Hoy';
+                                            if (isTomorrow) return 'Mañana';
+                                            return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+                                        };
+
+                                        const renderTaskCard = (task: TaskData, isCompleted: boolean) => {
+                                            const tType = TASK_TYPES.find(t => t.value === task.type);
+                                            const TIcon = tType?.icon || StickyNote;
+                                            const typeLabel = tType?.label || task.type;
+                                            const priorityInfo = TASK_PRIORITIES.find(p => p.value === task.priority);
+
+                                            return (
+                                                <div
+                                                    key={task._id}
+                                                    className={`rounded-[14px] border px-3.5 py-3 transition-all ${isCompleted
+                                                        ? 'bg-emerald-50/40 border-emerald-100'
+                                                        : task.isOverdue
+                                                            ? 'bg-red-50/30 border-red-100 shadow-sm'
+                                                            : 'bg-white border-slate-100 shadow-sm hover:shadow-md'
+                                                        }`}
+                                                >
+                                                    {/* Row 1: Complete button + Title + Delete */}
+                                                    <div className="flex items-start gap-2.5">
+                                                        {!isCompleted ? (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        await completeTask(task._id);
+                                                                        setTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: 'completed' as const } : t));
+                                                                    } catch (err) { console.error(err); }
+                                                                }}
+                                                                className="shrink-0 w-[22px] h-[22px] mt-0.5 rounded-full border-2 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50 transition-all flex items-center justify-center group"
+                                                                title="Completar"
+                                                            >
+                                                                <CheckCircle2 size={0} className="group-hover:!w-3 group-hover:!h-3 text-emerald-400 transition-all" />
+                                                            </button>
+                                                        ) : (
+                                                            <CheckCircle2 size={18} className="text-emerald-400 shrink-0 mt-0.5" />
+                                                        )}
+                                                        <span className={`flex-1 text-[13px] font-semibold leading-snug ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-800'
+                                                            }`}>
+                                                            {task.title}
+                                                        </span>
+                                                        {!isCompleted && (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        await deleteTaskApi(task._id);
+                                                                        setTasks(prev => prev.filter(t => t._id !== task._id));
+                                                                    } catch (err) { console.error(err); }
+                                                                }}
+                                                                className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                                                                title="Eliminar"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Row 2: Type + Priority + Due Date badges */}
+                                                    <div className="flex items-center gap-1.5 mt-2 ml-8 flex-wrap">
+                                                        {/* Type badge */}
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-500">
+                                                            <TIcon size={10} />
+                                                            {typeLabel}
+                                                        </span>
+
+                                                        {/* Priority badge */}
+                                                        {priorityInfo && (
+                                                            <span
+                                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border"
+                                                                style={{
+                                                                    color: isCompleted ? '#94a3b8' : priorityInfo.color,
+                                                                    borderColor: (isCompleted ? '#94a3b8' : priorityInfo.color) + '25',
+                                                                    background: (isCompleted ? '#94a3b8' : priorityInfo.color) + '10',
+                                                                }}
+                                                            >
+                                                                <Flag size={9} />
+                                                                {priorityInfo.label}
+                                                            </span>
+                                                        )}
+
+                                                        {/* Due date badge */}
+                                                        {task.dueDate && (
+                                                            <span
+                                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${isCompleted
+                                                                    ? 'text-slate-400 border-slate-200 bg-slate-50'
+                                                                    : task.isOverdue
+                                                                        ? 'text-red-500 border-red-200 bg-red-50'
+                                                                        : 'text-slate-500 border-slate-200 bg-slate-50'
+                                                                    }`}
+                                                            >
+                                                                <Calendar size={9} />
+                                                                {task.isOverdue && !isCompleted && '⚠ '}
+                                                                {formatDueDate(task.dueDate)}
+                                                            </span>
+                                                        )}
+
+                                                        {/* Created date */}
+                                                        <span className="text-[9px] text-slate-300 font-medium ml-auto">
+                                                            {formatActivityTime(task.createdAt)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        };
+
+                                        return (
+                                            <>
+                                                {pending.length > 0 && (
+                                                    <div className="mb-5">
+                                                        <div className="flex items-center gap-2 mb-2.5 px-1">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                                                Pendientes
+                                                            </p>
+                                                            <span className="text-[10px] font-bold text-amber-500 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded-full">
+                                                                {pending.length}
+                                                            </span>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            {pending.map(task => renderTaskCard(task, false))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {completed.length > 0 && (
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-2.5 px-1">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                                                Completadas
+                                                            </p>
+                                                            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-full">
+                                                                {completed.length}
+                                                            </span>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            {completed.map(task => renderTaskCard(task, true))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </>
+                            )}
+                        </div>
+
+                        {/* Footer — Tareas */}
+                        <div className="shrink-0 px-5 py-3 border-t border-slate-200/50 bg-white/80 backdrop-blur-md">
+                            <button
+                                onClick={() => setShowTaskForm(!showTaskForm)}
+                                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[13px] font-bold shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 hover:-translate-y-0.5 transition-all"
+                            >
+                                <Plus size={14} />
+                                {showTaskForm ? 'Cerrar Formulario' : 'Nueva Tarea'}
+                            </button>
+                        </div>
+                    </div>
+                ) : activeTab === 'trazabilidad' ? (
+                    /* ════════════ TRAZABILIDAD TAB ════════════ */
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="flex-1 overflow-y-auto px-5 py-4 hidden-scrollbar">
+                            {loadingContact ? (
+                                <div className="flex flex-col items-center justify-center py-16">
+                                    <Loader2 size={28} className="animate-spin text-violet-400" />
+                                    <p className="text-[13px] text-slate-400 mt-3 font-medium">Cargando oportunidades...</p>
+                                </div>
+                            ) : deals.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-center">
+                                    <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-4 border border-blue-100">
+                                        <TrendingUp size={28} className="text-blue-300" />
+                                    </div>
+                                    <h3 className="text-[15px] font-bold text-slate-600">Sin oportunidades</h3>
+                                    <p className="text-[13px] text-slate-400 mt-1 max-w-xs">
+                                        Este contacto no tiene deals asociados en el pipeline.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {/* Summary bar */}
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl text-[11px] font-bold text-emerald-700">
+                                            <DollarSign size={12} className="text-emerald-500" />
+                                            {deals.reduce((s, d) => s + (d.value || 0), 0).toLocaleString()}
+                                            <span className="text-emerald-500/70 font-medium">total</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 border border-violet-100 rounded-xl text-[11px] font-bold text-violet-700">
+                                            <Briefcase size={12} className="text-violet-500" />
+                                            {deals.length}
+                                            <span className="text-violet-500/70 font-medium">{deals.length === 1 ? 'deal' : 'deals'}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Deal cards */}
+                                    {deals.map(deal => {
+                                        const stage = pipelineStages.find(s => s.key === deal.status);
+                                        const stageLabel = stage?.label || deal.status;
+                                        const stageColor = stage?.color || '#8b5cf6';
+
+                                        return (
+                                            <div
+                                                key={deal._id}
+                                                className="bg-white rounded-[16px] border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden"
+                                            >
+                                                {/* Stage strip */}
+                                                <div
+                                                    className="h-1.5 w-full"
+                                                    style={{ background: `linear-gradient(90deg, ${stageColor}, ${stageColor}90)` }}
+                                                />
+
+                                                <div className="p-4">
+                                                    {/* Row 1: Stage badge + Value */}
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <span
+                                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border"
+                                                            style={{
+                                                                color: stageColor,
+                                                                borderColor: stageColor + '30',
+                                                                background: stageColor + '10',
+                                                            }}
+                                                        >
+                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stageColor }} />
+                                                            {stageLabel}
+                                                        </span>
+                                                        <span className="text-[16px] font-extrabold text-emerald-600 font-mono tracking-tight">
+                                                            ${deal.value?.toLocaleString() || 0}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Row 2: Company + Title */}
+                                                    <div className="flex items-start gap-3 mb-3">
+                                                        <div
+                                                            className="w-9 h-9 rounded-[10px] border border-slate-200/80 bg-white flex items-center justify-center shadow-sm shrink-0 overflow-hidden"
+                                                            style={{ backgroundColor: deal.company?.themeColor || undefined }}
+                                                        >
+                                                            {deal.company?.logo ? (
+                                                                <img
+                                                                    src={deal.company.logo}
+                                                                    alt=""
+                                                                    className="w-full h-full object-contain p-0.5"
+                                                                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                                />
+                                                            ) : (
+                                                                <Building2 size={16} className="text-slate-400" />
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <h4 className="text-[14px] font-bold text-slate-800 truncate leading-snug">
+                                                                {deal.title}
+                                                            </h4>
+                                                            {deal.company?.name && (
+                                                                <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                                                                    {deal.company.name}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 3: Meta badges */}
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        {/* Days in stage */}
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-500">
+                                                            <Clock size={9} />
+                                                            {deal.daysInStatus || 0}d en etapa
+                                                        </span>
+
+                                                        {/* Expected close */}
+                                                        {deal.expectedCloseDate && (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-500">
+                                                                <Calendar size={9} />
+                                                                {new Date(deal.expectedCloseDate).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                                                            </span>
+                                                        )}
+
+                                                        {/* Pending tasks */}
+                                                        {deal.pendingTasks !== undefined && deal.pendingTasks > 0 && (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200/60 text-[10px] font-bold text-amber-600">
+                                                                <CheckSquare size={9} />
+                                                                {deal.pendingTasks} tarea{deal.pendingTasks !== 1 && 's'}
+                                                            </span>
+                                                        )}
+
+                                                        {/* Created */}
+                                                        <span className="text-[9px] text-slate-300 font-medium ml-auto">
+                                                            Creado {new Date(deal.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Row 4: Owner */}
+                                                    {deal.assignedTo && (
+                                                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+                                                            <OwnerAvatar name={deal.assignedTo.name} profilePhotoUrl={deal.assignedTo.profilePhotoUrl} size="xs" />
+                                                            <span className="text-[11px] text-slate-500 font-medium">{deal.assignedTo.name}</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Row 5: Status History Timeline */}
+                                                    {((deal as any).statusHistory?.length > 0 || deal.createdAt) && (
+                                                        <div className="mt-3 pt-3 border-t border-slate-100">
+                                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                                                <History size={10} /> Recorrido en Pipeline
+                                                            </div>
+                                                            <div className="relative ml-1.5">
+                                                                <div className="absolute left-[4.5px] top-1 bottom-1 w-px bg-slate-200" />
+                                                                {/* Creation entry */}
+                                                                <div className="relative flex items-start gap-2.5 pb-2">
+                                                                    <div className="w-2.5 h-2.5 rounded-full bg-violet-400 border-2 border-white shadow-sm shrink-0 mt-0.5 z-10" />
+                                                                    <div className="flex-1 flex items-baseline justify-between gap-2">
+                                                                        <span className="text-[10px] font-bold text-slate-600">Creación</span>
+                                                                        <span className="text-[9px] text-slate-400 font-medium shrink-0">
+                                                                            {new Date(deal.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} {new Date(deal.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                {/* Status changes */}
+                                                                {((deal as any).statusHistory || []).map((h: any, idx: number) => {
+                                                                    const toStage = pipelineStages.find(s => s.key === h.to);
+                                                                    const toLabel = toStage?.label || h.to;
+                                                                    const toColor = toStage?.color || '#64748b';
+                                                                    const isLast = idx === ((deal as any).statusHistory || []).length - 1;
+                                                                    return (
+                                                                        <div key={idx} className={`relative flex items-start gap-2.5 ${isLast ? '' : 'pb-2'}`}>
+                                                                            <div className="w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm shrink-0 mt-0.5 z-10" style={{ backgroundColor: toColor }} />
+                                                                            <div className="flex-1 flex items-baseline justify-between gap-2">
+                                                                                <span className="text-[10px] font-bold" style={{ color: toColor }}>{toLabel}</span>
+                                                                                <span className="text-[9px] text-slate-400 font-medium shrink-0">
+                                                                                    {new Date(h.changedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} {new Date(h.changedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : null}
 
                 {/* ── Delete Confirmation Modal ─────────────── */}
                 {showDeleteConfirm && (

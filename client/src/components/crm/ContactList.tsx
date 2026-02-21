@@ -3,6 +3,7 @@ import { getContacts, ContactData } from '../../services/crm.service';
 import { Search, MapPin, Building2, Link2, Plus, Filter, MessageCircle, Mail, Phone, Linkedin } from 'lucide-react';
 import ContactFormDrawer from './ContactFormDrawer';
 import ContactActivityDrawer from './ContactActivityDrawer';
+import OwnerAvatar from '../common/OwnerAvatar';
 import PremiumHeader from './PremiumHeader';
 
 export default function ContactList({ onSelectContact }: { onSelectContact?: (id: string) => void }) {
@@ -240,7 +241,8 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
                                             </span>
                                         </div>
 
-                                        <div className="shrink-0 flex items-center">
+                                        <div className="shrink-0 flex items-center gap-1.5">
+                                            <OwnerAvatar name={contact.assignedTo?.name} profilePhotoUrl={contact.assignedTo?.profilePhotoUrl} size="xs" />
                                             {contact.linkedInContactId || contact.linkedInProfileUrl ? (
                                                 <a
                                                     href={contact.linkedInProfileUrl || `https://linkedin.com/in/${contact.linkedInContactId}`}

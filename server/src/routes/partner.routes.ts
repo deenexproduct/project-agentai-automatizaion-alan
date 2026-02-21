@@ -28,15 +28,26 @@ router.get('/', async (req: Request, res: Response) => {
                 }
             },
             {
+                $lookup: {
+                    from: 'users',
+                    localField: 'assignedTo',
+                    foreignField: '_id',
+                    pipeline: [{ $project: { name: 1, profilePhotoUrl: 1 } }],
+                    as: '_assignedToArr'
+                }
+            },
+            {
                 $addFields: {
                     companiesCount: { $size: '$companies' },
-                    contactsCount: { $size: '$contacts' }
+                    contactsCount: { $size: '$contacts' },
+                    assignedTo: { $arrayElemAt: ['$_assignedToArr', 0] }
                 }
             },
             {
                 $project: {
                     companies: 0,
-                    contacts: 0
+                    contacts: 0,
+                    _assignedToArr: 0
                 }
             },
             { $sort: { name: 1 } }
@@ -53,7 +64,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const partner = await Partner.create({ ...req.body, userId });
+        const partner = await Partner.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
         res.status(201).json(partner);
     } catch (err: any) {
         console.error('Create partner error:', err.message);

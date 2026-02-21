@@ -5,6 +5,7 @@ import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as C
 import { formatToArgentineDateTime, isTodayInArgentina, isOverdueExact } from '../../utils/date';
 import TaskFormDrawer from './TaskFormDrawer';
 import PremiumHeader from './PremiumHeader';
+import OwnerAvatar from '../common/OwnerAvatar';
 
 export default function TaskList() {
     const [tasks, setTasks] = useState<TaskData[]>([]);
@@ -159,6 +160,7 @@ export default function TaskList() {
                         <span className={`px-2.5 py-1 rounded-[8px] text-[10px] font-bold border uppercase tracking-widest ${getTypeInfo(task.type).color} shadow-sm`}>
                             {getTypeInfo(task.type).label}
                         </span>
+                        <OwnerAvatar name={task.assignedTo?.name} profilePhotoUrl={task.assignedTo?.profilePhotoUrl} size="xs" />
                     </div>
                 </div>
 

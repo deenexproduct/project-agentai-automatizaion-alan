@@ -93,7 +93,7 @@ router.get('/companies', async (req: Request, res: Response) => {
                 .sort({ createdAt: -1 })
                 .skip((pageNum - 1) * limitNum)
                 .limit(limitNum)
-                .populate('assignedTo', 'name email')
+                .populate('assignedTo', 'name email profilePhotoUrl')
                 .populate('partner', 'name')
                 .lean(),
             Company.countDocuments(query),
@@ -134,7 +134,7 @@ router.get('/companies', async (req: Request, res: Response) => {
 router.post('/companies', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
-        const company = await Company.create({ ...req.body, userId });
+        const company = await Company.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
         res.status(201).json(company);
     } catch (err: any) {
         console.error('CRM create company error:', err.message);
@@ -147,7 +147,7 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
         const company = await Company.findOne({ _id: req.params.id, userId })
-            .populate('assignedTo', 'name email')
+            .populate('assignedTo', 'name email profilePhotoUrl')
             .populate('partner', 'name')
             .lean();
 
@@ -156,7 +156,8 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
         const [contacts, deals, tasks, activities] = await Promise.all([
             CrmContact.find({ company: req.params.id, userId }).sort({ isResponsible: -1, fullName: 1 }).lean(),
             Deal.find({ company: req.params.id, userId })
-                .populate('primaryContact', 'fullName position')
+                .populate('primaryContact', 'fullName position profilePhotoUrl')
+                .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ createdAt: -1 }).lean(),
             Task.find({ company: req.params.id, userId, status: { $in: ['pending', 'in_progress'] } })
                 .sort({ dueDate: 1 }).lean(),
@@ -165,7 +166,24 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
                 .sort({ createdAt: -1 }).limit(20).lean(),
         ]);
 
-        res.json({ ...company, contacts, deals, tasks, activities });
+        // Enrich deals with daysInStatus and pendingTasks
+        const dealIds = deals.map(d => d._id);
+        const dealTaskCounts = await Task.aggregate([
+            { $match: { deal: { $in: dealIds }, status: { $in: ['pending', 'in_progress'] } } },
+            { $group: { _id: '$deal', count: { $sum: 1 } } },
+        ]);
+        const dealTaskMap: Record<string, number> = {};
+        for (const t of dealTaskCounts) dealTaskMap[t._id.toString()] = t.count;
+
+        const enrichedDeals = deals.map(deal => ({
+            ...deal,
+            pendingTasks: dealTaskMap[deal._id.toString()] || 0,
+            daysInStatus: (deal as any).statusHistory?.length > 0
+                ? Math.floor((Date.now() - new Date((deal as any).statusHistory[(deal as any).statusHistory.length - 1].changedAt).getTime()) / (1000 * 60 * 60 * 24))
+                : Math.floor((Date.now() - new Date(deal.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
+        }));
+
+        res.json({ ...company, contacts, deals: enrichedDeals, tasks, activities });
     } catch (err: any) {
         console.error('CRM company detail error:', err.message);
         res.status(500).json({ error: 'Failed to fetch company' });
@@ -245,7 +263,7 @@ router.get('/contacts', async (req: Request, res: Response) => {
         const [contacts, total] = await Promise.all([
             CrmContact.find(query)
                 .populate('company', 'name logo')
-                .populate('assignedTo', 'name email')
+                .populate('assignedTo', 'name email profilePhotoUrl')
                 .populate('partner', 'name')
                 .sort({ createdAt: -1 })
                 .skip((pageNum - 1) * limitNum)
@@ -265,7 +283,7 @@ router.get('/contacts', async (req: Request, res: Response) => {
 router.post('/contacts', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
-        const contact = await CrmContact.create({ ...req.body, userId });
+        const contact = await CrmContact.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
 
         // Auto-prospect if LinkedIn URL is provided
         if (contact.linkedInProfileUrl) {
@@ -288,7 +306,7 @@ router.get('/contacts/:id', async (req: Request, res: Response) => {
         const userId = (req as any).user._id.toString();
         const contact = await CrmContact.findOne({ _id: req.params.id, userId })
             .populate('company', 'name logo sector website')
-            .populate('assignedTo', 'name email')
+            .populate('assignedTo', 'name email profilePhotoUrl')
             .populate('linkedInContactId')
             .populate('partner', 'name')
             .lean();
@@ -296,16 +314,34 @@ router.get('/contacts/:id', async (req: Request, res: Response) => {
         if (!contact) return res.status(404).json({ error: 'Contact not found' });
 
         const [tasks, activities, deals] = await Promise.all([
-            Task.find({ contact: req.params.id, userId, status: { $in: ['pending', 'in_progress'] } })
-                .sort({ dueDate: 1 }).lean(),
+            Task.find({ contact: req.params.id, userId })
+                .sort({ status: 1, dueDate: 1 }).lean(),
             Activity.find({ contact: req.params.id, userId })
                 .sort({ createdAt: -1 }).limit(30).lean(),
             Deal.find({ primaryContact: req.params.id, userId })
-                .populate('company', 'name logo')
+                .populate('company', 'name logo themeColor sector localesCount')
+                .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ createdAt: -1 }).lean(),
         ]);
 
-        res.json({ ...contact, tasks, activities, deals });
+        // Enrich deals with daysInStatus and pendingTasks
+        const dealIds = deals.map(d => d._id);
+        const taskCounts = await Task.aggregate([
+            { $match: { deal: { $in: dealIds }, status: { $in: ['pending', 'in_progress'] } } },
+            { $group: { _id: '$deal', count: { $sum: 1 } } },
+        ]);
+        const taskMap: Record<string, number> = {};
+        for (const t of taskCounts) taskMap[t._id.toString()] = t.count;
+
+        const enrichedDeals = deals.map(deal => ({
+            ...deal,
+            pendingTasks: taskMap[deal._id.toString()] || 0,
+            daysInStatus: (deal as any).statusHistory?.length > 0
+                ? Math.floor((Date.now() - new Date((deal as any).statusHistory[(deal as any).statusHistory.length - 1].changedAt).getTime()) / (1000 * 60 * 60 * 24))
+                : Math.floor((Date.now() - new Date(deal.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
+        }));
+
+        res.json({ ...contact, tasks, activities, deals: enrichedDeals });
     } catch (err: any) {
         console.error('CRM contact detail error:', err.message);
         res.status(500).json({ error: 'Failed to fetch contact' });
@@ -397,7 +433,7 @@ router.get('/deals', async (req: Request, res: Response) => {
         const deals = await Deal.find(query)
             .populate('company', 'name logo sector localesCount costPerLocation')
             .populate('primaryContact', 'fullName position profilePhotoUrl')
-            .populate('assignedTo', 'name email')
+            .populate('assignedTo', 'name email profilePhotoUrl')
             .sort({ createdAt: -1 })
             .lean();
 
@@ -464,7 +500,7 @@ router.post('/deals', async (req: Request, res: Response) => {
             return res.status(400).json({ error: `Invalid status "${status}". Valid: ${validKeys.join(', ')}` });
         }
 
-        const deal = await Deal.create({ ...req.body, status, userId });
+        const deal = await Deal.create({ ...req.body, status, assignedTo: req.body.assignedTo || userId, userId });
         res.status(201).json(deal);
     } catch (err: any) {
         console.error('CRM create deal error:', err.message);
@@ -517,7 +553,7 @@ router.patch('/deals/:id', async (req: Request, res: Response) => {
         const populated = await Deal.findById(deal._id)
             .populate('company', 'name logo sector')
             .populate('primaryContact', 'fullName position profilePhotoUrl')
-            .populate('assignedTo', 'name email')
+            .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 
         res.json(populated);
@@ -561,7 +597,7 @@ router.get('/tasks', async (req: Request, res: Response) => {
                 .populate('contact', 'fullName profilePhotoUrl')
                 .populate('deal', 'title')
                 .populate('company', 'name logo')
-                .populate('assignedTo', 'name email')
+                .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ dueDate: 1, priority: -1 })
                 .skip((pageNum - 1) * limitNum)
                 .limit(limitNum)
@@ -580,13 +616,13 @@ router.get('/tasks', async (req: Request, res: Response) => {
 router.post('/tasks', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
-        const task = await Task.create({ ...req.body, userId });
+        const task = await Task.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
 
         const populated = await Task.findById(task._id)
             .populate('contact', 'fullName')
             .populate('deal', 'title')
             .populate('company', 'name')
-            .populate('assignedTo', 'name email')
+            .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 
         res.status(201).json(populated);
@@ -608,7 +644,7 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
             .populate('contact', 'fullName')
             .populate('deal', 'title')
             .populate('company', 'name')
-            .populate('assignedTo', 'name email')
+            .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 
         if (!task) return res.status(404).json({ error: 'Task not found' });
@@ -660,8 +696,12 @@ router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
 router.delete('/tasks/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const result = await Task.deleteOne({ _id: req.params.id, userId });
-        if (result.deletedCount === 0) return res.status(404).json({ error: 'Task not found' });
+        const task = await Task.findOne({ _id: req.params.id, userId }).lean();
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+        if (task.status === 'completed') {
+            return res.status(403).json({ error: 'Completed tasks cannot be deleted' });
+        }
+        await Task.deleteOne({ _id: req.params.id, userId });
         res.json({ success: true });
     } catch (err: any) {
         console.error('CRM delete task error:', err.message);
@@ -693,7 +733,7 @@ router.get('/activities', async (req: Request, res: Response) => {
                 .populate('contact', 'fullName profilePhotoUrl')
                 .populate('deal', 'title')
                 .populate('company', 'name logo')
-                .populate('createdBy', 'name')
+                .populate('createdBy', 'name profilePhotoUrl')
                 .sort({ createdAt: -1 })
                 .skip((pageNum - 1) * limitNum)
                 .limit(limitNum)

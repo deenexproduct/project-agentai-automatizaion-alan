@@ -5,6 +5,7 @@ import { Settings, Plus, DollarSign, Calendar, Clock, CheckSquare, Users, Buildi
 import { formatToArgentineDate } from '../../utils/date';
 import DealFormDrawer from './DealFormDrawer';
 import PremiumHeader from './PremiumHeader';
+import OwnerAvatar from '../common/OwnerAvatar';
 
 interface StageData {
     key: string;
@@ -272,6 +273,7 @@ export default function PipelineBoard() {
                                                                                     <CheckSquare size={13} className="mr-1.5 text-amber-500" />{deal.pendingTasks}
                                                                                 </div>
                                                                             )}
+                                                                            <OwnerAvatar name={deal.assignedTo?.name} profilePhotoUrl={deal.assignedTo?.profilePhotoUrl} size="xs" />
                                                                         </div>
                                                                     </div>
                                                                 </div>

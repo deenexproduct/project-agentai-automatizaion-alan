@@ -16,8 +16,9 @@ import VoiceCommandPage from './VoiceCommandPage';
 import WhatsAppPage from './WhatsAppPage';
 import ExtensionPage from './ExtensionPage';
 import TeamPermissions from '../team/TeamPermissions';
+import ProfileSettings from '../settings/ProfileSettings';
 
-type SidebarTab = 'dashboard' | 'pipeline' | 'companies' | 'contacts' | 'tasks' | 'partners' | 'prospecting-crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team';
+type SidebarTab = 'dashboard' | 'pipeline' | 'companies' | 'contacts' | 'tasks' | 'partners' | 'prospecting-crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team' | 'profile';
 
 interface SidebarItem {
     id: SidebarTab;
@@ -57,6 +58,7 @@ const extensionGroup: SidebarItem[] = [
 ];
 
 const bottomGroup: SidebarItem[] = [
+    { id: 'profile', Icon: User, label: 'Mi Perfil' },
     { id: 'team', Icon: Users, label: 'Equipo' },
     { id: 'config', Icon: Settings, label: 'Configuración Extensión', accentColor: '#ec4899' },
 ];
@@ -91,7 +93,7 @@ export default function LinkedInApp() {
                         }}
                         title="LinkedIn Automation"
                     >
-                        <span className="text-white text-lg font-bold">in</span>
+                        <img src="/isotipo.png" alt="Logo" className="w-7 h-7 object-contain" />
                     </div>
 
                     {/* CRM Group */}
@@ -167,7 +169,8 @@ export default function LinkedInApp() {
                                                                 activeTab === 'voice' ? 'Transcriptor de Audio' :
                                                                     activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
                                                                         activeTab === 'extension' ? 'Extensión Deenex' :
-                                                                            activeTab === 'team' ? 'Equipo y Permisos' : 'Configuración'}
+                                                                            activeTab === 'team' ? 'Equipo y Permisos' :
+                                                                                activeTab === 'profile' ? 'Mi Perfil' : 'Configuración'}
                         </h1>
 
                     </div>
@@ -192,6 +195,7 @@ export default function LinkedInApp() {
                     {activeTab === 'voice' && <VoiceCommandPage />}
                     {activeTab === 'extension' && <ExtensionPage />}
                     {activeTab === 'team' && <TeamPermissions />}
+                    {activeTab === 'profile' && <ProfileSettings />}
                 </div>
             </main>
         </div>

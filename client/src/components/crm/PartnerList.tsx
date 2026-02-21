@@ -3,6 +3,7 @@ import { Search, Plus, Edit2, Trash2, Handshake, Mail, MessageCircle, Building2,
 import { PartnerData, getPartners, deletePartner } from '../../services/crm.service';
 import PartnerFormDrawer from './PartnerFormDrawer';
 import PremiumHeader from './PremiumHeader';
+import OwnerAvatar from '../common/OwnerAvatar';
 
 export default function PartnerList() {
     const [partners, setPartners] = useState<PartnerData[]>([]);
@@ -108,6 +109,7 @@ export default function PartnerList() {
                                                     <Handshake size={18} className="text-violet-600" />
                                                 </div>
                                                 <div className="font-extrabold text-[15px] text-slate-800 tracking-tight">{partner.name}</div>
+                                                <OwnerAvatar name={partner.assignedTo?.name} profilePhotoUrl={partner.assignedTo?.profilePhotoUrl} size="xs" />
                                             </div>
                                         </td>
 

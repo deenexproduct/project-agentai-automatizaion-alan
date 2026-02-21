@@ -31,6 +31,7 @@ export type PartnerData = {
     phone?: string;
     commissionPercentage?: number;
     notes?: string;
+    assignedTo?: { _id: string; name: string; profilePhotoUrl?: string };
     createdAt?: string;
     companiesCount?: number;
     contactsCount?: number;
@@ -60,7 +61,7 @@ export type CompanyData = {
         notes?: string;
         lastResearchedAt?: string;
     };
-    assignedTo?: { _id: string; name: string; email: string };
+    assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     contactsCount?: number;
     dealsCount?: number;
     createdAt: string;
@@ -77,7 +78,7 @@ export type ContactData = {
     profilePhotoUrl?: string;
     company?: { _id: string; name: string; logo?: string };
     partner?: PartnerData;
-    assignedTo?: { _id: string; name: string; email: string };
+    assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     linkedInContactId?: { _id: string; profileUrl: string };
     linkedInProfileUrl?: string;
     tags: string[];
@@ -92,7 +93,7 @@ export type DealData = {
     status: string;
     company?: { _id: string; name: string; logo?: string; themeColor?: string; sector?: string; localesCount?: number; costPerLocation?: number };
     primaryContact?: { _id: string; fullName: string; position?: string; profilePhotoUrl?: string };
-    assignedTo?: { _id: string; name: string; email: string };
+    assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     expectedCloseDate?: string;
     daysInStatus?: number;
     pendingTasks?: number;
@@ -109,7 +110,7 @@ export type TaskData = {
     contact?: { _id: string; fullName: string; profilePhotoUrl?: string };
     deal?: { _id: string; title: string };
     company?: { _id: string; name: string; logo?: string };
-    assignedTo?: { _id: string; name: string; email: string };
+    assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     isOverdue?: boolean;
     createdAt: string;
 };
@@ -121,7 +122,7 @@ export type ActivityData = {
     contact?: { _id: string; fullName: string; profilePhotoUrl?: string };
     deal?: { _id: string; title: string };
     company?: { _id: string; name: string; logo?: string };
-    createdBy?: { _id: string; name: string };
+    createdBy?: { _id: string; name: string; profilePhotoUrl?: string };
     createdAt: string;
 };
 

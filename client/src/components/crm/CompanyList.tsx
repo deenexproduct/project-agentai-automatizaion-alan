@@ -3,6 +3,7 @@ import { getCompanies, CompanyData } from '../../services/crm.service';
 import { Search, MapPin, Globe, Users, Briefcase, Plus, Filter } from 'lucide-react';
 import CompanyFormDrawer from './CompanyFormDrawer';
 import PremiumHeader from './PremiumHeader';
+import OwnerAvatar from '../common/OwnerAvatar';
 
 export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id: string) => void }) {
     const [companies, setCompanies] = useState<CompanyData[]>([]);
@@ -149,7 +150,8 @@ export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id
                                             {company.dealsCount || 0} Deal{(company.dealsCount !== 1) && 's'}
                                         </span>
 
-                                        <div className="ml-auto">
+                                        <div className="ml-auto flex items-center gap-1.5">
+                                            <OwnerAvatar name={company.assignedTo?.name} profilePhotoUrl={company.assignedTo?.profilePhotoUrl} size="xs" />
                                             {company.website && (
                                                 <a
                                                     href={company.website.startsWith('http') ? company.website : `https://${company.website}`}

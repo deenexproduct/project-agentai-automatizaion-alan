@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlignLeft, Globe, Briefcase, Hash, User, Phone, Mail, Loader2, AlertTriangle } from 'lucide-react';
-import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, SystemConfig, PartnerData, addCompanyCategory, getContacts, ContactData, extractLogo } from '../../services/crm.service';
+import { X, Save, Building2, AlignLeft, Globe, Briefcase, Hash, User, Phone, Mail, Loader2, AlertTriangle, GitBranch, DollarSign, Clock, Calendar, CheckSquare, TrendingUp, History } from 'lucide-react';
+import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, SystemConfig, PartnerData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig } from '../../services/crm.service';
+import OwnerAvatar from '../common/OwnerAvatar';
 
 interface Props {
     company?: CompanyData | null;
@@ -25,8 +26,11 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     const [partners, setPartners] = useState<PartnerData[]>([]);
     const [companyContacts, setCompanyContacts] = useState<ContactData[]>([]);
     const [loadingContacts, setLoadingContacts] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'contacts'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'trazabilidad'>('info');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [companyDeals, setCompanyDeals] = useState<DealData[]>([]);
+    const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
+    const [loadingDeals, setLoadingDeals] = useState(false);
     const drawerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -67,11 +71,22 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                     .then(res => setCompanyContacts(res.contacts))
                     .catch(err => console.error("Error loading company contacts", err))
                     .finally(() => setLoadingContacts(false));
+                // Load deals for this company
+                setLoadingDeals(true);
+                getCompany(company._id)
+                    .then(res => setCompanyDeals((res as any).deals || []))
+                    .catch(err => console.error('Error loading company deals', err))
+                    .finally(() => setLoadingDeals(false));
+                // Load pipeline stages for label/color mapping
+                getPipelineConfig()
+                    .then(config => setPipelineStages(config.stages || []))
+                    .catch(() => { });
             }
         } else if (open && !company) {
             setActiveTab('info');
             setShowDeleteConfirm(false);
             setCompanyContacts([]);
+            setCompanyDeals([]);
             setFormData({
                 name: '',
                 website: '',
@@ -256,6 +271,18 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                             {!loadingContacts && companyContacts.length > 0 && (
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === 'contacts' ? 'bg-fuchsia-100' : 'bg-slate-200'}`}>
                                     {companyContacts.length}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('trazabilidad')}
+                            className={`flex-1 py-2 text-[13px] font-bold rounded-[10px] transition-all flex items-center justify-center gap-2 ${activeTab === 'trazabilidad' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:bg-white/50 hover:text-slate-700'}`}
+                        >
+                            <GitBranch size={16} /> Traza
+                            {companyDeals.length > 0 && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === 'trazabilidad' ? 'bg-blue-100' : 'bg-slate-200'}`}>
+                                    {companyDeals.length}
                                 </span>
                             )}
                         </button>
@@ -454,6 +481,155 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                             )}
                         </div>
                     )}
+
+                    {activeTab === 'trazabilidad' && (
+                        <div className="flex flex-col gap-4 animate-[fadeIn_0.3s_ease-out]">
+                            {loadingDeals ? (
+                                <div className="flex flex-col items-center justify-center py-16">
+                                    <Loader2 size={28} className="animate-spin text-violet-400" />
+                                    <p className="text-[13px] text-slate-400 mt-3 font-medium">Cargando oportunidades...</p>
+                                </div>
+                            ) : companyDeals.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-center opacity-70 bg-white/30 rounded-[20px] border border-white/50">
+                                    <div className="w-16 h-16 bg-blue-50/80 rounded-[20px] flex items-center justify-center mb-4 border border-blue-100/50 shadow-inner">
+                                        <TrendingUp size={24} className="text-blue-400" />
+                                    </div>
+                                    <h3 className="text-[15px] font-bold text-slate-700">Sin oportunidades</h3>
+                                    <p className="text-slate-500 text-[13px] font-medium max-w-[200px] mt-1">Esta empresa no tiene deals en el pipeline.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Summary bar */}
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl text-[11px] font-bold text-emerald-700">
+                                            <DollarSign size={12} className="text-emerald-500" />
+                                            {companyDeals.reduce((s, d) => s + (d.value || 0), 0).toLocaleString()}
+                                            <span className="text-emerald-500/70 font-medium">total</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 border border-violet-100 rounded-xl text-[11px] font-bold text-violet-700">
+                                            <Briefcase size={12} className="text-violet-500" />
+                                            {companyDeals.length}
+                                            <span className="text-violet-500/70 font-medium">{companyDeals.length === 1 ? 'deal' : 'deals'}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Deal cards */}
+                                    {companyDeals.map(deal => {
+                                        const stage = pipelineStages.find(s => s.key === deal.status);
+                                        const stageLabel = stage?.label || deal.status;
+                                        const stageColor = stage?.color || '#8b5cf6';
+
+                                        return (
+                                            <div
+                                                key={deal._id}
+                                                className="bg-white/70 backdrop-blur-md rounded-[16px] border border-slate-200/60 shadow-sm overflow-hidden"
+                                            >
+                                                <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${stageColor}, ${stageColor}90)` }} />
+                                                <div className="p-4">
+                                                    {/* Stage + Value */}
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <span
+                                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border"
+                                                            style={{ color: stageColor, borderColor: stageColor + '30', background: stageColor + '10' }}
+                                                        >
+                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stageColor }} />
+                                                            {stageLabel}
+                                                        </span>
+                                                        <span className="text-[16px] font-extrabold text-emerald-600 font-mono tracking-tight">
+                                                            ${deal.value?.toLocaleString() || 0}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Title + Contact */}
+                                                    <h4 className="text-[14px] font-bold text-slate-800 truncate leading-snug mb-1">
+                                                        {deal.title}
+                                                    </h4>
+                                                    {deal.primaryContact?.fullName && (
+                                                        <p className="text-[11px] text-slate-400 font-medium truncate mb-3 flex items-center gap-1">
+                                                            <User size={10} />
+                                                            {deal.primaryContact.fullName}
+                                                            {deal.primaryContact.position && ` · ${deal.primaryContact.position}`}
+                                                        </p>
+                                                    )}
+
+                                                    {/* Meta badges */}
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-500">
+                                                            <Clock size={9} />
+                                                            {(deal as any).daysInStatus || 0}d en etapa
+                                                        </span>
+                                                        {deal.expectedCloseDate && (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-500">
+                                                                <Calendar size={9} />
+                                                                {new Date(deal.expectedCloseDate).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                                                            </span>
+                                                        )}
+                                                        {(deal as any).pendingTasks > 0 && (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200/60 text-[10px] font-bold text-amber-600">
+                                                                <CheckSquare size={9} />
+                                                                {(deal as any).pendingTasks} tarea{(deal as any).pendingTasks !== 1 && 's'}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[9px] text-slate-300 font-medium ml-auto">
+                                                            Creado {new Date(deal.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Owner */}
+                                                    {deal.assignedTo && (
+                                                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+                                                            <OwnerAvatar name={deal.assignedTo.name} profilePhotoUrl={deal.assignedTo.profilePhotoUrl} size="xs" />
+                                                            <span className="text-[11px] text-slate-500 font-medium">{deal.assignedTo.name}</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Status History Timeline */}
+                                                    {((deal as any).statusHistory?.length > 0 || deal.createdAt) && (
+                                                        <div className="mt-3 pt-3 border-t border-slate-100">
+                                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                                                <History size={10} /> Recorrido en Pipeline
+                                                            </div>
+                                                            <div className="relative ml-1.5">
+                                                                <div className="absolute left-[4.5px] top-1 bottom-1 w-px bg-slate-200" />
+                                                                {/* Creation entry */}
+                                                                <div className="relative flex items-start gap-2.5 pb-2">
+                                                                    <div className="w-2.5 h-2.5 rounded-full bg-violet-400 border-2 border-white shadow-sm shrink-0 mt-0.5 z-10" />
+                                                                    <div className="flex-1 flex items-baseline justify-between gap-2">
+                                                                        <span className="text-[10px] font-bold text-slate-600">Creación</span>
+                                                                        <span className="text-[9px] text-slate-400 font-medium shrink-0">
+                                                                            {new Date(deal.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} {new Date(deal.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                {/* Status changes */}
+                                                                {((deal as any).statusHistory || []).map((h: any, idx: number) => {
+                                                                    const toStage = pipelineStages.find(s => s.key === h.to);
+                                                                    const toLabel = toStage?.label || h.to;
+                                                                    const toColor = toStage?.color || '#64748b';
+                                                                    const isLast = idx === ((deal as any).statusHistory || []).length - 1;
+                                                                    return (
+                                                                        <div key={idx} className={`relative flex items-start gap-2.5 ${isLast ? '' : 'pb-2'}`}>
+                                                                            <div className="w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm shrink-0 mt-0.5 z-10" style={{ backgroundColor: toColor }} />
+                                                                            <div className="flex-1 flex items-baseline justify-between gap-2">
+                                                                                <span className="text-[10px] font-bold" style={{ color: toColor }}>{toLabel}</span>
+                                                                                <span className="text-[9px] text-slate-400 font-medium shrink-0">
+                                                                                    {new Date(h.changedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} {new Date(h.changedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="pt-4 border-t border-slate-200/50 flex gap-3 bg-white/50 backdrop-blur-md sticky bottom-0 px-6 pb-4 z-20">
@@ -472,7 +648,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                         onClick={onClose}
                         className="flex-1 px-4 py-2 bg-white border border-slate-200/80 text-slate-600 rounded-[10px] text-[13px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
                     >
-                        {activeTab === 'contacts' ? 'Cerrar' : 'Cancelar'}
+                        {activeTab === 'contacts' || activeTab === 'trazabilidad' ? 'Cerrar' : 'Cancelar'}
                     </button>
                     {activeTab === 'info' && (
                         <button
