@@ -128,14 +128,80 @@ export type ActivityData = {
 };
 
 export type DashboardStats = {
-    totalCompanies: number;
-    totalContacts: number;
-    totalDeals: number;
-    pipelineValue: number;
-    dealsByStatus: Record<string, { count: number; value: number }>;
-    tasksPendingToday: number;
-    tasksOverdue: number;
-    activitiesThisWeek: number;
+    companies: {
+        totalLocales: number;
+        totalCompanies: number;
+        growthFromLastMonth: number;
+    };
+    revenue: {
+        wonThisMonth: { currency: string; amount: number }[];
+        pipelineForecast: { currency: string; amount: number }[];
+    };
+    traceability: {
+        activitiesThisWeek: { type: string; count: number }[];
+    };
+    contacts: {
+        total: number;
+        newThisMonth: number;
+        byRole: { role: string; count: number }[];
+    };
+    tasks: {
+        total: number;
+        overdue: number;
+        completionRateThisWeek: number;
+    };
+    conversion: {
+        totalDeals: number;
+        winRate: number;
+        leadToWon: number;
+        leadToRejected: number;
+        dealsWon: number;
+        dealsLost: number;
+        dealsPaused: number;
+        funnel: {
+            step: number;
+            key: string;
+            label: string;
+            count: number;
+        }[];
+    };
+};
+
+export type CalendarConfigData = {
+    _id?: string;
+    googleEmail?: string;
+    googleRefreshToken?: string;
+    smtp?: {
+        host: string;
+        port: number;
+        user: string;
+        pass: string;
+        secure?: boolean;
+    };
+    emailTemplate?: string;
+};
+
+export type EventData = {
+    _id: string;
+    userId: { _id: string; name: string; email: string };
+    assignedTo?: { _id: string; name: string; email: string };
+    title: string;
+    description?: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    type: 'meet' | 'physical';
+    location?: string;
+    googleEventId?: string;
+    meetLink?: string;
+    attendees: string[];
+    linkedTo?: {
+        contact?: { _id: string; fullName: string; profilePhotoUrl?: string }; // Legacy
+        contacts?: { _id: string; fullName: string; profilePhotoUrl?: string }[];
+        company?: { _id: string; name: string; logo?: string };
+        deal?: { _id: string; title: string };
+    };
+    createdAt: string;
 };
 
 // ── API Methods ──────────────────────────────────────────────────
@@ -168,7 +234,7 @@ export const updatePartner = async (id: string, data: Partial<PartnerData>) => (
 export const deletePartner = async (id: string) => (await api.delete(`/partners/${id}`)).data;
 
 // Dashboard
-export const getDashboardStats = async () => (await api.get<DashboardStats>('/crm/dashboard/stats')).data;
+export const getDashboardStats = async () => (await api.get<DashboardStats>('/dashboard/metrics')).data;
 
 // Companies
 export const getCompanies = async (params: any) => (await api.get<{ companies: CompanyData[]; total: number; pages: number }>('/crm/companies', { params })).data;
@@ -199,5 +265,27 @@ export const completeTask = async (id: string) => (await api.patch<{ success: bo
 export const deleteTask = async (id: string) => (await api.delete(`/crm/tasks/${id}`)).data;
 
 // Activities
-export const getActivities = async (params: any = {}) => (await api.get<{ activities: ActivityData[]; total: number; pages: number }>('/crm/activities', { params })).data;
+export const getActivities = async (params: any = {}) => (await api.get<{ activities: (ActivityData & { source?: string })[]; total: number; pages: number }>('/crm/activities', { params })).data;
 export const createActivity = async (data: Partial<ActivityData>) => (await api.post<ActivityData>('/crm/activities', data)).data;
+
+// ── Calendar Config & Events ──────────────────────────────────────
+
+export const getCalendarConfig = async (): Promise<CalendarConfigData> => (await api.get('/calendar/config')).data;
+
+export const updateCalendarConfig = async (data: Partial<CalendarConfigData>): Promise<CalendarConfigData> => (await api.put('/calendar/config', data)).data;
+
+export const getEvents = async (filters: { start?: string; end?: string } = {}): Promise<{ events: EventData[] }> => {
+    const params = new URLSearchParams();
+    if (filters.start) params.append('start', filters.start);
+    if (filters.end) params.append('end', filters.end);
+    return (await api.get(`/calendar/events?${params.toString()}`)).data;
+};
+
+export const createEvent = async (data: Partial<EventData> & { sendInvite?: boolean }): Promise<{ success: boolean; event: EventData }> =>
+    (await api.post('/calendar/events', data)).data;
+
+export const updateEvent = async (id: string, data: Partial<EventData> & { sendInvite?: boolean }): Promise<{ success: boolean; event: EventData }> =>
+    (await api.put(`/calendar/events/${id}`, data)).data;
+
+export const deleteEvent = async (id: string): Promise<{ success: boolean }> =>
+    (await api.delete(`/calendar/events/${id}`)).data;

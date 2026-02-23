@@ -98,20 +98,20 @@ export default function TaskList() {
 
     const getTypeInfo = (type: string) => {
         switch (type) {
-            case 'call': return { label: 'Llamada', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
-            case 'meeting': return { label: 'Reunión', color: 'text-indigo-600 bg-indigo-50 border-indigo-200' };
-            case 'email': return { label: 'Email', color: 'text-amber-600 bg-amber-50 border-amber-200' };
-            case 'follow_up': return { label: 'Seguimiento', color: 'text-blue-600 bg-blue-50 border-blue-200' };
-            case 'proposal': return { label: 'Propuesta', color: 'text-fuchsia-600 bg-fuchsia-50 border-fuchsia-200' };
-            case 'research': return { label: 'Investigación', color: 'text-purple-600 bg-purple-50 border-purple-200' };
-            default: return { label: 'Otro', color: 'text-slate-600 bg-slate-50 border-slate-200' };
+            case 'call': return { label: 'Llamada', color: 'text-emerald-700 bg-emerald-50 border-emerald-200/60' };
+            case 'meeting': return { label: 'Reunión', color: 'text-indigo-700 bg-indigo-50 border-indigo-200/60' };
+            case 'email': return { label: 'Email', color: 'text-amber-700 bg-amber-50 border-amber-200/60' };
+            case 'follow_up': return { label: 'Seguimiento', color: 'text-blue-700 bg-blue-50 border-blue-200/60' };
+            case 'proposal': return { label: 'Propuesta', color: 'text-fuchsia-700 bg-fuchsia-50 border-fuchsia-200/60' };
+            case 'research': return { label: 'Investigación', color: 'text-purple-700 bg-purple-50 border-purple-200/60' };
+            default: return { label: 'Otro', color: 'text-slate-700 bg-slate-50 border-slate-200/60' };
         }
     };
 
     const getPriorityBadge = (priority: string) => {
         switch (priority) {
-            case 'urgent': return <span className="px-2 py-0.5 rounded-[8px] text-[10px] font-black bg-red-100/80 text-red-600 border border-red-200 uppercase tracking-widest shadow-sm">Urgente</span>;
-            case 'high': return <span className="px-2 py-0.5 rounded-[8px] text-[10px] font-bold bg-orange-100/80 text-orange-600 border border-orange-200 uppercase tracking-wider shadow-sm">Alta</span>;
+            case 'urgent': return <span className="px-2 py-0.5 rounded-[6px] text-[11px] font-semibold bg-red-50 text-red-600 border border-red-100 flex items-center gap-1"><AlertCircle size={10} /> Urgente</span>;
+            case 'high': return <span className="px-2 py-0.5 rounded-[6px] text-[11px] font-semibold bg-orange-50 text-orange-600 border border-orange-100 flex items-center gap-1">Alta</span>;
             default: return null;
         }
     };
@@ -128,66 +128,88 @@ export default function TaskList() {
     const completedTasks = tasks.filter(t => t.status === 'completed').sort((a, b) => (new Date((b as any).completedAt || 0).getTime() - new Date((a as any).completedAt || 0).getTime()));
 
 
-    const renderTaskCard = (task: TaskData, isOverdue: boolean, isKanbanCompleted: boolean = false) => (
-        <div
-            key={task._id}
-            onClick={(e) => handleEdit(task, e)}
-            className="group bg-white/60 backdrop-blur-xl rounded-[20px] p-5 border border-white/80 shadow-[0_4px_16px_rgba(30,27,75,0.02)] hover:shadow-[0_12px_32px_rgba(139,92,246,0.1)] hover:border-violet-300 hover:bg-white/80 transition-all duration-300 flex items-start gap-4 cursor-pointer relative overflow-hidden hover:-translate-y-1 w-full"
-        >
-            <div className={`absolute inset-y-0 left-0 w-1.5 transition-opacity duration-300 ${isOverdue ? 'bg-red-500 opacity-70 group-hover:opacity-100' : 'bg-gradient-to-b from-violet-500 to-fuchsia-500 opacity-0 group-hover:opacity-100'}`} />
-
-            <button
-                onClick={(e) => handleComplete(task._id, e)}
-                className={`mt-1 transition-colors shrink-0 outline-none hover:scale-110 ${task.status === 'completed' || isKanbanCompleted ? 'text-emerald-500' : 'text-slate-300 group-hover:text-emerald-500'}`}
-                title="Marcar completada"
-                disabled={task.status === 'completed' || isKanbanCompleted}
+    const renderTaskCard = (task: TaskData, isOverdue: boolean, isKanbanCompleted: boolean = false) => {
+        const isCompleted = task.status === 'completed' || isKanbanCompleted;
+        return (
+            <div
+                key={task._id}
+                onClick={(e) => handleEdit(task, e)}
+                className={`group bg-white rounded-[16px] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(139,92,246,0.08)] transition-all duration-300 flex items-start gap-3.5 cursor-pointer relative overflow-hidden border ${isCompleted ? 'border-slate-200/60 opacity-60 hover:opacity-100' : isOverdue ? 'border-red-100 hover:border-red-300' : 'border-slate-200/60 hover:border-violet-300'} w-full`}
             >
-                {task.status === 'completed' || isKanbanCompleted ? (
-                    <CheckCircle2 size={24} strokeWidth={2.5} className="drop-shadow-[0_2px_8px_rgba(16,185,129,0.3)] text-emerald-500" />
-                ) : (
-                    <>
-                        <Circle size={24} strokeWidth={2.5} className="group-hover:hidden" />
-                        <CheckCircle2 size={24} strokeWidth={2.5} className="hidden group-hover:block drop-shadow-[0_2px_8px_rgba(16,185,129,0.3)] text-emerald-500" />
-                    </>
-                )}
-            </button>
+                {/* Subtle left indicator line */}
+                <div className={`absolute top-0 left-0 bottom-0 w-1 transition-colors duration-300 ${isOverdue ? 'bg-red-400' : isCompleted ? 'bg-emerald-400' : 'bg-transparent group-hover:bg-violet-400'}`} />
 
-            <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center justify-between mb-2 gap-2">
-                    <h3 className="font-bold text-slate-800 text-[16px] group-hover:text-violet-700 transition-colors truncate">{task.title}</h3>
-                    <div className="flex items-center gap-2 shrink-0">
+                <button
+                    onClick={(e) => handleComplete(task._id, e)}
+                    className={`mt-0.5 transition-all shrink-0 outline-none hover:scale-110 ${isCompleted ? 'text-emerald-500' : 'text-slate-300 hover:text-emerald-500'}`}
+                    title="Marcar completada"
+                    disabled={isCompleted}
+                >
+                    {isCompleted ? (
+                        <CheckCircle2 size={22} strokeWidth={2.5} className="text-emerald-500" />
+                    ) : (
+                        <>
+                            <Circle size={22} strokeWidth={2} className="group-hover:hidden" />
+                            <CheckCircle2 size={22} strokeWidth={2.5} className="hidden group-hover:block text-emerald-500" />
+                        </>
+                    )}
+                </button>
+
+                <div className="flex-1 min-w-0 flex flex-col">
+                    <div className="flex items-start justify-between gap-2 mb-1.5 pr-5">
+                        <h3 className={`font-semibold text-[15px] leading-snug transition-colors line-clamp-2 ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-violet-700'}`}>
+                            {task.title}
+                        </h3>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
                         {getPriorityBadge(task.priority)}
-                        <span className={`px-2.5 py-1 rounded-[8px] text-[10px] font-bold border uppercase tracking-widest ${getTypeInfo(task.type).color} shadow-sm`}>
+                        <span className={`px-2 py-0.5 rounded-[6px] text-[11px] font-medium border ${getTypeInfo(task.type).color}`}>
                             {getTypeInfo(task.type).label}
                         </span>
-                        <OwnerAvatar name={task.assignedTo?.name} profilePhotoUrl={task.assignedTo?.profilePhotoUrl} size="xs" />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] font-medium text-slate-500 mt-auto pt-3 border-t border-slate-100">
+                        {task.dueDate && (
+                            <span className={`flex items-center gap-1.5 ${isOverdue && !isCompleted ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                                <Clock size={13} className={isOverdue && !isCompleted ? 'text-red-500' : 'text-slate-400'} />
+                                {formatToArgentineDateTime(task.dueDate)}
+                            </span>
+                        )}
+                        {task.company && (
+                            <div className="flex items-center gap-1.5 text-slate-500" title={`Empresa: ${task.company.name}`}>
+                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block" />
+                                <Building2 size={13} className="text-slate-400" />
+                                <span className="truncate max-w-[120px]">{task.company.name}</span>
+                            </div>
+                        )}
+                        {task.contact && (
+                            <div className="flex items-center gap-1.5 text-slate-500" title={`Contacto: ${task.contact.fullName}`}>
+                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block" />
+                                <Users size={13} className="text-slate-400" />
+                                <span className="truncate max-w-[120px]">{task.contact.fullName}</span>
+                            </div>
+                        )}
+                        {task.deal && (
+                            <div className="flex items-center gap-1.5 text-slate-500" title={`Negocio: ${task.deal.title}`}>
+                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block" />
+                                <Briefcase size={13} className="text-slate-400" />
+                                <span className="truncate max-w-[120px]">{task.deal.title}</span>
+                            </div>
+                        )}
+
+                        <div className="ml-auto pl-2 flex items-center">
+                            <OwnerAvatar name={task.assignedTo?.name} profilePhotoUrl={task.assignedTo?.profilePhotoUrl} size="xs" />
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] font-bold text-slate-500 mt-3 pt-3 border-t border-slate-200/50">
-                    {task.dueDate && (
-                        <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] shadow-sm ${isOverdue ? 'bg-red-50/90 text-red-600 border border-red-200' : 'bg-white/80 text-slate-600 border border-slate-200'}`}>
-                            <Clock size={14} className={isOverdue ? 'text-red-500' : 'text-slate-400'} />
-                            {formatToArgentineDateTime(task.dueDate)}
-                        </span>
-                    )}
-                    {task.company && (
-                        <span className="flex items-center gap-1.5 bg-white/60 backdrop-blur-sm px-3 py-1.5 rounded-[10px] border border-white shadow-sm"><Building2 size={14} className="text-blue-500" /> <span className="truncate max-w-[120px]">{task.company.name}</span></span>
-                    )}
-                    {task.contact && (
-                        <span className="flex items-center gap-1.5 bg-white/60 backdrop-blur-sm px-3 py-1.5 rounded-[10px] border border-white shadow-sm"><Users size={14} className="text-emerald-500" /> <span className="truncate max-w-[120px]">{task.contact.fullName}</span></span>
-                    )}
-                    {task.deal && (
-                        <span className="flex items-center gap-1.5 bg-white/60 backdrop-blur-sm px-3 py-1.5 rounded-[10px] border border-white shadow-sm"><Briefcase size={14} className="text-violet-500" /> <span className="truncate max-w-[120px]">{task.deal.title}</span></span>
-                    )}
+                <div className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500">
+                    <GripVertical size={16} />
                 </div>
             </div>
-            {/* Grab handle hint */}
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-20 transition-opacity">
-                <GripVertical size={20} className="text-slate-800" />
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4">

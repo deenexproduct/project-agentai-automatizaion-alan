@@ -1,11 +1,12 @@
 import { ActivityData } from '../../services/crm.service';
-import { Phone, MessageCircle, Linkedin, Mail, Users, FileText, CheckCircle2, Activity } from 'lucide-react';
+import { Phone, MessageCircle, Linkedin, Mail, Users, FileText, CheckCircle2, Activity, Briefcase, Building2, CheckSquare } from 'lucide-react';
 
 interface ActivityTimelineProps {
-    activities: ActivityData[];
+    activities: (ActivityData & { source?: string })[];
+    onItemClick?: (item: ActivityData & { source?: string }) => void;
 }
 
-export default function ActivityTimeline({ activities }: ActivityTimelineProps) {
+export default function ActivityTimeline({ activities, onItemClick }: ActivityTimelineProps) {
     if (activities.length === 0) {
         return <div className="text-sm text-slate-500 text-center py-4">No hay actividad reciente.</div>;
     }
@@ -27,24 +28,27 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
                         </div>
 
                         {/* Content */}
-                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow">
+                        <div
+                            onClick={() => onItemClick && onItemClick(activity)}
+                            className={`bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm transition-shadow ${onItemClick ? 'cursor-pointer hover:shadow-md hover:border-violet-200' : ''}`}
+                        >
                             <div className="flex items-start justify-between gap-4 mb-2">
                                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${getIconConfig(activity.type).badgeInfo}`}>
                                     {getIconConfig(activity.type).label}
                                 </span>
                                 <div className="flex items-center gap-2">
                                     {activity.createdBy && (
-                                        <div className="flex flex-row-reverse items-center gap-1.5" title={`Creado por ${activity.createdBy.name}`}>
+                                        <div className="flex flex-row-reverse items-center gap-1.5" title={`Creado por ${activity.createdBy.name || 'Usuario'}`}>
                                             <time className="text-[11px] font-semibold text-slate-400">
                                                 {formatTimeAgo(activity.createdAt)}
                                             </time>
                                             <div className="flex items-center gap-1.5 bg-white border border-slate-200/60 px-1.5 py-0.5 rounded-full shadow-sm">
-                                                <span className="text-[10px] font-bold text-slate-600 truncate max-w-[90px] pl-1 hidden sm:block">{activity.createdBy.name.split(' ')[0]}</span>
+                                                <span className="text-[10px] font-bold text-slate-600 truncate max-w-[90px] pl-1 hidden sm:block">{activity.createdBy.name?.split(' ')[0] || 'User'}</span>
                                                 <div className="w-4 h-4 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/50">
                                                     {activity.createdBy.profilePhotoUrl ? (
                                                         <img src={activity.createdBy.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <span className="text-[9px] font-bold text-slate-500">{activity.createdBy.name.charAt(0).toUpperCase()}</span>
+                                                        <span className="text-[9px] font-bold text-slate-500">{activity.createdBy.name?.charAt(0).toUpperCase() || 'U'}</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -142,6 +146,24 @@ function getIconConfig(type: string) {
             bg: 'bg-violet-500',
             badgeInfo: 'text-violet-700 bg-violet-100',
             label: 'Tarea Terminada'
+        };
+        case 'deal_created': return {
+            icon: <Briefcase size={14} className="text-white" />,
+            bg: 'bg-emerald-500',
+            badgeInfo: 'text-emerald-700 bg-emerald-100',
+            label: 'Nuevo Deal'
+        };
+        case 'company_created': return {
+            icon: <Building2 size={14} className="text-white" />,
+            bg: 'bg-blue-600',
+            badgeInfo: 'text-blue-700 bg-blue-100',
+            label: 'Nueva Empresa'
+        };
+        case 'task_created': return {
+            icon: <CheckSquare size={14} className="text-white" />,
+            bg: 'bg-amber-500',
+            badgeInfo: 'text-amber-700 bg-amber-100',
+            label: 'Nueva Tarea'
         };
         default: return {
             icon: <Activity size={14} className="text-slate-600" />,

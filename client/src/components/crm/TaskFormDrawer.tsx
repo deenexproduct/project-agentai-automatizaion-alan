@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag } from 'lucide-react';
-import { TaskData, createTask, updateTask, getCompanies, getContacts, getDealsPipeline, getCompany, CompanyData, ContactData, DealData, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2 } from 'lucide-react';
+import { TaskData, createTask, updateTask, deleteTask, getCompanies, getContacts, getDealsPipeline, getCompany, CompanyData, ContactData, DealData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import AutocompleteInput from '../common/AutocompleteInput';
 import OwnerAvatar from '../common/OwnerAvatar';
 
@@ -33,6 +33,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
     const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
 
     const [saving, setSaving] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -69,6 +70,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
             setContactSearch('');
             setDealSearch('');
         }
+        setShowDeleteConfirm(false);
     }, [open, task]);
 
     // Autocomplete Companies
@@ -130,6 +132,17 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
         if (!open) return;
         getTeamUsers().then(setTeamUsers).catch(console.error);
     }, [open]);
+
+    const handleDeleteTask = async () => {
+        if (!task?._id) return;
+        try {
+            await deleteTask(task._id);
+            onSaved();
+            onClose();
+        } catch (error) {
+            console.error('Error al eliminar tarea:', error);
+        }
+    };
 
     const handleBackdropClick = (e: React.MouseEvent) => {
         if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
@@ -397,6 +410,16 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                     </div>
 
                     <div className="mt-auto pt-4 border-t border-slate-200/50 flex gap-3 bg-white/50 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-4">
+                        {task && task._id && (
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="px-3 py-2 bg-white border border-red-100 text-red-500 rounded-[10px] hover:bg-red-50 hover:border-red-200 transition-all shadow-sm"
+                                title="Eliminar Tarea"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={onClose}
@@ -414,6 +437,35 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                     </div>
                 </form>
             </div>
+
+            {/* ── Delete Confirmation Modal ─────────────── */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-slate-100" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 bg-red-50 text-red-500 rounded-[16px] flex items-center justify-center mb-5 border border-red-100 shadow-inner">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Eliminar Tarea?</h3>
+                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                            Estás a punto de eliminar la tarea <strong>{task?.title}</strong>. Esta acción no se puede deshacer.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors text-[14px]"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDeleteTask}
+                                className="flex-1 py-3 px-4 bg-red-500 text-white font-bold rounded-[14px] hover:bg-red-600 transition-colors shadow-sm shadow-red-500/30 text-[14px]"
+                            >
+                                Sí, eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

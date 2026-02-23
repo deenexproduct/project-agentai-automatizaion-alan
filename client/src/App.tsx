@@ -7,7 +7,8 @@ import TeamPermissions from './components/team/TeamPermissions'
 import { API_BASE } from './config';
 import api from './lib/axios';
 import { useAuth } from './contexts/AuthContext';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon, Calendar as CalendarIcon } from 'lucide-react';
+import CalendarPage from './pages/calendar';
 
 const API_URL = `${API_BASE}/api`;
 

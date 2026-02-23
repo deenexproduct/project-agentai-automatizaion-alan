@@ -416,6 +416,31 @@ router.post('/contacts/:id/link-linkedin', async (req: Request, res: Response) =
     }
 });
 
+// ── DELETE /contacts/:id — Delete contact ────────────────────
+router.delete('/contacts/:id', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id.toString();
+
+        // Check for active deals
+        const activeDeals = await Deal.countDocuments({
+            $or: [{ primaryContact: req.params.id }, { contacts: req.params.id }],
+            userId,
+            status: { $nin: ['ganado', 'perdido'] },
+        });
+        if (activeDeals > 0) {
+            return res.status(400).json({ error: `No se puede eliminar: el contacto está en ${activeDeals} negocio(s) activo(s)` });
+        }
+
+        const result = await CrmContact.deleteOne({ _id: req.params.id, userId });
+        if (result.deletedCount === 0) return res.status(404).json({ error: 'Contact not found' });
+
+        res.json({ success: true });
+    } catch (err: any) {
+        console.error('CRM delete contact error:', err.message);
+        res.status(500).json({ error: 'Failed to delete contact' });
+    }
+});
+
 // ════════════════════════════════════════════════════════════════
 //  DEALS
 // ════════════════════════════════════════════════════════════════
@@ -747,9 +772,7 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
         const userId = (req as any).user._id.toString();
         const task = await Task.findOne({ _id: req.params.id, userId }).lean();
         if (!task) return res.status(404).json({ error: 'Task not found' });
-        if (task.status === 'completed') {
-            return res.status(403).json({ error: 'Completed tasks cannot be deleted' });
-        }
+
         await Task.deleteOne({ _id: req.params.id, userId });
         res.json({ success: true });
     } catch (err: any) {
@@ -766,11 +789,68 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
 router.get('/activities', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const { contact, deal, company, type, page = '1', limit = '30' } = req.query;
+        const { contact, deal, company, type, unified, page = '1', limit = '30' } = req.query;
 
         const pageNum = Math.max(1, parseInt(page as string) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 30));
 
+        // If 'unified' is true, we aggregate across multiple collections for a richer dashboard feed
+        if (unified === 'true') {
+            const [activities, tasks, deals, companies] = await Promise.all([
+                Activity.find({ userId }).populate('contact', 'fullName').populate('company', 'name').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Task.find({ userId }).populate('contact', 'fullName').populate('company', 'name').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Deal.find({ userId }).populate('company', 'name').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Company.find({ userId }).sort({ createdAt: -1 }).limit(limitNum).lean()
+            ]);
+
+            const unifiedFeed: any[] = [];
+
+            activities.forEach(a => unifiedFeed.push({
+                _id: a._id.toString(),
+                type: a.type,
+                description: a.description,
+                createdAt: a.createdAt,
+                contact: a.contact,
+                company: a.company,
+                source: 'activity'
+            }));
+
+            tasks.forEach(t => unifiedFeed.push({
+                _id: t._id.toString(),
+                type: t.status === 'completed' ? 'task_completed' : 'task_created',
+                description: `Tarea: ${t.title} (${t.status})`,
+                createdAt: t.createdAt,
+                contact: t.contact,
+                company: t.company,
+                source: 'task'
+            }));
+
+            deals.forEach(d => unifiedFeed.push({
+                _id: d._id.toString(),
+                type: 'deal_created',
+                description: `Nuevo Deal: ${d.title} (${d.currency} ${d.value})`,
+                createdAt: d.createdAt,
+                company: d.company,
+                source: 'deal'
+            }));
+
+            companies.forEach(c => unifiedFeed.push({
+                _id: c._id.toString(),
+                type: 'company_created',
+                description: `Nueva Empresa: ${(c as any).name}`,
+                createdAt: c.createdAt,
+                source: 'company'
+            }));
+
+            unifiedFeed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+            const paginatedFeed = unifiedFeed.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+            return res.json({ activities: paginatedFeed, total: unifiedFeed.length, page: pageNum, pages: Math.ceil(unifiedFeed.length / limitNum) });
+        }
+
+
+        // Standard Activity query
         const query: any = { userId };
         if (contact) query.contact = contact;
         if (deal) query.deal = deal;

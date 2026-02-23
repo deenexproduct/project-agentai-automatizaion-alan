@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Building2, AlignLeft, Globe, Briefcase, Hash, User, Phone, Mail, Loader2, AlertTriangle, GitBranch, DollarSign, Clock, Calendar, CheckSquare, TrendingUp, History } from 'lucide-react';
+import { X, Save, Building2, AlignLeft, Globe, Briefcase, Hash, User, Phone, Mail, Loader2, AlertTriangle, GitBranch, DollarSign, Clock, Calendar, CheckSquare, TrendingUp, History, Camera, ImagePlus, Trash2 } from 'lucide-react';
 import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, SystemConfig, PartnerData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 
@@ -32,6 +32,10 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     const [companyDeals, setCompanyDeals] = useState<DealData[]>([]);
     const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
     const [loadingDeals, setLoadingDeals] = useState(false);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const [hasManuallyUploadedLogo, setHasManuallyUploadedLogo] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const drawerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -56,11 +60,12 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
         if (open && company) {
             setActiveTab('info');
             setShowDeleteConfirm(false);
+            setHasManuallyUploadedLogo(false);
+            lastFetchedWebsite.current = company.website || '';
             setFormData({
                 name: company.name || '',
                 website: company.website || '',
                 logo: company.logo || '',
-                themeColor: company.themeColor || '',
                 description: company.description || '',
                 localesCount: company.localesCount || 1,
                 costPerLocation: company.costPerLocation || 0,
@@ -89,13 +94,14 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
         } else if (open && !company) {
             setActiveTab('info');
             setShowDeleteConfirm(false);
+            setHasManuallyUploadedLogo(false);
+            lastFetchedWebsite.current = '';
             setCompanyContacts([]);
             setCompanyDeals([]);
             setFormData({
                 name: '',
                 website: '',
                 logo: '',
-                themeColor: '',
                 description: '',
                 localesCount: 1,
                 costPerLocation: 0,
@@ -119,17 +125,93 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
         }
     };
 
+    // Compress and convert image to base64 data URL
+    const compressImage = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 200;
+                    let w = img.width;
+                    let h = img.height;
+                    // Scale down to MAX_SIZE keeping aspect ratio
+                    if (w > h) { h = (h / w) * MAX_SIZE; w = MAX_SIZE; }
+                    else { w = (w / h) * MAX_SIZE; h = MAX_SIZE; }
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d')!;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/webp', 0.8));
+                };
+                img.onerror = reject;
+                img.src = e.target?.result as string;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setUploadingLogo(true);
+            const compressed = await compressImage(file);
+            setFormData(prev => ({ ...prev, logo: compressed }));
+            setHasManuallyUploadedLogo(true);
+        } catch (err) {
+            console.error('Error compressing photo:', err);
+        } finally {
+            setUploadingLogo(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        const file = e.dataTransfer.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+
+        try {
+            setUploadingLogo(true);
+            const compressed = await compressImage(file);
+            setFormData(prev => ({ ...prev, logo: compressed }));
+            setHasManuallyUploadedLogo(true);
+        } catch (err) {
+            console.error('Error compressing dragged photo:', err);
+        } finally {
+            setUploadingLogo(false);
+        }
+    };
+
     const [isExtractingLogo, setIsExtractingLogo] = useState(false);
     const lastFetchedWebsite = useRef<string>(company?.website || '');
 
     const handleWebsiteBlur = async () => {
-        if (formData.website && (formData.website !== lastFetchedWebsite.current || !formData.logo)) {
+        if (formData.website && !hasManuallyUploadedLogo && (formData.website !== lastFetchedWebsite.current || !formData.logo)) {
             setIsExtractingLogo(true);
             try {
                 // Call our new reliable backend scraper
-                const { logo, themeColor } = await extractLogo(formData.website);
+                const { logo } = await extractLogo(formData.website);
                 if (logo) {
-                    setFormData(prev => ({ ...prev, logo, themeColor: themeColor || prev.themeColor }));
+                    setFormData(prev => ({ ...prev, logo }));
                     lastFetchedWebsite.current = formData.website;
                 }
             } catch (error) {
@@ -152,17 +234,15 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
             }
 
             let currentLogo = formData.logo;
-            let currentThemeColor = formData.themeColor;
 
             // Enforce Logo Scraping on Submit if not triggered by blur
-            if (formData.website && (formData.website !== lastFetchedWebsite.current || !currentLogo)) {
+            if (formData.website && !hasManuallyUploadedLogo && (formData.website !== lastFetchedWebsite.current || !currentLogo)) {
                 setIsExtractingLogo(true);
                 try {
-                    const { logo, themeColor } = await extractLogo(formData.website);
+                    const { logo } = await extractLogo(formData.website);
                     if (logo) {
                         currentLogo = logo;
-                        currentThemeColor = themeColor || currentThemeColor;
-                        setFormData(prev => ({ ...prev, logo, themeColor: currentThemeColor }));
+                        setFormData(prev => ({ ...prev, logo }));
                         lastFetchedWebsite.current = formData.website;
                     }
                 } catch (error) {
@@ -173,7 +253,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
             }
 
             // Cleanup partner field if empty so we don't send string 'undefined'
-            const payload: any = { ...formData, logo: currentLogo, themeColor: currentThemeColor };
+            const payload: any = { ...formData, logo: currentLogo };
             if (payload.partner === '') payload.partner = undefined;
             if (payload.partner && typeof payload.partner === 'object' && '_id' in payload.partner) {
                 payload.partner = (payload.partner as any)._id; // Just send the ID if it was an object
@@ -305,7 +385,77 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                 <div className="p-6 flex-1 flex flex-col gap-6 overflow-y-auto hidden-scrollbar">
                     {activeTab === 'info' && (
                         <form id="company-form" onSubmit={handleSubmit} className="flex flex-col gap-6">
-                            <div className="space-y-2">
+
+                            {/* Foto de Perfil Upload */}
+                            <div className="flex items-center gap-5">
+                                <div
+                                    className={`relative group rounded-[16px] transition-all ${isDragging ? 'ring-4 ring-blue-500/30 scale-105' : ''}`}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
+                                >
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                                        onChange={handlePhotoUpload}
+                                        className="hidden"
+                                    />
+                                    {formData.logo ? (
+                                        <div className="relative">
+                                            <img
+                                                src={formData.logo}
+                                                alt="Logo de la empresa"
+                                                className="w-20 h-20 rounded-[16px] object-contain bg-white border-2 border-slate-200 shadow-lg p-1"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData(prev => ({ ...prev, logo: '' }))}
+                                                className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploadingLogo || isExtractingLogo}
+                                            className={`w-20 h-20 rounded-[16px] bg-gradient-to-br ${isExtractingLogo ? 'from-blue-50 to-indigo-50 border-blue-300' : 'from-slate-100 to-slate-50 border-slate-300 hover:border-blue-400 hover:from-blue-50 hover:to-indigo-50'} border-2 ${isDragging ? 'border-blue-500 border-solid' : 'border-dashed'} transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group/btn shadow-inner`}
+                                        >
+                                            {(uploadingLogo || isExtractingLogo) ? (
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <Loader2 size={20} className={`${isExtractingLogo ? 'text-blue-500' : 'text-blue-400'} animate-spin`} />
+                                                    <span className="text-[8px] font-bold text-blue-500 uppercase">{isExtractingLogo ? 'Web' : 'Subiendo'}</span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <Camera size={20} className="text-slate-400 group-hover/btn:text-blue-500 transition-colors" />
+                                                    <span className="text-[9px] font-bold text-slate-400 group-hover/btn:text-blue-500 uppercase">Logo</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <p className="text-[13px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                                        <ImagePlus size={14} className="text-blue-500" />
+                                        Logo de la Empresa
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 leading-snug">Sube una imagen o ingresa el sitio web abajo para extraer el logo automáticamente.</p>
+                                    {!formData.logo && (
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="mt-1.5 text-[12px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
+                                        >
+                                            <Camera size={12} /> Seleccionar archivo
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 pt-6 border-t border-slate-200/50">
                                 <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
                                     <Building2 size={14} className="text-blue-500" />
                                     Nombre de la Empresa *

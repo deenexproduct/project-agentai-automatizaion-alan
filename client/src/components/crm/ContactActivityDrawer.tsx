@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import api from '../../lib/axios';
 import {
     X, Phone, MessageCircle, Linkedin, Mail, Users, StickyNote,
     CheckCircle2, Send, Clock, Pencil, Building2,
@@ -6,8 +7,9 @@ import {
     Save, User, Briefcase, Tag, AlertTriangle,
     ThumbsUp, ThumbsDown, Minus, Target, RotateCcw,
     Eye, Reply, Ban, Star, Info, Bell, MessageSquare,
-    CheckCheck, CircleDot, HelpCircle, ArrowRightLeft, UserX, UserCheck, ArrowRight,
-    ListTodo, Plus, Calendar, Flag, Trash2, Circle, GitBranch, DollarSign, TrendingUp, CheckSquare, History
+    CheckCheck, CircleDot, HelpCircle, ArrowRightLeft, UserX, UserCheck, ArrowRight, ChevronRight,
+    ListTodo, Plus, Calendar, Flag, Trash2, Circle, GitBranch, DollarSign, TrendingUp, CheckSquare, History,
+    Camera, ImagePlus
 } from 'lucide-react';
 import {
     getContact, createActivity, updateContact, deleteContact, createContact,
@@ -19,6 +21,7 @@ import {
 import OwnerAvatar from '../common/OwnerAvatar';
 import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
+import TaskFormDrawer from './TaskFormDrawer';
 
 // ── Activity Type Config ─────────────────────────────────────────
 
@@ -106,9 +109,9 @@ function formatActivityTime(dateStr: string): string {
 
     const time = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-    if (isToday) return `Hoy ${time}`;
-    if (isYesterday) return `Ayer ${time}`;
-    return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) + ` ${time}`;
+    if (isToday) return `Hoy ${time} `;
+    if (isYesterday) return `Ayer ${time} `;
+    return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) + ` ${time} `;
 }
 
 function getActivityIcon(type: string) {
@@ -169,6 +172,10 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
     const [savingContact, setSavingContact] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [extractingPhoto, setExtractingPhoto] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ── Task state ──
     const [tasks, setTasks] = useState<TaskData[]>([]);
@@ -177,6 +184,8 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     const [taskType, setTaskType] = useState('follow_up');
     const [taskPriority, setTaskPriority] = useState('medium');
     const [taskDueDate, setTaskDueDate] = useState('');
+    const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState<TaskData | null>(null);
 
     // ── Deal / Trazabilidad state ──
     const [deals, setDeals] = useState<DealData[]>([]);
@@ -279,6 +288,105 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, [open, onClose]);
+
+    // ── Image Upload Helpers ──
+    const compressImage = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 200;
+                    let w = img.width;
+                    let h = img.height;
+                    if (w > h) { h = (h / w) * MAX_SIZE; w = MAX_SIZE; }
+                    else { w = (w / h) * MAX_SIZE; h = MAX_SIZE; }
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d')!;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/webp', 0.8));
+                };
+                img.onerror = reject;
+                img.src = e.target?.result as string;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setUploadingPhoto(true);
+            const compressed = await compressImage(file);
+            setFormData(prev => ({ ...prev, profilePhotoUrl: compressed }));
+        } catch (err) {
+            console.error('Error compressing photo:', err);
+        } finally {
+            setUploadingPhoto(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        const file = e.dataTransfer.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+
+        try {
+            setUploadingPhoto(true);
+            const compressed = await compressImage(file);
+            setFormData(prev => ({ ...prev, profilePhotoUrl: compressed }));
+        } catch (err) {
+            console.error('Error compressing dragged photo:', err);
+        } finally {
+            setUploadingPhoto(false);
+        }
+    };
+
+    // Auto-extract profile photo from LinkedIn URL
+    useEffect(() => {
+        const linkedInUrl = formData.linkedInProfileUrl;
+        if (!linkedInUrl || !linkedInUrl.includes('linkedin.com/in/') || formData.profilePhotoUrl) {
+            return;
+        }
+        const fetchPhoto = async () => {
+            try {
+                setExtractingPhoto(true);
+                const res = await api.get('/linkedin/scrape-profile', { params: { url: linkedInUrl } });
+                if (res.data?.profilePhotoUrl) {
+                    setFormData(prev => {
+                        if (prev.profilePhotoUrl) return prev;
+                        return { ...prev, profilePhotoUrl: res.data.profilePhotoUrl };
+                    });
+                }
+            } catch (err: any) {
+                console.warn('Could not extract LinkedIn photo:', err?.response?.data?.error || err.message);
+            } finally {
+                setExtractingPhoto(false);
+            }
+        };
+        const timeoutId = setTimeout(fetchPhoto, 1500);
+        return () => clearTimeout(timeoutId);
+    }, [formData.linkedInProfileUrl]);
 
     // ── Handlers ──
 
@@ -491,6 +599,70 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                 </div>
                             ) : (
                                 <>
+                                    <div className="flex items-center gap-4 bg-white/40 p-3 rounded-[16px] border border-slate-200/50">
+                                        <div
+                                            className={`relative group rounded-[16px] transition-all ${isDragging ? 'ring-4 ring-fuchsia-400/30 scale-105' : ''}`}
+                                            onDragOver={handleDragOver}
+                                            onDragLeave={handleDragLeave}
+                                            onDrop={handleDrop}
+                                        >
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                accept="image/png,image/jpeg,image/jpg,image/webp"
+                                                onChange={handlePhotoUpload}
+                                                className="hidden"
+                                            />
+                                            {formData.profilePhotoUrl ? (
+                                                <div className="relative">
+                                                    <img
+                                                        src={formData.profilePhotoUrl}
+                                                        alt="Foto de perfil"
+                                                        className="w-16 h-16 rounded-[14px] object-cover border-2 border-white shadow-md ring-1 ring-slate-200"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({ ...prev, profilePhotoUrl: '' }))}
+                                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                    >
+                                                        <Trash2 size={10} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    disabled={uploadingPhoto || extractingPhoto}
+                                                    className={`w-16 h-16 rounded-[14px] bg-gradient-to-br ${extractingPhoto ? 'from-blue-50 to-indigo-50 border-blue-300' : 'from-slate-100 to-slate-50 border-slate-300 hover:border-fuchsia-400 hover:from-fuchsia-50 hover:to-violet-50'} border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group/btn shadow-inner`}
+                                                >
+                                                    {(uploadingPhoto || extractingPhoto) ? (
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <Loader2 size={16} className={`${extractingPhoto ? 'text-blue-500' : 'text-fuchsia-400'} animate-spin`} />
+                                                        </div>
+                                                    ) : (
+                                                        <Camera size={20} className="text-slate-400 group-hover/btn:text-fuchsia-500 transition-colors" />
+                                                    )}
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 space-y-0.5">
+                                            <p className="text-[12px] font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                                                <ImagePlus size={13} className="text-fuchsia-500" />
+                                                Foto de Perfil
+                                            </p>
+                                            <p className="text-[11px] text-slate-500 leading-tight">Arrastra una imagen o usa la URL de LinkedIn.</p>
+                                            {!formData.profilePhotoUrl && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="text-[11px] font-bold text-fuchsia-600 hover:text-fuchsia-700 flex items-center gap-1 transition-colors mt-1"
+                                                >
+                                                    Seleccionar archivo
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     {/* LinkedIn Profile URL */}
                                     <div className="space-y-1.5">
                                         <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
@@ -633,19 +805,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                         </div>
                                     </div>
 
-                                    {/* Photo URL */}
-                                    <div className="space-y-1.5">
-                                        <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                                            <User size={13} className="text-pink-500" /> Foto de Perfil (URL)
-                                        </label>
-                                        <input
-                                            type="url"
-                                            value={formData.profilePhotoUrl || ''}
-                                            onChange={(e) => setFormData({ ...formData, profilePhotoUrl: e.target.value })}
-                                            placeholder="https://..."
-                                            className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-pink-500/10 focus:border-pink-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
-                                        />
-                                    </div>
+
 
                                     {/* Email + Phone */}
                                     <div className="grid grid-cols-2 gap-4">
@@ -875,15 +1035,15 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                                         )}
                                                         <div className="ml-auto flex items-center gap-2">
                                                             {activity.createdBy && (
-                                                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-1.5 py-0.5 rounded-full shadow-sm" title={`Creado por ${activity.createdBy.name}`}>
+                                                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-1.5 py-0.5 rounded-full shadow-sm" title={`Creado por ${activity.createdBy.name || 'Usuario'} `}>
                                                                     <div className="w-4 h-4 rounded-full bg-white overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/50">
                                                                         {activity.createdBy.profilePhotoUrl ? (
                                                                             <img src={activity.createdBy.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
                                                                         ) : (
-                                                                            <span className="text-[9px] font-bold text-slate-500">{activity.createdBy.name.charAt(0).toUpperCase()}</span>
+                                                                            <span className="text-[9px] font-bold text-slate-500">{activity.createdBy.name?.charAt(0).toUpperCase() || 'U'}</span>
                                                                         )}
                                                                     </div>
-                                                                    <span className="text-[10px] font-bold text-slate-600 truncate max-w-[80px] pr-1 hidden sm:block">{activity.createdBy.name.split(' ')[0]}</span>
+                                                                    <span className="text-[10px] font-bold text-slate-600 truncate max-w-[80px] pr-1 hidden sm:block">{activity.createdBy.name?.split(' ')[0] || 'User'}</span>
                                                                 </div>
                                                             )}
                                                             <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap tabular-nums">
@@ -989,7 +1149,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                                                     background: isActive ? p.color + '15' : 'white',
                                                                     borderColor: isActive ? p.color + '40' : '#e2e8f0',
                                                                     color: isActive ? p.color : '#94a3b8',
-                                                                    boxShadow: isActive ? `0 2px 8px ${p.color}20` : 'none',
+                                                                    boxShadow: isActive ? `0 2px 8px ${p.color} 20` : 'none',
                                                                 }}
                                                             >
                                                                 <Flag size={10} />
@@ -1077,94 +1237,122 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                             return (
                                                 <div
                                                     key={task._id}
-                                                    className={`rounded-[14px] border px-3.5 py-3 transition-all ${isCompleted
-                                                        ? 'bg-emerald-50/40 border-emerald-100'
+                                                    onClick={() => {
+                                                        setEditingTask(task);
+                                                        setIsTaskDrawerOpen(true);
+                                                    }}
+                                                    className={`rounded-[14px] border px-3.5 py-3 transition-all cursor-pointer group flex gap-3 items-center ${isCompleted
+                                                        ? 'bg-emerald-50/40 border-emerald-100 hover:border-emerald-300'
                                                         : task.isOverdue
-                                                            ? 'bg-red-50/30 border-red-100 shadow-sm'
-                                                            : 'bg-white border-slate-100 shadow-sm hover:shadow-md'
-                                                        }`}
+                                                            ? 'bg-red-50/30 border-red-100 shadow-sm hover:border-red-300'
+                                                            : 'bg-white border-slate-100 shadow-sm hover:shadow-md hover:border-violet-200/60'
+                                                        } `}
                                                 >
-                                                    {/* Row 1: Complete button + Title + Delete */}
-                                                    <div className="flex items-start gap-2.5">
-                                                        {!isCompleted ? (
-                                                            <button
-                                                                onClick={async () => {
-                                                                    try {
-                                                                        await completeTask(task._id);
-                                                                        setTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: 'completed' as const } : t));
-                                                                    } catch (err) { console.error(err); }
-                                                                }}
-                                                                className="shrink-0 w-[22px] h-[22px] mt-0.5 rounded-full border-2 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50 transition-all flex items-center justify-center group"
-                                                                title="Completar"
-                                                            >
-                                                                <CheckCircle2 size={0} className="group-hover:!w-3 group-hover:!h-3 text-emerald-400 transition-all" />
-                                                            </button>
-                                                        ) : (
-                                                            <CheckCircle2 size={18} className="text-emerald-400 shrink-0 mt-0.5" />
-                                                        )}
-                                                        <span className={`flex-1 text-[13px] font-semibold leading-snug ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-800'
-                                                            }`}>
-                                                            {task.title}
-                                                        </span>
-                                                        {!isCompleted && (
-                                                            <button
-                                                                onClick={async () => {
-                                                                    try {
-                                                                        await deleteTaskApi(task._id);
-                                                                        setTasks(prev => prev.filter(t => t._id !== task._id));
-                                                                    } catch (err) { console.error(err); }
-                                                                }}
-                                                                className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                                                                title="Eliminar"
-                                                            >
-                                                                <Trash2 size={12} />
-                                                            </button>
-                                                        )}
+                                                    <div className="flex-1 min-w-0">
+                                                        {/* Row 1: Complete button + Title + Delete */}
+                                                        <div className="flex items-start gap-2.5">
+                                                            {!isCompleted ? (
+                                                                <button
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        try {
+                                                                            await completeTask(task._id);
+                                                                            setTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: 'completed' as const } : t));
+                                                                        } catch (err) { console.error(err); }
+                                                                    }}
+                                                                    className="shrink-0 w-[22px] h-[22px] mt-0.5 rounded-full border-2 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50 transition-all flex items-center justify-center btn-complete"
+                                                                    title="Completar"
+                                                                >
+                                                                    <CheckCircle2 size={0} className="text-emerald-400 transition-all opacity-0" />
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        try {
+                                                                            await completeTask(task._id); // Assume completeTask toggles, or we need updateTask
+                                                                            setTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: 'pending' as const } : t));
+                                                                        } catch (err) { console.error(err); }
+                                                                    }}
+                                                                >
+                                                                    <CheckCircle2 size={18} className="text-emerald-400 shrink-0 mt-0.5 hover:text-emerald-500" />
+                                                                </button>
+                                                            )}
+                                                            <span className={`flex-1 text-[13px] font-semibold leading-snug truncate ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-800'
+                                                                }`}>
+                                                                {task.title}
+                                                            </span>
+                                                            {!isCompleted && (
+                                                                <button
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        try {
+                                                                            await deleteTaskApi(task._id);
+                                                                            setTasks(prev => prev.filter(t => t._id !== task._id));
+                                                                        } catch (err) { console.error(err); }
+                                                                    }}
+                                                                    className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                                                                    title="Eliminar"
+                                                                >
+                                                                    <Trash2 size={12} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Row 2: Type + Priority + Due Date badges */}
+                                                        <div className="flex items-center gap-1.5 mt-2 ml-8 flex-wrap">
+                                                            {/* Type badge */}
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-500">
+                                                                <TIcon size={10} />
+                                                                {typeLabel}
+                                                            </span>
+
+                                                            {/* Priority badge */}
+                                                            {priorityInfo && (
+                                                                <span
+                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border"
+                                                                    style={{
+                                                                        color: isCompleted ? '#94a3b8' : priorityInfo.color,
+                                                                        borderColor: (isCompleted ? '#94a3b8' : priorityInfo.color) + '25',
+                                                                        background: (isCompleted ? '#94a3b8' : priorityInfo.color) + '10',
+                                                                    }}
+                                                                >
+                                                                    <Flag size={9} />
+                                                                    {priorityInfo.label}
+                                                                </span>
+                                                            )}
+
+                                                            {/* Due date badge */}
+                                                            {task.dueDate && (
+                                                                <span
+                                                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${isCompleted
+                                                                        ? 'text-slate-400 border-slate-200 bg-slate-50'
+                                                                        : task.isOverdue
+                                                                            ? 'text-red-500 border-red-200 bg-red-50'
+                                                                            : 'text-slate-500 border-slate-200 bg-slate-50'
+                                                                        } `}
+                                                                >
+                                                                    <Calendar size={9} />
+                                                                    {task.isOverdue && !isCompleted && '⚠ '}
+                                                                    {formatDueDate(task.dueDate)}
+                                                                </span>
+                                                            )}
+
+                                                            {/* Created date */}
+                                                            <span className="text-[9px] text-slate-300 font-medium ml-auto">
+                                                                {formatActivityTime(task.createdAt)}
+                                                            </span>
+
+                                                            {/* Owner assigned */}
+                                                            {(task as any).assignedTo && (
+                                                                <div className="ml-1.5 flex items-center">
+                                                                    <OwnerAvatar name={(task as any).assignedTo.name} profilePhotoUrl={(task as any).assignedTo.profilePhotoUrl} size="xs" />
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-
-                                                    {/* Row 2: Type + Priority + Due Date badges */}
-                                                    <div className="flex items-center gap-1.5 mt-2 ml-8 flex-wrap">
-                                                        {/* Type badge */}
-                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200/80 text-[10px] font-bold text-slate-500">
-                                                            <TIcon size={10} />
-                                                            {typeLabel}
-                                                        </span>
-
-                                                        {/* Priority badge */}
-                                                        {priorityInfo && (
-                                                            <span
-                                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border"
-                                                                style={{
-                                                                    color: isCompleted ? '#94a3b8' : priorityInfo.color,
-                                                                    borderColor: (isCompleted ? '#94a3b8' : priorityInfo.color) + '25',
-                                                                    background: (isCompleted ? '#94a3b8' : priorityInfo.color) + '10',
-                                                                }}
-                                                            >
-                                                                <Flag size={9} />
-                                                                {priorityInfo.label}
-                                                            </span>
-                                                        )}
-
-                                                        {/* Due date badge */}
-                                                        {task.dueDate && (
-                                                            <span
-                                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${isCompleted
-                                                                    ? 'text-slate-400 border-slate-200 bg-slate-50'
-                                                                    : task.isOverdue
-                                                                        ? 'text-red-500 border-red-200 bg-red-50'
-                                                                        : 'text-slate-500 border-slate-200 bg-slate-50'
-                                                                    }`}
-                                                            >
-                                                                <Calendar size={9} />
-                                                                {task.isOverdue && !isCompleted && '⚠ '}
-                                                                {formatDueDate(task.dueDate)}
-                                                            </span>
-                                                        )}
-
-                                                        {/* Created date */}
-                                                        <span className="text-[9px] text-slate-300 font-medium ml-auto">
-                                                            {formatActivityTime(task.createdAt)}
-                                                        </span>
+                                                    <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-x-2 group-hover:translate-x-0 w-8 h-8 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                                                        <ChevronRight size={18} />
                                                     </div>
                                                 </div>
                                             );
@@ -1439,13 +1627,29 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                     </div>
                 )}
 
+                <TaskFormDrawer
+                    task={editingTask}
+                    open={isTaskDrawerOpen}
+                    onClose={() => {
+                        setIsTaskDrawerOpen(false);
+                        setEditingTask(null);
+                    }}
+                    onSaved={() => {
+                        if (contact) {
+                            getTasks({ contact: contact._id, limit: 100 })
+                                .then(res => setTasks(res.tasks))
+                                .catch(console.error);
+                        }
+                    }}
+                />
+
                 <style>{`
-                    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                    @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideInRight { from { transform: translateX(100 %); } to { transform: translateX(0); } }
                     .hidden-scrollbar::-webkit-scrollbar { display: none; }
                     .hidden-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-                `}</style>
+`}</style>
             </div>
-        </div>
+        </div >
     );
 }

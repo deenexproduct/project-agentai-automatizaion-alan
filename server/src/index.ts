@@ -17,8 +17,10 @@ import linkedinPostsRoutes from './routes/linkedin-posts.routes';
 import linkedinPublishingConfigRoutes from './routes/linkedin-publishing-config.routes';
 import authRoutes from './routes/auth.routes';
 import crmRoutes from './routes/crm.routes';
+import dashboardRoutes from './routes/dashboard.routes';
 import systemConfigRoutes from './routes/system-config.routes';
 import partnerRoutes from './routes/partner.routes';
+import calendarRoutes from './routes/calendar.routes';
 import { authMiddleware } from './middleware/auth.middleware';
 import { whatsappService } from './services/whatsapp.service';
 import { validateEncryptionKey } from './utils/crypto.service';
@@ -49,7 +51,8 @@ app.use((req, res, next) => {
   console.log(`[REQUEST] ${req.method} ${req.url}`);
   next();
 });
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 import { Transcription } from './models/transcription.model';
 
@@ -248,13 +251,15 @@ app.use('/api/linkedin/posts', authMiddleware, linkedinPostsRoutes);
 app.use('/api/linkedin/publishing', authMiddleware, linkedinPublishingConfigRoutes);
 console.log('🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts');
 
-// CRM routes
+// CRM and Dashboard routes
 app.use('/api/crm', authMiddleware, crmRoutes);
-console.log('📋 CRM routes mounted at /api/crm');
+app.use('/api/dashboard', authMiddleware, dashboardRoutes);
+console.log('📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard');
 
 // System Settings & Partners
 app.use('/api/system-config', authMiddleware, systemConfigRoutes);
 app.use('/api/partners', authMiddleware, partnerRoutes);
+app.use('/api/calendar', authMiddleware, calendarRoutes);
 console.log('⚙️ System Config & Partners routes mounted');
 
 // Start server

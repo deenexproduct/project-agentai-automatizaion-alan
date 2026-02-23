@@ -1,6 +1,10 @@
 import nodemailer from 'nodemailer';
 import path from 'path';
 import fs from 'fs';
+import { ICalendarConfig, ISmtpConfig } from '../models/calendar-config.model';
+import { IEvent } from '../models/event.model';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 // Attempt to load branding data
 let branding: any = { projectName: 'Deenex', urls: { frontend: 'http://localhost:5173' } };
@@ -316,6 +320,88 @@ class EmailService {
       return true;
     } catch (error: any) {
       console.error(`[emailService] ❌ Error al enviar invitación:`, error.message);
+      return false;
+    }
+  }
+
+  // --- New Event Invitation Logic ---
+
+  private getTransporter(smtp?: ISmtpConfig): nodemailer.Transporter {
+    if (smtp && smtp.host && smtp.user) {
+      return nodemailer.createTransport({
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.secure || smtp.port === 465,
+        auth: {
+          user: smtp.user,
+          pass: smtp.pass,
+        },
+      });
+    }
+    // Fallback to default system transporter if user hasn't configured SMTP
+    return this.transporter;
+  }
+
+  private compileEventTemplate(template: string, event: IEvent, locationType: string, locationDetails: string): string {
+    const dateFormatted = format(new Date(event.date), "EEEE d 'de' MMMM, yyyy", { locale: es });
+    const timeFormatted = `${event.startTime} hs a ${event.endTime} hs`;
+
+    let compiled = template
+      .replace(/\{\{eventName\}\}/g, event.title)
+      .replace(/\{\{eventDescription\}\}/g, event.description || '')
+      .replace(/\{\{eventDate\}\}/g, dateFormatted)
+      .replace(/\{\{eventTime\}\}/g, timeFormatted)
+      .replace(/\{\{locationType\}\}/g, locationType)
+      .replace(/\{\{locationDetails\}\}/g, locationDetails)
+      .replace(/\{\{meetLink\}\}/g, event.meetLink || '#');
+
+    return compiled;
+  }
+
+  async sendEventInvitations(config: ICalendarConfig | null, event: IEvent): Promise<boolean> {
+    try {
+      if (!event.attendees || event.attendees.length === 0) {
+        return false; // No one to email
+      }
+
+      console.log(`[emailService] Enviando invitación de evento a ${event.attendees.length} participantes`);
+
+      const defaultTemplate = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #695EDE;">Has sido invitado a {{eventName}}</h2>
+          <p>{{eventDescription}}</p>
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px;">
+            <p><strong>📅 Fecha:</strong> {{eventDate}}</p>
+            <p><strong>⏰ Hora:</strong> {{eventTime}}</p>
+            <p><strong>📍 Ubicación:</strong> {{locationType}} - {{locationDetails}}</p>
+          </div>
+        </div>
+      `;
+
+      const template = config?.emailTemplate || defaultTemplate;
+      const locationType = event.type === 'meet' ? 'Videollamada (Google Meet)' : 'Presencial';
+      const locationDetails = event.type === 'meet'
+        ? `<a href="${event.meetLink}" style="color: #695EDE;">${event.meetLink}</a>`
+        : (event.location || 'Por confirmar');
+
+      const html = this.compileEventTemplate(template, event, locationType, locationDetails);
+      const mailTransporter = this.getTransporter(config?.smtp);
+      const senderEmail = config?.smtp?.user || process.env.SMTP_USER || 'app.sistema@deenex.tech';
+
+      const pName = branding.projectName || 'Deenex';
+
+      await mailTransporter.sendMail({
+        from: `"${pName} Calendar" <${senderEmail}>`,
+        to: event.attendees.join(', '), // Send to all attendees
+        subject: `Invitación: ${event.title}`,
+        text: `Has sido invitado a ${event.title}. Fecha: ${format(new Date(event.date), 'dd/MM/yyyy')} a las ${event.startTime}.`,
+        html: html,
+      });
+
+      console.log(`[emailService] ✅ Invitaciones enviadas para el evento ${event.title}`);
+      return true;
+    } catch (error: any) {
+      console.error(`[emailService] ❌ Error al enviar invitaciones de evento:`, error.message);
       return false;
     }
   }

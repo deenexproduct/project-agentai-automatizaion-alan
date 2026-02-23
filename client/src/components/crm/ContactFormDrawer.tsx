@@ -30,6 +30,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
     const [saving, setSaving] = useState(false);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [extractingPhoto, setExtractingPhoto] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -152,6 +153,37 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
         } finally {
             setUploadingPhoto(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        const file = e.dataTransfer.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+
+        try {
+            setUploadingPhoto(true);
+            const compressed = await compressImage(file);
+            setFormData(prev => ({ ...prev, profilePhotoUrl: compressed }));
+        } catch (err) {
+            console.error('Error compressing dragged photo:', err);
+        } finally {
+            setUploadingPhoto(false);
         }
     };
 
@@ -279,7 +311,12 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
 
                     {/* Foto de Perfil Upload */}
                     <div className="flex items-center gap-5">
-                        <div className="relative group">
+                        <div
+                            className={`relative group rounded-[16px] transition-all ${isDragging ? 'ring-4 ring-fuchsia-400/30 scale-105' : ''}`}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                        >
                             <input
                                 ref={fileInputRef}
                                 type="file"

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, LayoutDashboard, Database, CheckSquare, Columns3 } from 'lucide-react';
+import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, LayoutDashboard, Database, CheckSquare, Columns3, Calendar as CalendarIcon } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
 import CRMDashboard from '../crm/CRMDashboard';
 import PipelineBoard from '../crm/PipelineBoard';
@@ -17,8 +17,9 @@ import WhatsAppPage from './WhatsAppPage';
 import ExtensionPage from './ExtensionPage';
 import TeamPermissions from '../team/TeamPermissions';
 import ProfileSettings from '../settings/ProfileSettings';
+import CalendarPage from '../../pages/calendar/index';
 
-type SidebarTab = 'dashboard' | 'pipeline' | 'companies' | 'contacts' | 'tasks' | 'partners' | 'prospecting-crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team' | 'profile';
+type SidebarTab = 'dashboard' | 'pipeline' | 'companies' | 'contacts' | 'tasks' | 'partners' | 'calendar' | 'prospecting-crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team' | 'profile';
 
 interface SidebarItem {
     id: SidebarTab;
@@ -35,6 +36,7 @@ const crmGroup: SidebarItem[] = [
     { id: 'companies', Icon: Building2, label: 'Empresas' },
     { id: 'contacts', Icon: User, label: 'Contactos' },
     { id: 'partners', Icon: Handshake, label: 'Partners Oficiales' },
+    { id: 'calendar', Icon: CalendarIcon, label: 'Calendario y Citas' },
 ];
 
 const linkedinGroup: SidebarItem[] = [
@@ -161,16 +163,17 @@ export default function LinkedInApp() {
                                 activeTab === 'pipeline' ? 'Pipeline de Ventas' :
                                     activeTab === 'companies' ? 'Directorio de Empresas' :
                                         activeTab === 'contacts' ? 'Agenda de Contactos' :
-                                            activeTab === 'partners' ? 'Partners Officiales' :
+                                            activeTab === 'partners' ? 'Partners Oficiales' :
                                                 activeTab === 'tasks' ? 'Centro de Tareas' :
-                                                    activeTab === 'prospecting-crm' ? 'Prospecting CRM' :
-                                                        activeTab === 'publicaciones' ? 'Publicaciones AI' :
-                                                            activeTab === 'prospecting' ? 'Prospecting Bots' :
-                                                                activeTab === 'voice' ? 'Transcriptor de Audio' :
-                                                                    activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
-                                                                        activeTab === 'extension' ? 'Extensión Deenex' :
-                                                                            activeTab === 'team' ? 'Equipo y Permisos' :
-                                                                                activeTab === 'profile' ? 'Mi Perfil' : 'Configuración'}
+                                                    activeTab === 'calendar' ? 'Calendario y Citas' :
+                                                        activeTab === 'prospecting-crm' ? 'Prospecting CRM' :
+                                                            activeTab === 'publicaciones' ? 'Publicaciones AI' :
+                                                                activeTab === 'prospecting' ? 'Prospecting Bots' :
+                                                                    activeTab === 'voice' ? 'Transcriptor de Audio' :
+                                                                        activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
+                                                                            activeTab === 'extension' ? 'Extensión Deenex' :
+                                                                                activeTab === 'team' ? 'Equipo y Permisos' :
+                                                                                    activeTab === 'profile' ? 'Mi Perfil' : 'Configuración'}
                         </h1>
 
                     </div>
@@ -187,6 +190,7 @@ export default function LinkedInApp() {
                     {activeTab === 'contacts' && <ContactList />}
                     {activeTab === 'partners' && <PartnerList />}
                     {activeTab === 'tasks' && <TaskList />}
+                    {activeTab === 'calendar' && <CalendarPage />}
                     {activeTab === 'prospecting-crm' && <CRMPage />}
                     {activeTab === 'publicaciones' && <PublicacionesPage />}
                     {activeTab === 'prospecting' && <ProspectingPage />}

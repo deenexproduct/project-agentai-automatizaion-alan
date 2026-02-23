@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Briefcase, CheckSquare, Clock, ArrowUpRight, Plus, Activity } from 'lucide-react';
+import { Building2, Users, Briefcase, CheckSquare, Clock, ArrowUpRight, Plus, Activity, Trophy, XCircle, AlertCircle } from 'lucide-react';
 import { getDashboardStats, getTasks, getActivities, DashboardStats, TaskData, ActivityData, completeTask, getDealsPipeline } from '../../services/crm.service';
 import { formatToArgentineDate } from '../../utils/date';
 import ActivityTimeline from './ActivityTimeline';
 import CompanyFormDrawer from './CompanyFormDrawer';
 import DealFormDrawer from './DealFormDrawer';
+import ContactActivityDrawer from './ContactActivityDrawer';
 
 export default function CRMDashboard() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -15,6 +16,25 @@ export default function CRMDashboard() {
 
     const [isCompanyDrawerOpen, setIsCompanyDrawerOpen] = useState(false);
     const [isDealDrawerOpen, setIsDealDrawerOpen] = useState(false);
+    const [isContactDrawerOpen, setIsContactDrawerOpen] = useState(false);
+
+    // Store selected IDs to pass to Drawers when clicked from timeline
+    const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+    const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+    const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+
+    const handleTimelineClick = (item: ActivityData & { source?: string }) => {
+        if (item.source === 'deal' || item.deal) {
+            setSelectedDealId(item._id ? item._id : (typeof item.deal === 'object' && item.deal ? item.deal._id : (item.deal as unknown as string || '')));
+            setIsDealDrawerOpen(true);
+        } else if (item.source === 'company' || item.company) {
+            setSelectedCompanyId(item._id ? item._id : (typeof item.company === 'object' && item.company ? item.company._id : (item.company as unknown as string || '')));
+            setIsCompanyDrawerOpen(true);
+        } else if (item.source === 'contact' || item.contact) {
+            setSelectedContactId(item._id ? item._id : (typeof item.contact === 'object' && item.contact ? item.contact._id : (item.contact as unknown as string || '')));
+            setIsContactDrawerOpen(true);
+        }
+    };
 
     const loadData = async () => {
         try {
@@ -22,7 +42,7 @@ export default function CRMDashboard() {
             const [statsData, tasksData, actsData, pipelineData] = await Promise.all([
                 getDashboardStats(),
                 getTasks({ overdue: true, limit: 5 }), // Fetch urgent/overdue + today tasks
-                getActivities({ limit: 10 }),
+                getActivities({ limit: 40, unified: true }),
                 getDealsPipeline()
             ]);
             setStats(statsData);
@@ -66,36 +86,81 @@ export default function CRMDashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10 w-full">
+                {/* 1. Monto Mensual */}
                 <StatCard
-                    title="Valor del Pipeline"
-                    value={`$${stats.pipelineValue.toLocaleString()}`}
+                    title="Monto Mensual Ganado"
+                    value={`$${(stats.revenue?.wonThisMonth || []).reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()}`}
                     icon={Briefcase}
                     color="text-emerald-600"
                     bg="bg-emerald-100"
-                    trend="+12%"
+                    subtitle="Este mes"
                 />
+
+                {/* 2. Locales */}
                 <StatCard
-                    title="Deals Activos"
-                    value={stats.totalDeals.toString()}
-                    icon={TargetIcon}
+                    title="Locales Activos"
+                    value={(stats.companies?.totalLocales || 0).toString()}
+                    icon={Building2}
+                    color="text-indigo-600"
+                    bg="bg-indigo-100"
+                />
+
+                {/* 3. Empresas */}
+                <StatCard
+                    title="Total Empresas"
+                    value={(stats.companies?.totalCompanies || 0).toString()}
+                    icon={Building2}
                     color="text-violet-600"
                     bg="bg-violet-100"
+                    trend={stats.companies?.growthFromLastMonth > 0 ? `+${stats.companies.growthFromLastMonth}` : stats.companies?.growthFromLastMonth < 0 ? `${stats.companies.growthFromLastMonth}` : null}
                 />
+
+                {/* 4. Contactos */}
                 <StatCard
-                    title="Empresas"
-                    value={stats.totalCompanies.toString()}
-                    icon={Building2}
+                    title="Total de Contactos"
+                    value={(stats.contacts?.total || 0).toString()}
+                    icon={Users}
                     color="text-blue-600"
                     bg="bg-blue-100"
+                    subtitle={`+${stats.contacts.newThisMonth} nuevos este mes`}
                 />
+
+                {/* 5. Ganados */}
                 <StatCard
-                    title="Tareas Pendientes"
-                    value={stats.tasksPendingToday.toString()}
-                    subtitle={`${stats.tasksOverdue} vencidas`}
+                    title="Deals Ganados"
+                    value={(stats.conversion?.dealsWon || 0).toString()}
+                    icon={Trophy}
+                    color="text-emerald-600"
+                    bg="bg-emerald-100"
+                />
+
+                {/* 6. Fallidos */}
+                <StatCard
+                    title="Deals Fallidos / Pausa"
+                    value={((stats.conversion?.dealsLost || 0) + (stats.conversion?.dealsPaused || 0)).toString()}
+                    icon={XCircle}
+                    color="text-red-500"
+                    bg="bg-red-100"
+                />
+
+                {/* 7. Tareas Totales */}
+                <StatCard
+                    title="Tareas Totales"
+                    value={(stats.tasks?.total || 0).toString()}
                     icon={CheckSquare}
-                    color={stats.tasksOverdue > 0 ? "text-red-500" : "text-amber-500"}
-                    bg={stats.tasksOverdue > 0 ? "bg-red-100" : "bg-amber-100"}
+                    color="text-amber-600"
+                    bg="bg-amber-100"
+                />
+
+                {/* 8. Tareas Atrasadas */}
+                <StatCard
+                    title="Tareas Atrasadas"
+                    value={(stats.tasks?.overdue || 0).toString()}
+                    icon={AlertCircle}
+                    color={(stats.tasks?.overdue || 0) > 0 ? "text-red-500" : "text-emerald-500"}
+                    bg={(stats.tasks?.overdue || 0) > 0 ? "bg-red-100" : "bg-emerald-100"}
+                    subtitle={`${(stats.tasks?.completionRateThisWeek || 0).toFixed(0)}% completadas la sem.`}
                 />
             </div>
 
@@ -103,40 +168,34 @@ export default function CRMDashboard() {
                 {/* Left Column: Tasks & Pipeline Summary */}
                 <div className="lg:col-span-2 flex flex-col gap-6">
 
-                    {/* Pipeline Summary Bar */}
+                    {/* Análisis de Conversión del Pipeline */}
                     <div className="bg-white/80 backdrop-blur-xl border border-white/90 rounded-[28px] p-6 shadow-[0_8px_32px_rgba(30,27,75,0.05)] transition-all duration-300 hover:bg-white/95 hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)]">
                         <div className="flex items-center justify-between mb-5">
                             <h3 className="text-[16px] font-bold text-slate-800 flex items-center gap-2 tracking-tight">
-                                <div className="w-8 h-8 rounded-[10px] bg-violet-100 text-violet-600 flex items-center justify-center shadow-inner">
-                                    <Activity size={16} />
+                                <div className="w-8 h-8 rounded-[10px] bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
+                                    <TargetIcon size={16} />
                                 </div>
-                                Mi Pipeline
+                                Análisis de Conversión del Pipeline
                             </h3>
-                            <button className="text-[13px] text-violet-600 font-bold hover:underline">Ver Tablero</button>
                         </div>
-                        <div className="flex h-12 rounded-[16px] overflow-hidden shadow-inner bg-white/50 border border-white/40 p-1 gap-1">
-                            {Object.entries(stats.dealsByStatus).map(([status, data], idx) => {
-                                // Default colors if pipeline config not available here
-                                const colors = ['#6366f1', '#8b5cf6', '#a855f7', '#f59e0b', '#3b82f6'];
-                                const baseColor = colors[idx % colors.length];
-                                const percent = (data.count / stats.totalDeals) * 100 || 0;
-                                if (percent === 0) return null;
-                                return (
-                                    <div
-                                        key={status}
-                                        style={{ width: `${percent}%`, background: `linear-gradient(135deg, ${baseColor}, ${baseColor}dd)` }}
-                                        className="h-full rounded-[10px] flex items-center justify-center text-white text-[11px] font-bold transition-all hover:opacity-90 cursor-help shadow-sm border border-white/20 hover:scale-[1.02]"
-                                        title={`${status}: ${data.count} deals`}
-                                    >
-                                        {data.count > 0 && data.count}
-                                    </div>
-                                );
-                            })}
+
+                        {/* Tasas Generales */}
+                        <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-slate-50/50 rounded-[20px] border border-slate-100">
+                            <div className="flex flex-col text-center">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Win Rate (Ganados vs Fallidos)</p>
+                                <div className="text-2xl font-extrabold text-slate-800">{(stats.conversion?.winRate || 0).toFixed(1)}%</div>
+                            </div>
+                            <div className="flex flex-col text-center border-l border-r border-slate-200">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Lead a Ganado</p>
+                                <div className="text-2xl font-extrabold text-emerald-600">{(stats.conversion?.leadToWon || 0).toFixed(1)}%</div>
+                            </div>
+                            <div className="flex flex-col text-center">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Rechazo (Lead a Denegado)</p>
+                                <div className="text-2xl font-extrabold text-red-500">{(stats.conversion?.leadToRejected || 0).toFixed(1)}%</div>
+                            </div>
                         </div>
-                        <div className="flex justify-between mt-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2">
-                            <span>Leads</span>
-                            <span>Negociación</span>
-                        </div>
+
+                        {/* Funnel Visual Eliminado por solicitud del usuario */}
                     </div>
 
                     {/* Pending Tasks */}
@@ -148,7 +207,6 @@ export default function CRMDashboard() {
                                 </div>
                                 Prioridad de Hoy
                             </h3>
-                            <button className="text-[13px] text-violet-600 font-bold hover:underline">Ver Todo</button>
                         </div>
 
                         {tasks.length === 0 ? (
@@ -204,21 +262,30 @@ export default function CRMDashboard() {
                         </h3>
                     </div>
                     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar -mr-4 pb-4">
-                        <ActivityTimeline activities={activities} />
+                        <ActivityTimeline activities={activities} onItemClick={handleTimelineClick} />
                     </div>
                 </div>
             </div>
 
             <CompanyFormDrawer
                 open={isCompanyDrawerOpen}
-                onClose={() => setIsCompanyDrawerOpen(false)}
+                company={selectedCompanyId ? { _id: selectedCompanyId } as any : undefined}
+                onClose={() => { setIsCompanyDrawerOpen(false); setSelectedCompanyId(null); }}
                 onSaved={loadData}
             />
 
             <DealFormDrawer
                 open={isDealDrawerOpen}
+                deal={selectedDealId ? { _id: selectedDealId } as any : undefined}
                 stages={pipelineStages}
-                onClose={() => setIsDealDrawerOpen(false)}
+                onClose={() => { setIsDealDrawerOpen(false); setSelectedDealId(null); }}
+                onSaved={loadData}
+            />
+
+            <ContactActivityDrawer
+                open={isContactDrawerOpen}
+                contactId={selectedContactId || ''}
+                onClose={() => { setIsContactDrawerOpen(false); setSelectedContactId(null); }}
                 onSaved={loadData}
             />
         </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, DollarSign, Calendar, Building2, User, Briefcase, MessageCircle, Mail, History, FileText, ListTodo, CheckSquare, Plus, ChevronRight, Check, UserPlus, XCircle, Phone, Linkedin, Users, Send, Loader2 } from 'lucide-react';
+import { X, Save, DollarSign, Calendar, Building2, User, Briefcase, MessageCircle, Mail, History, FileText, ListTodo, CheckSquare, Plus, ChevronRight, Check, UserPlus, XCircle, Phone, Linkedin, Users, Send, Loader2, Clock } from 'lucide-react';
 import { DealData, createDeal, updateDeal, getCompanies, getContacts, CompanyData, ContactData, getTasks, TaskData, updateCompany, updateTask, getDealActivities, createActivity, ActivityData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { formatToArgentineDateTime, formatToArgentineDate } from '../../utils/date';
 import OwnerAvatar from '../common/OwnerAvatar';
@@ -43,7 +43,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
     const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
 
     const [saving, setSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'info' | 'history' | 'tasks'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'activity' | 'history' | 'tasks'>('info');
 
     const [isContactDrawerOpen, setIsContactDrawerOpen] = useState(false);
     const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
@@ -118,9 +118,9 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
         }
     }, [open, deal, stages]);
 
-    // Load activities when Trazabilidad tab opens
+    // Load activities when Actividad tab opens
     useEffect(() => {
-        if (activeTab === 'history' && deal?._id) {
+        if (activeTab === 'activity' && deal?._id) {
             setLoadingActivities(true);
             getDealActivities(deal._id)
                 .then(res => setDealActivities(res.activities))
@@ -276,19 +276,27 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-2 p-1 bg-slate-100/80 rounded-[12px] shadow-inner">
+                    <div className="flex gap-1 p-1 bg-slate-100/80 rounded-[12px] shadow-inner">
                         <button
                             type="button"
                             onClick={() => setActiveTab('info')}
-                            className={`flex-1 py-1.5 text-[12px] font-bold rounded-[8px] transition-all ${activeTab === 'info' ? 'bg-white shadow-sm text-violet-700' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 py-1.5 px-2 text-[12px] font-bold rounded-[8px] transition-all ${activeTab === 'info' ? 'bg-white shadow-sm text-violet-700' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             Información
                         </button>
                         <button
                             type="button"
+                            onClick={() => setActiveTab('activity')}
+                            disabled={!deal?._id}
+                            className={`flex-1 py-1.5 px-2 text-[12px] font-bold rounded-[8px] transition-all flex items-center justify-center gap-1.5 ${activeTab === 'activity' ? 'bg-white shadow-sm text-violet-700' : 'text-slate-500 hover:text-slate-700'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                        >
+                            <Clock size={14} /> Actividad
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => setActiveTab('history')}
                             disabled={!deal?._id}
-                            className={`flex-1 py-1.5 text-[12px] font-bold rounded-[8px] transition-all flex items-center justify-center gap-1.5 ${activeTab === 'history' ? 'bg-white shadow-sm text-violet-700' : 'text-slate-500 hover:text-slate-700'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                            className={`flex-1 py-1.5 px-2 text-[12px] font-bold rounded-[8px] transition-all flex items-center justify-center gap-1.5 ${activeTab === 'history' ? 'bg-white shadow-sm text-violet-700' : 'text-slate-500 hover:text-slate-700'} disabled:opacity-40 disabled:cursor-not-allowed`}
                         >
                             <History size={14} /> Trazabilidad
                         </button>
@@ -641,12 +649,16 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                     })}
                                 </div>
                             </div>
+                        </div>
+                    )}
 
+                    {activeTab === 'activity' && (
+                        <div className="flex flex-col gap-5 h-full">
                             {/* Activities Section */}
-                            <div>
+                            <div className="flex-1 flex flex-col">
                                 <div className="flex items-center justify-between border-b border-slate-200/60 pb-2 mb-3">
                                     <div className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                                        <FileText size={14} className="text-emerald-500" /> Actividades
+                                        <Clock size={14} className="text-emerald-500" /> Historial de Actividades
                                     </div>
                                     <button
                                         type="button"
