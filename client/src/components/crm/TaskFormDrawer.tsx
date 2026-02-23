@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag } from 'lucide-react';
-import { TaskData, createTask, updateTask, getCompanies, getContacts, getDealsPipeline, getCompany, CompanyData, ContactData, DealData } from '../../services/crm.service';
+import { TaskData, createTask, updateTask, getCompanies, getContacts, getDealsPipeline, getCompany, CompanyData, ContactData, DealData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import AutocompleteInput from '../common/AutocompleteInput';
+import OwnerAvatar from '../common/OwnerAvatar';
 
 interface Props {
     task?: TaskData | null;
@@ -29,6 +30,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
     const [companySearch, setCompanySearch] = useState('');
     const [contactSearch, setContactSearch] = useState('');
     const [dealSearch, setDealSearch] = useState('');
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
 
     const [saving, setSaving] = useState(false);
 
@@ -46,6 +48,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                 company: task.company,
                 contact: task.contact,
                 deal: task.deal,
+                assignedTo: (task as any).assignedTo,
             });
             setCompanySearch(task.company?.name || '');
             setContactSearch(task.contact?.fullName || '');
@@ -60,6 +63,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                 company: undefined,
                 contact: undefined,
                 deal: undefined,
+                assignedTo: undefined,
             });
             setCompanySearch('');
             setContactSearch('');
@@ -121,6 +125,12 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
         return () => window.removeEventListener('keydown', handler);
     }, [open, onClose]);
 
+    // Load team users
+    useEffect(() => {
+        if (!open) return;
+        getTeamUsers().then(setTeamUsers).catch(console.error);
+    }, [open]);
+
     const handleBackdropClick = (e: React.MouseEvent) => {
         if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
             onClose();
@@ -171,6 +181,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                 company: formData.company?._id as any,
                 contact: formData.contact?._id as any,
                 deal: formData.deal?._id as any,
+                assignedTo: (formData as any).assignedTo ? (formData as any).assignedTo._id || (formData as any).assignedTo : null,
             };
             if (!payload.dueDate) delete payload.dueDate;
 
@@ -357,6 +368,33 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                         onSelect={(opt) => handleSelectDeal(opt.data)}
                         colorTheme="amber"
                     />
+
+                    {/* Responsable Selector */}
+                    <div className="space-y-2 pt-6 border-t border-slate-200/50">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                            <User size={14} className="text-fuchsia-500" />
+                            Responsable
+                        </label>
+                        <div className="relative w-full">
+                            <select
+                                value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
+                                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
+                                className="w-full pl-12 pr-10 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
+                            >
+                                <option value="">Sin asignar</option>
+                                {teamUsers.map(u => (
+                                    <option key={u._id} value={u._id}>{u.name || u.email}</option>
+                                ))}
+                            </select>
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                <OwnerAvatar
+                                    name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}
+                                    profilePhotoUrl={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.profilePhotoUrl}
+                                    size="sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
 
                     <div className="mt-auto pt-4 border-t border-slate-200/50 flex gap-3 bg-white/50 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-4">
                         <button

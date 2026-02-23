@@ -13,8 +13,8 @@ import {
     getContact, createActivity, updateContact, deleteContact, createContact,
     getCompanies, getSystemConfig, getPartners, addContactRole, addContactPosition,
     createTask, completeTask, deleteTask as deleteTaskApi, getTasks,
-    getPipelineConfig, getDealsPipeline,
-    ActivityData, ContactData, CompanyData, SystemConfig, PartnerData, TaskData, DealData, PipelineStage
+    getPipelineConfig, getDealsPipeline, getTeamUsers,
+    ActivityData, ContactData, CompanyData, SystemConfig, PartnerData, TaskData, DealData, PipelineStage, TeamUser
 } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 import AutocompleteInput from '../common/AutocompleteInput';
@@ -166,6 +166,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     const [companySearch, setCompanySearch] = useState('');
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
     const [savingContact, setSavingContact] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -216,6 +217,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                     linkedInProfileUrl: c.linkedInProfileUrl || '',
                     profilePhotoUrl: c.profilePhotoUrl || '',
                     company: c.company || undefined,
+                    assignedTo: c.assignedTo as any,
                     tags: c.tags || [],
                 });
                 setCompanySearch(c.company?.name || '');
@@ -227,10 +229,11 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     // ── Load system config + partners ──
     useEffect(() => {
         if (!open) return;
-        Promise.all([getSystemConfig(), getPartners()])
-            .then(([cfg, parts]) => {
+        Promise.all([getSystemConfig(), getPartners(), getTeamUsers()])
+            .then(([cfg, parts, users]) => {
                 setConfig(cfg);
                 setPartners(parts.partners);
+                setTeamUsers(users);
             })
             .catch(console.error);
     }, [open]);
@@ -291,6 +294,14 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
             if (payload.partner === '' || payload.channel !== 'partners') payload.partner = undefined;
             if (payload.partner && typeof payload.partner === 'object' && '_id' in payload.partner) {
                 payload.partner = (payload.partner as any)._id;
+            }
+            // Send assignedTo as ID or null
+            if (payload.assignedTo) {
+                if (typeof payload.assignedTo === 'object' && '_id' in payload.assignedTo) {
+                    payload.assignedTo = payload.assignedTo._id;
+                }
+            } else {
+                payload.assignedTo = null; // Send null to backend to unset
             }
 
             let result;
@@ -595,6 +606,33 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                         </div>
                                     )}
 
+                                    {/* Responsable / Owner Selector */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                            <User size={13} className="text-fuchsia-500" /> Responsable
+                                        </label>
+                                        <div className="relative">
+                                            <select
+                                                value={(formData.assignedTo as any)?._id || formData.assignedTo || ''}
+                                                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
+                                                className="w-full pl-10 pr-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[13px] font-medium text-slate-700 appearance-none cursor-pointer"
+                                            >
+                                                <option value="">Sin asignar</option>
+                                                {teamUsers.map(u => (
+                                                    <option key={u._id} value={u._id}>{u.name || u.email}</option>
+                                                ))}
+                                            </select>
+                                            {/* Avatar preview inline */}
+                                            <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                <OwnerAvatar
+                                                    name={teamUsers.find(u => u._id === ((formData.assignedTo as any)?._id || formData.assignedTo))?.name || ''}
+                                                    profilePhotoUrl={teamUsers.find(u => u._id === ((formData.assignedTo as any)?._id || formData.assignedTo))?.profilePhotoUrl}
+                                                    size="xs"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Photo URL */}
                                     <div className="space-y-1.5">
                                         <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
@@ -835,9 +873,23 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                                                 {(activity as any).outcome}
                                                             </span>
                                                         )}
-                                                        <span className="ml-auto text-[10px] text-slate-400 font-medium whitespace-nowrap tabular-nums">
-                                                            {formatActivityTime(activity.createdAt)}
-                                                        </span>
+                                                        <div className="ml-auto flex items-center gap-2">
+                                                            {activity.createdBy && (
+                                                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-1.5 py-0.5 rounded-full shadow-sm" title={`Creado por ${activity.createdBy.name}`}>
+                                                                    <div className="w-4 h-4 rounded-full bg-white overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/50">
+                                                                        {activity.createdBy.profilePhotoUrl ? (
+                                                                            <img src={activity.createdBy.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
+                                                                        ) : (
+                                                                            <span className="text-[9px] font-bold text-slate-500">{activity.createdBy.name.charAt(0).toUpperCase()}</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-slate-600 truncate max-w-[80px] pr-1 hidden sm:block">{activity.createdBy.name.split(' ')[0]}</span>
+                                                                </div>
+                                                            )}
+                                                            <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap tabular-nums">
+                                                                {formatActivityTime(activity.createdAt)}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                     {/* Description */}
                                                     <p className="text-[12.5px] text-slate-600 leading-snug ml-9">

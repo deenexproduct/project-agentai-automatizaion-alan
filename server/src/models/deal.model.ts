@@ -21,6 +21,7 @@ export interface IDeal extends Document {
     status: string; // Dynamic — validated against PipelineConfig at route level
     company?: mongoose.Types.ObjectId;
     primaryContact?: mongoose.Types.ObjectId;
+    contacts: mongoose.Types.ObjectId[];
     assignedTo?: mongoose.Types.ObjectId;
     expectedCloseDate?: Date;
     closedAt?: Date;
@@ -91,6 +92,10 @@ const DealSchema = new Schema<IDeal>({
         ref: 'CrmContact',
         default: null,
     },
+    contacts: [{
+        type: Schema.Types.ObjectId,
+        ref: 'CrmContact',
+    }],
     assignedTo: {
         type: Schema.Types.ObjectId,
         ref: 'User',

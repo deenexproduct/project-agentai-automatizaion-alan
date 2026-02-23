@@ -433,6 +433,7 @@ router.get('/deals', async (req: Request, res: Response) => {
         const deals = await Deal.find(query)
             .populate('company', 'name logo sector localesCount costPerLocation')
             .populate('primaryContact', 'fullName position profilePhotoUrl')
+            .populate('contacts', 'fullName position profilePhotoUrl email phone')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .sort({ createdAt: -1 })
             .lean();
@@ -505,6 +506,54 @@ router.post('/deals', async (req: Request, res: Response) => {
     } catch (err: any) {
         console.error('CRM create deal error:', err.message);
         res.status(500).json({ error: 'Failed to create deal' });
+    }
+});
+
+// ── GET /deals/:id/activities — Aggregated timeline ──────────
+router.get('/deals/:id/activities', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id.toString();
+        const dealId = req.params.id;
+
+        // Find the deal to get its contacts
+        const deal = await Deal.findOne({ _id: dealId, userId }).lean();
+        if (!deal) return res.status(404).json({ error: 'Deal not found' });
+
+        // Build $or query: activities linked to the deal OR to any of its contacts
+        const orConditions: any[] = [{ deal: dealId }];
+        if (deal.primaryContact) orConditions.push({ contact: deal.primaryContact });
+        if ((deal as any).contacts?.length) {
+            for (const cId of (deal as any).contacts) {
+                const cStr = cId.toString();
+                // Avoid duplicating primaryContact
+                if (cStr !== deal.primaryContact?.toString()) {
+                    orConditions.push({ contact: cId });
+                }
+            }
+        }
+
+        const activities = await Activity.find({ userId, $or: orConditions })
+            .populate('contact', 'fullName profilePhotoUrl')
+            .populate('deal', 'title')
+            .populate('company', 'name logo')
+            .populate('createdBy', 'name profilePhotoUrl')
+            .sort({ createdAt: -1 })
+            .limit(100)
+            .lean();
+
+        // Deduplicate by _id (in case an activity references both deal and contact)
+        const seen = new Set<string>();
+        const unique = activities.filter(a => {
+            const id = a._id.toString();
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        });
+
+        res.json({ activities: unique, total: unique.length });
+    } catch (err: any) {
+        console.error('CRM deal activities error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch deal activities' });
     }
 });
 
@@ -757,7 +806,8 @@ router.post('/activities', async (req: Request, res: Response) => {
             createdBy: userId,
             userId,
         });
-        res.status(201).json(activity);
+        const popActivity = await Activity.findById(activity._id).populate('createdBy', 'name email profilePhotoUrl');
+        res.status(201).json(popActivity);
     } catch (err: any) {
         console.error('CRM create activity error:', err.message);
         res.status(500).json({ error: 'Failed to create activity' });

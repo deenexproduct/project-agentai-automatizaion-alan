@@ -93,6 +93,7 @@ export type DealData = {
     status: string;
     company?: { _id: string; name: string; logo?: string; themeColor?: string; sector?: string; localesCount?: number; costPerLocation?: number };
     primaryContact?: { _id: string; fullName: string; position?: string; profilePhotoUrl?: string };
+    contacts?: { _id: string; fullName: string; position?: string; profilePhotoUrl?: string; email?: string; phone?: string }[];
     assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     expectedCloseDate?: string;
     daysInStatus?: number;
@@ -143,6 +144,16 @@ export const getPipelineConfig = async () => (await api.get<PipelineConfig>('/cr
 export const updatePipelineConfig = async (data: Partial<PipelineConfig>) => (await api.put<PipelineConfig>('/crm/pipeline/config', data)).data;
 export const resetPipelineConfig = async () => (await api.post<PipelineConfig>('/crm/pipeline/config/seed')).data;
 
+// Team Users
+export type TeamUser = {
+    _id: string;
+    name?: string;
+    email: string;
+    profilePhotoUrl?: string;
+    role?: string;
+};
+export const getTeamUsers = async () => (await api.get<TeamUser[]>('/auth/users')).data;
+
 // System Config
 export const getSystemConfig = async () => (await api.get<SystemConfig>('/system-config')).data;
 export const addCompanyCategory = async (category: string) => (await api.post<SystemConfig>('/system-config/categories', { category })).data;
@@ -178,6 +189,7 @@ export const linkLinkedInContact = async (id: string, linkedInContactId: string)
 export const getDealsPipeline = async (params: any = {}) => (await api.get<{ stages: { key: string, label: string, color: string, deals: DealData[] }[] }>('/crm/deals', { params })).data;
 export const createDeal = async (data: Partial<DealData>) => (await api.post<DealData>('/crm/deals', data)).data;
 export const updateDeal = async (id: string, data: Partial<DealData>) => (await api.patch<DealData>(`/crm/deals/${id}`, data)).data;
+export const getDealActivities = async (dealId: string) => (await api.get<{ activities: ActivityData[]; total: number }>(`/crm/deals/${dealId}/activities`)).data;
 
 // Tasks
 export const getTasks = async (params: any) => (await api.get<{ tasks: TaskData[]; total: number; pages: number }>('/crm/tasks', { params })).data;

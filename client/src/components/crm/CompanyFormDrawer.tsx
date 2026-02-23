@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, Building2, AlignLeft, Globe, Briefcase, Hash, User, Phone, Mail, Loader2, AlertTriangle, GitBranch, DollarSign, Clock, Calendar, CheckSquare, TrendingUp, History } from 'lucide-react';
-import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, SystemConfig, PartnerData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig } from '../../services/crm.service';
+import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, SystemConfig, PartnerData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 
 interface Props {
@@ -24,6 +24,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     const [saving, setSaving] = useState(false);
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
     const [companyContacts, setCompanyContacts] = useState<ContactData[]>([]);
     const [loadingContacts, setLoadingContacts] = useState(false);
     const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'trazabilidad'>('info');
@@ -36,12 +37,14 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     useEffect(() => {
         const loadInitialData = async () => {
             try {
-                const [cfg, parts] = await Promise.all([
+                const [cfg, parts, users] = await Promise.all([
                     getSystemConfig(),
-                    getPartners()
+                    getPartners(),
+                    getTeamUsers()
                 ]);
                 setConfig(cfg);
                 setPartners(parts.partners);
+                setTeamUsers(users);
             } catch (error) {
                 console.error("Failed to load options", error);
             }
@@ -63,6 +66,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                 costPerLocation: company.costPerLocation || 0,
                 category: company.category || '',
                 partner: company.partner || undefined,
+                assignedTo: (company as any).assignedTo,
             });
             // Fetch contacts for this company
             if (company._id) {
@@ -97,6 +101,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                 costPerLocation: 0,
                 category: '',
                 partner: undefined,
+                assignedTo: undefined,
             });
         }
     }, [open, company]);
@@ -172,6 +177,13 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
             if (payload.partner === '') payload.partner = undefined;
             if (payload.partner && typeof payload.partner === 'object' && '_id' in payload.partner) {
                 payload.partner = (payload.partner as any)._id; // Just send the ID if it was an object
+            }
+            if (payload.assignedTo) {
+                if (typeof payload.assignedTo === 'object' && '_id' in payload.assignedTo) {
+                    payload.assignedTo = payload.assignedTo._id;
+                }
+            } else {
+                payload.assignedTo = null;
             }
 
             let result;
@@ -360,6 +372,33 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                         <option key={p._id} value={p._id}>{p.name}</option>
                                     ))}
                                 </select>
+                            </div>
+
+                            {/* Responsable Selector */}
+                            <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">
+                                <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                    <User size={14} className="text-fuchsia-500" />
+                                    Responsable
+                                </label>
+                                <div className="relative w-full">
+                                    <select
+                                        value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
+                                        onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
+                                        className="w-full pl-12 pr-10 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
+                                    >
+                                        <option value="">Sin asignar</option>
+                                        {teamUsers.map(u => (
+                                            <option key={u._id} value={u._id}>{u.name || u.email}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                        <OwnerAvatar
+                                            name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}
+                                            profilePhotoUrl={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.profilePhotoUrl}
+                                            size="sm"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">

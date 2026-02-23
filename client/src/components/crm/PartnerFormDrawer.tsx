@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save, User, Mail, Phone, Percent, FileText, Handshake } from 'lucide-react';
-import { PartnerData, createPartner, updatePartner } from '../../services/crm.service';
+import { PartnerData, createPartner, updatePartner, getTeamUsers, TeamUser } from '../../services/crm.service';
+import OwnerAvatar from '../common/OwnerAvatar';
 
 interface Props {
     partner?: PartnerData | null;
@@ -19,6 +20,7 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
     });
 
     const [saving, setSaving] = useState(false);
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
 
     // Initial data
     useEffect(() => {
@@ -28,7 +30,8 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                 email: partner.email || '',
                 phone: partner.phone || '',
                 commissionPercentage: partner.commissionPercentage || 0,
-                notes: partner.notes || ''
+                notes: partner.notes || '',
+                assignedTo: (partner as any).assignedTo,
             });
         } else if (open && !partner) {
             setFormData({
@@ -36,7 +39,8 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                 email: '',
                 phone: '',
                 commissionPercentage: 0,
-                notes: ''
+                notes: '',
+                assignedTo: undefined,
             });
         }
     }, [open, partner]);
@@ -48,14 +52,25 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
         return () => window.removeEventListener('keydown', handler);
     }, [open, onClose]);
 
+    // Load team users
+    useEffect(() => {
+        if (!open) return;
+        getTeamUsers().then(setTeamUsers).catch(console.error);
+    }, [open]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
         try {
+            const payload = {
+                ...formData,
+                assignedTo: (formData as any).assignedTo ? (formData as any).assignedTo._id || (formData as any).assignedTo : null,
+            };
+
             if (partner?._id) {
-                await updatePartner(partner._id, formData);
+                await updatePartner(partner._id, payload);
             } else {
-                await createPartner(formData);
+                await createPartner(payload);
             }
             onSaved();
             onClose();
@@ -175,6 +190,33 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                                 placeholder="Ej. 15"
                                 className="w-full px-4 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-300 transition-all text-[14px] font-bold text-slate-700 placeholder:text-slate-400 shadow-inner max-w-[200px]"
                             />
+                        </div>
+
+                        {/* Responsable Selector */}
+                        <div className="space-y-2 pt-2 border-t border-slate-200/50">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                <User size={15} className="text-fuchsia-500" />
+                                Responsable
+                            </label>
+                            <div className="relative w-full">
+                                <select
+                                    value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
+                                    onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
+                                    className="w-full pl-12 pr-10 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
+                                >
+                                    <option value="">Sin asignar</option>
+                                    {teamUsers.map(u => (
+                                        <option key={u._id} value={u._id}>{u.name || u.email}</option>
+                                    ))}
+                                </select>
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                    <OwnerAvatar
+                                        name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}
+                                        profilePhotoUrl={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.profilePhotoUrl}
+                                        size="sm"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         <div className="space-y-2 pt-2 border-t border-slate-200/50 flex-1 flex flex-col">
