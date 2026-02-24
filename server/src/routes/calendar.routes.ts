@@ -218,7 +218,7 @@ router.post('/events', async (req: Request, res: Response) => {
         // 1. Google Calendar Integration
         if (config?.googleRefreshToken) {
             try {
-                const { eventId, meetLink } = await createGoogleEvent(config, newEvent.toObject());
+                const { eventId, meetLink } = await createGoogleEvent(config as any, newEvent.toObject());
                 newEvent.googleEventId = eventId;
                 if (meetLink) {
                     newEvent.meetLink = meetLink;
@@ -234,7 +234,7 @@ router.post('/events', async (req: Request, res: Response) => {
         // 2. Email Invitations
         if (sendInvite && config) {
             // Async emission, don't block response
-            emailService.sendEventInvitations(config, newEvent.toObject()).catch(e => console.error('Email error:', e));
+            emailService.sendEventInvitations(config as any, newEvent.toObject()).catch(e => console.error('Email error:', e));
         }
 
         res.status(201).json({ success: true, event: newEvent });
@@ -278,7 +278,7 @@ router.put('/events/:id', async (req: Request, res: Response) => {
             const assignee = event.assignedTo || event.userId;
             const config = await CalendarConfig.findOne({ userId: assignee }).lean();
             if (config) {
-                emailService.sendEventInvitations(config, event as any).catch(e => console.error('Email error:', e));
+                emailService.sendEventInvitations(config as any, event as any).catch(e => console.error('Email error:', e));
             }
         }
 
@@ -299,7 +299,7 @@ router.delete('/events/:id', async (req: Request, res: Response) => {
         const config = await CalendarConfig.findOne({ userId: assignee }).lean();
         if (config?.googleRefreshToken && event.googleEventId) {
             try {
-                await deleteGoogleEvent(config, event.googleEventId);
+                await deleteGoogleEvent(config as any, event.googleEventId);
             } catch (err) {
                 console.error('Failed deleting from google', err);
             }

@@ -16,7 +16,7 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/calendar/auth/google/callback';
 
-export function getOAuthClient(): OAuth2Client {
+export function getOAuthClient(): any {
     return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 }
 
@@ -39,7 +39,7 @@ export async function listGoogleCalendars(config: ICalendarConfig): Promise<IGoo
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     const res = await calendar.calendarList.list(
         { minAccessRole: 'writer' },
@@ -65,7 +65,7 @@ export async function createGoogleEvent(
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
 
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     // Format dates for Google Calendar API
     // Ensure event.date is treated robustly, dealing natively with Date objects or Strings
@@ -136,7 +136,7 @@ export async function deleteGoogleEvent(config: ICalendarConfig, eventId: string
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     try {
         await calendar.events.delete({
@@ -155,7 +155,7 @@ export async function syncGoogleEvents(config: ICalendarConfig, timeMin: Date, t
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     try {
         const res = await calendar.events.list({
@@ -237,7 +237,7 @@ export async function updateGoogleEvent(
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     try {
         // Fetch existing first to preserve attendees or other fields we don't strictly overwrite
