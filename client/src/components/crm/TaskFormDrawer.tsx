@@ -4,15 +4,18 @@ import { TaskData, createTask, updateTask, deleteTask, getContacts, getCompanies
 import { formatToLocalDateTimeInput } from '../../utils/date';
 import AutocompleteInput from '../common/AutocompleteInput';
 import OwnerAvatar from '../common/OwnerAvatar';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Props {
     task?: TaskData | null;
     open: boolean;
+    initialDate?: Date;
     onClose: () => void;
     onSaved: () => void;
 }
 
-export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) {
+export default function TaskFormDrawer({ task, open, initialDate, onClose, onSaved }: Props) {
+    const { user } = useAuth();
     const [formData, setFormData] = useState<Partial<TaskData>>({
         title: '',
         type: 'follow_up',
@@ -56,23 +59,31 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
             setContactSearch(task.contact?.fullName || '');
             setDealSearch(task.deal?.title || '');
         } else if (open && !task) {
+            let defaultDueDate = '';
+            if (initialDate) {
+                // Keep the initial date (which is usually midnight local time) and set it to 09:00 for the task default
+                const dateObj = new Date(initialDate);
+                dateObj.setHours(9, 0, 0, 0);
+                defaultDueDate = formatToLocalDateTimeInput(dateObj);
+            }
+
             setFormData({
                 title: '',
                 type: 'follow_up',
                 priority: 'medium',
                 status: 'pending',
-                dueDate: '',
+                dueDate: defaultDueDate,
                 company: undefined,
                 contact: undefined,
                 deal: undefined,
-                assignedTo: undefined,
+                assignedTo: user?._id as any,
             });
             setCompanySearch('');
             setContactSearch('');
             setDealSearch('');
         }
         setShowDeleteConfirm(false);
-    }, [open, task]);
+    }, [open, task, user?._id]);
 
     // Autocomplete Companies
     useEffect(() => {

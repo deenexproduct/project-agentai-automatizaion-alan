@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
+import mongoose from 'mongoose';
 import { IEvent } from '../models/event.model';
 import { ICalendarConfig } from '../models/calendar-config.model';
 
@@ -67,8 +68,16 @@ export async function createGoogleEvent(
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     // Format dates for Google Calendar API
-    // Google expects a local format without 'Z' if providing a timezone, e.g. "2024-12-31T15:30:00"
-    const eventDate = event.date.split('T')[0]; // Extract YYYY-MM-DD
+    // Ensure event.date is treated robustly, dealing natively with Date objects or Strings
+    // Since mongoose saves plain dates as UTC midnight, toISOString will safely extract the EXACT requested day (e.g. 2026-02-25)
+    // regardless of the server's local timezone offset executing this code.
+    let dateStr = "";
+    if (event.date instanceof Date) {
+        dateStr = event.date.toISOString();
+    } else {
+        dateStr = String(event.date); // Fallback if magically a string
+    }
+    const eventDate = dateStr.split('T')[0]; // Extract YYYY-MM-DD
     const startDateTime = `${eventDate}T${event.startTime}:00`;
     const endDateTime = `${eventDate}T${event.endTime}:00`;
 
@@ -156,6 +165,7 @@ export async function syncGoogleEvents(config: ICalendarConfig, timeMin: Date, t
             maxResults: 2500,
             singleEvents: true,
             orderBy: 'startTime',
+            showDeleted: true,
         });
 
         const items = res.data.items || [];
@@ -247,7 +257,13 @@ export async function updateGoogleEvent(
         }
 
         if (event.date && event.startTime && event.endTime) {
-            const eventDate = new Date(event.date as unknown as string).toISOString().split('T')[0];
+            let dateStr = "";
+            if (event.date instanceof Date) {
+                dateStr = event.date.toISOString();
+            } else {
+                dateStr = String(event.date);
+            }
+            const eventDate = dateStr.split('T')[0];
             const startDateTime = `${eventDate}T${event.startTime}:00`;
             const endDateTime = `${eventDate}T${event.endTime}:00`;
 

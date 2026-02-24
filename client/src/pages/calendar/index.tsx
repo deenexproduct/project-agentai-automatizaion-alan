@@ -180,6 +180,7 @@ export default function CalendarPage() {
             <EventFormDrawer
                 open={isEventDrawerOpen}
                 event={selectedEvent}
+                initialDate={selectedDate || currentDate}
                 onClose={() => setIsEventDrawerOpen(false)}
                 onSaved={loadEvents}
             />
@@ -192,6 +193,13 @@ export default function CalendarPage() {
                 onEditEvent={(event) => {
                     setIsDailyDrawerOpen(false);
                     openEditEvent(event);
+                }}
+                onNewEvent={(date) => {
+                    setIsDailyDrawerOpen(false);
+                    setTimeout(() => {
+                        setSelectedDate(date);
+                        openNewEvent();
+                    }, 50); // Small delay to allow daily drawer to unmount and avoid event conflicts
                 }}
             />
         </div>

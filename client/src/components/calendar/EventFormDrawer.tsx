@@ -8,11 +8,12 @@ import { formatToLocalDateInput } from '../../utils/date';
 interface EventFormDrawerProps {
     open: boolean;
     event?: EventData;
+    initialDate?: Date | null;
     onClose: () => void;
     onSaved: () => void;
 }
 
-export default function EventFormDrawer({ open, event, onClose, onSaved }: EventFormDrawerProps) {
+export default function EventFormDrawer({ open, event, initialDate, onClose, onSaved }: EventFormDrawerProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [date, setDate] = useState(formatToLocalDateInput(new Date()));
@@ -67,7 +68,7 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
             } else {
                 setTitle('');
                 setDescription('');
-                setDate(formatToLocalDateInput(new Date()));
+                setDate(formatToLocalDateInput(initialDate || new Date()));
                 setStartTime('09:00');
                 setEndTime('10:00');
                 setType('meet');
@@ -84,7 +85,7 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
             setSendInvite(true);
             setShowDeleteConfirm(false);
         }
-    }, [open, event]);
+    }, [open, event, initialDate, user?._id]);
 
     useEffect(() => {
         if (!open) return;

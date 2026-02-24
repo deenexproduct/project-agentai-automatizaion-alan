@@ -33,10 +33,10 @@ const crmGroup: SidebarItem[] = [
     { id: 'dashboard', Icon: LayoutDashboard, label: 'Dashboard CRM' },
     { id: 'pipeline', Icon: Columns3, label: 'Pipeline Deals' },
     { id: 'tasks', Icon: CheckSquare, label: 'Tareas y Actividad' },
+    { id: 'calendar', Icon: CalendarIcon, label: 'Calendario y Citas' },
     { id: 'companies', Icon: Building2, label: 'Empresas' },
     { id: 'contacts', Icon: User, label: 'Contactos' },
     { id: 'partners', Icon: Handshake, label: 'Partners Oficiales' },
-    { id: 'calendar', Icon: CalendarIcon, label: 'Calendario y Citas' },
 ];
 
 const linkedinGroup: SidebarItem[] = [

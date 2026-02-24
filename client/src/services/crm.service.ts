@@ -190,7 +190,10 @@ export type EventData = {
     date: string;
     startTime: string;
     endTime: string;
-    type: 'meet' | 'physical';
+    type: 'meet' | 'physical' | 'task';
+    taskType?: 'call' | 'meeting' | 'follow_up' | 'proposal' | 'research' | 'other';
+    taskStatus?: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+    taskPriority?: 'low' | 'medium' | 'high' | 'urgent';
     location?: string;
     googleEventId?: string;
     meetLink?: string;

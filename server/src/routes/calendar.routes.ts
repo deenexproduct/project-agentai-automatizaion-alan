@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getAuthUrl, getOAuthClient, createGoogleEvent, deleteGoogleEvent, listGoogleCalendars } from '../services/google-calendar.service';
 import { CalendarConfig } from '../models/calendar-config.model';
 import { Event } from '../models/event.model';
+import { Task } from '../models/task.model';
 import { emailService } from '../services/email.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 
@@ -137,10 +138,67 @@ router.get('/events', async (req: Request, res: Response) => {
             .populate('linkedTo.contacts', 'fullName')
             .populate('linkedTo.company', 'name')
             .populate('linkedTo.deal', 'title')
-            .sort({ date: 1, startTime: 1 })
             .lean();
 
-        res.json({ events });
+        // Also fetch tasks for the same period
+        let taskQuery: any = { $or: [{ userId }, { assignedTo: userId }] };
+        if (start && end) {
+            taskQuery.dueDate = { $gte: new Date(start as string), $lte: new Date(end as string) };
+        }
+
+        const tasks = await Task.find(taskQuery)
+            .populate('userId', 'name email')
+            .populate('assignedTo', 'name email')
+            .populate('contact', 'fullName')
+            .populate('company', 'name')
+            .populate('deal', 'title')
+            .lean();
+
+        // Transform tasks to match EventData interface for the frontend Calendar
+        const transformedTasks = tasks.map(task => {
+            // Default task start time to 09:00 if none, or based on dueDate if it has time
+            const dateObj = new Date(task.dueDate || task.createdAt);
+            const hours = dateObj.getHours().toString().padStart(2, '0');
+            const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+            const startTime = `${hours}:${minutes}`;
+            // 30 min duration default
+            dateObj.setMinutes(dateObj.getMinutes() + 30);
+            const endHours = dateObj.getHours().toString().padStart(2, '0');
+            const endMinutes = dateObj.getMinutes().toString().padStart(2, '0');
+            const endTime = `${endHours}:${endMinutes}`;
+
+            return {
+                _id: task._id,
+                userId: task.userId,
+                assignedTo: task.assignedTo,
+                title: `[Tarea] ${task.title}`,
+                description: task.description,
+                date: task.dueDate || task.createdAt,
+                startTime,
+                endTime,
+                type: 'task', // Custom type for frontend logic
+                taskType: task.type,
+                taskStatus: task.status,
+                taskPriority: task.priority,
+                linkedTo: {
+                    contacts: task.contact ? [task.contact] : [],
+                    company: task.company,
+                    deal: task.deal
+                },
+                createdAt: task.createdAt,
+                updatedAt: task.updatedAt
+            };
+        });
+
+        // Combine and sort
+        const combinedEvents = [...events, ...transformedTasks].sort((a: any, b: any) => {
+            const dateA = new Date(a.date).getTime();
+            const dateB = new Date(b.date).getTime();
+            if (dateA !== dateB) return dateA - dateB;
+            return a.startTime.localeCompare(b.startTime);
+        });
+
+        res.json({ events: combinedEvents });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

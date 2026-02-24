@@ -1,4 +1,4 @@
-import { X, Calendar as CalendarIcon, MapPin, Video, User } from 'lucide-react';
+import { X, Calendar as CalendarIcon, MapPin, Video, User, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { EventData } from '../../services/crm.service';
@@ -10,9 +10,10 @@ interface DailyEventsDrawerProps {
     events: EventData[];
     onClose: () => void;
     onEditEvent: (event: EventData) => void;
+    onNewEvent: (date: Date) => void;
 }
 
-export default function DailyEventsDrawer({ open, date, events, onClose, onEditEvent }: DailyEventsDrawerProps) {
+export default function DailyEventsDrawer({ open, date, events, onClose, onEditEvent, onNewEvent }: DailyEventsDrawerProps) {
     if (!open || !date) return null;
 
     // Filter events for the selected date and sort them chronologically
@@ -125,6 +126,20 @@ export default function DailyEventsDrawer({ open, date, events, onClose, onEditE
                             ))}
                         </div>
                     )}
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-6 border-t border-slate-200/50 bg-white/50 backdrop-blur-md shrink-0">
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onNewEvent(date);
+                        }}
+                        className="w-full h-11 bg-violet-600 text-white font-bold rounded-[14px] hover:bg-violet-700 hover:-translate-y-0.5 transition-all shadow-[0_4px_12px_rgba(139,92,246,0.3)] flex items-center justify-center gap-2 text-[14px]"
+                    >
+                        <Plus size={18} /> Crear Evento
+                    </button>
                 </div>
             </div>
 

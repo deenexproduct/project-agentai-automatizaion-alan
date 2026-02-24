@@ -342,17 +342,24 @@ class EmailService {
     return this.transporter;
   }
 
-  private compileEventTemplate(template: string, event: IEvent, locationType: string, locationDetails: string): string {
+  private compileEventTemplate(template: string, event: IEvent, locationOrLink: string, contactName: string): string {
     const dateFormatted = format(new Date(event.date), "EEEE d 'de' MMMM, yyyy", { locale: es });
     const timeFormatted = `${event.startTime} hs a ${event.endTime} hs`;
 
     let compiled = template
+      .replace(/\{\{event_title\}\}/g, event.title)
+      .replace(/\{\{contact_name\}\}/g, contactName)
+      .replace(/\{\{event_date\}\}/g, dateFormatted)
+      .replace(/\{\{event_time\}\}/g, timeFormatted)
+      .replace(/\{\{event_location_or_link\}\}/g, locationOrLink);
+
+    // Fallbacks just in case the user's template was using the old variables
+    compiled = compiled
       .replace(/\{\{eventName\}\}/g, event.title)
       .replace(/\{\{eventDescription\}\}/g, event.description || '')
       .replace(/\{\{eventDate\}\}/g, dateFormatted)
       .replace(/\{\{eventTime\}\}/g, timeFormatted)
-      .replace(/\{\{locationType\}\}/g, locationType)
-      .replace(/\{\{locationDetails\}\}/g, locationDetails)
+      .replace(/\{\{locationDetails\}\}/g, locationOrLink)
       .replace(/\{\{meetLink\}\}/g, event.meetLink || '#');
 
     return compiled;
@@ -364,44 +371,113 @@ class EmailService {
         return false; // No one to email
       }
 
-      console.log(`[emailService] Enviando invitación de evento a ${event.attendees.length} participantes`);
+      console.log(`[emailService] Enviando invitación de evento a ${event.attendees.length} participantes individuales`);
 
-      const defaultTemplate = `
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #695EDE;">Has sido invitado a {{eventName}}</h2>
-          <p>{{eventDescription}}</p>
-          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px;">
-            <p><strong>📅 Fecha:</strong> {{eventDate}}</p>
-            <p><strong>⏰ Hora:</strong> {{eventTime}}</p>
-            <p><strong>📍 Ubicación:</strong> {{locationType}} - {{locationDetails}}</p>
-          </div>
-        </div>
-      `;
+      const defaultTemplate = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f4f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); padding: 50px 40px; text-align: center;">
+              <div style="background: rgba(255,255,255,0.2); width: 60px; height: 60px; border-radius: 16px; margin: 0 auto 20px auto; line-height: 60px; font-size: 30px;">🗓️</div>
+              <h1 style="color: #ffffff; margin: 0 0 10px 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">Tu reunión está confirmada</h1>
+              <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 18px; font-weight: 500;">{{event_title}}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 25px 0; font-size: 16px; line-height: 26px; color: #3f3f46;">
+                Hola <strong style="color: #18181b;">{{contact_name}}</strong>,<br><br>
+                Nos emociona confirmarte nuestra próxima sesión. Hemos reservado este espacio especialmente para ti. A continuación encontrarás todos los detalles que necesitas:
+              </p>
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border-radius: 16px; padding: 24px; margin-bottom: 35px; border: 1px solid #e2e8f0;">
+                <tr>
+                  <td width="40" style="padding-bottom: 20px;">
+                    <div style="background: #ffffff; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">📅</div>
+                  </td>
+                  <td style="padding-bottom: 20px;">
+                    <div style="font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Fecha</div>
+                    <div style="color: #0f172a; font-size: 16px; font-weight: 600; margin-top: 4px;">{{event_date}}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="40" style="padding-bottom: 20px;">
+                    <div style="background: #ffffff; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">⏰</div>
+                  </td>
+                  <td style="padding-bottom: 20px;">
+                    <div style="font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Hora</div>
+                    <div style="color: #0f172a; font-size: 16px; font-weight: 600; margin-top: 4px;">{{event_time}}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="40">
+                    <div style="background: #ffffff; width: 32px; height: 32px; border-radius: 8px; text-align: center; line-height: 32px; font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">📍</div>
+                  </td>
+                  <td>
+                    <div style="font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Modalidad / Link</div>
+                    <div style="color: #7c3aed; font-size: 16px; font-weight: 600; margin-top: 4px; word-break: break-word;">{{event_location_or_link}}</div>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 0; font-size: 15px; line-height: 24px; color: #64748b; text-align: center;">
+                Si necesitas reprogramar o tienes alguna duda antes de reunirnos, no dudes en responder directamente a este correo.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px 40px; text-align: center;">
+              <p style="margin: 0; font-size: 14px; color: #94a3b8; font-weight: 500;">
+                Potenciado por <strong style="color: #7c3aed;">Deenex CRM</strong>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 
       const template = config?.emailTemplate || defaultTemplate;
-      const locationType = event.type === 'meet' ? 'Videollamada (Google Meet)' : 'Presencial';
-      const locationDetails = event.type === 'meet'
-        ? `<a href="${event.meetLink}" style="color: #695EDE;">${event.meetLink}</a>`
-        : (event.location || 'Por confirmar');
+      const locationOrLink = event.type === 'meet'
+        ? `<a href="${event.meetLink}" style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold; margin-bottom: 15px; text-align: center;">Unirse a Google Meet</a><br><span style="color: #64748b; font-size: 13px;">Link directo: <a href="${event.meetLink}" style="color: #7c3aed;">${event.meetLink}</a></span>`
+        : (event.location || 'Presencial (Por confirmar)');
 
-      const html = this.compileEventTemplate(template, event, locationType, locationDetails);
       const mailTransporter = this.getTransporter(config?.smtp);
       const senderEmail = config?.smtp?.user || process.env.SMTP_USER || 'app.sistema@deenex.tech';
-
       const pName = branding.projectName || 'Deenex';
 
-      await mailTransporter.sendMail({
-        from: `"${pName} Calendar" <${senderEmail}>`,
-        to: event.attendees.join(', '), // Send to all attendees
-        subject: `Invitación: ${event.title}`,
-        text: `Has sido invitado a ${event.title}. Fecha: ${format(new Date(event.date), 'dd/MM/yyyy')} a las ${event.startTime}.`,
-        html: html,
-      });
+      // Send emails individually so we can greet by name or fallback
+      for (const attendeeEmail of event.attendees) {
+        // Simple name fallback: "alan.tapia" -> "Alan Tapia"
+        let contactName = 'Invitado';
+        if (attendeeEmail.includes('@')) {
+          const rawName = attendeeEmail.split('@')[0];
+          contactName = rawName.split('.').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+        }
 
-      console.log(`[emailService] ✅ Invitaciones enviadas para el evento ${event.title}`);
+        const html = this.compileEventTemplate(template, event, locationOrLink, contactName);
+
+        await mailTransporter.sendMail({
+          from: \`"\${pName} Calendar" <\${senderEmail}>\`,
+          to: attendeeEmail,
+          subject: \`Invitación Confirmada: \${event.title}\`,
+          text: \`Has sido invitado a \${event.title}. Fecha: \${format(new Date(event.date), 'dd/MM/yyyy')} a las \${event.startTime}.\`,
+          html: html,
+        });
+      }
+
+      console.log(`[emailService] ✅ Invitaciones enviadas para el evento ${ event.title }`);
       return true;
     } catch (error: any) {
-      console.error(`[emailService] ❌ Error al enviar invitaciones de evento:`, error.message);
+      console.error(`[emailService] ❌ Error al enviar invitaciones de evento: `, error.message);
       return false;
     }
   }
