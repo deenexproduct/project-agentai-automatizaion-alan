@@ -53,7 +53,7 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
                 setDate(formatToLocalDateInput(event.date));
                 setStartTime(event.startTime || '09:00');
                 setEndTime(event.endTime || '10:00');
-                setType(event.type || 'meet');
+                setType((event.type === 'task' ? 'meet' : event.type) || 'meet');
                 setLocation(event.location || '');
                 setAttendeesInput(event.attendees?.join(', ') || '');
                 setSelectedContacts((event.linkedTo?.contacts as any) || (event.linkedTo?.contact ? [event.linkedTo.contact] : []));

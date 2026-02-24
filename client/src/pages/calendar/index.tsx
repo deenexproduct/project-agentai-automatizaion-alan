@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Settings, ChevronLeft, ChevronRight, Plus, MapPin, Video } from 'lucide-react';
+import { Settings, ChevronLeft, ChevronRight, Plus, MapPin, Video, CheckSquare, ChevronDown } from 'lucide-react';
 import { format, addMonths, subMonths, subDays, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { parseSafeDate } from '../../utils/date';
 import CalendarConfigModal from '../../components/calendar/CalendarConfigModal';
 import EventFormDrawer from '../../components/calendar/EventFormDrawer';
+import TaskFormDrawer from '../../components/crm/TaskFormDrawer';
 import DailyEventsDrawer from '../../components/calendar/DailyEventsDrawer';
-import { getEvents, EventData } from '../../services/crm.service';
+import { getEvents, EventData, TaskData } from '../../services/crm.service';
 
 export default function CalendarPage() {
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -18,6 +19,10 @@ export default function CalendarPage() {
     const [selectedEvent, setSelectedEvent] = useState<EventData | undefined>(undefined);
     const [isDailyDrawerOpen, setIsDailyDrawerOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+    const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
+    const [selectedTask, setSelectedTask] = useState<TaskData | undefined>(undefined);
+    const [showNewDropdown, setShowNewDropdown] = useState(false);
 
     const loadEvents = async () => {
         try {
@@ -50,8 +55,31 @@ export default function CalendarPage() {
     };
 
     const openEditEvent = (event: EventData) => {
-        setSelectedEvent(event);
-        setIsEventDrawerOpen(true);
+        if (event.type === 'task') {
+            // Reconstruct a partial TaskData object from the unified EventData
+            const taskData: Partial<TaskData> = {
+                _id: event._id,
+                title: event.title.replace('[Tarea] ', ''),
+                type: event.taskType || 'other',
+                status: event.taskStatus || 'pending',
+                priority: event.taskPriority || 'medium',
+                dueDate: event.date,
+                assignedTo: event.assignedTo as any,
+                contact: event.linkedTo?.contacts?.[0] as any,
+                company: event.linkedTo?.company as any,
+                deal: event.linkedTo?.deal as any
+            };
+            setSelectedTask(taskData as TaskData);
+            setIsTaskDrawerOpen(true);
+        } else {
+            setSelectedEvent(event);
+            setIsEventDrawerOpen(true);
+        }
+    };
+
+    const openNewTask = () => {
+        setSelectedTask(undefined);
+        setIsTaskDrawerOpen(true);
     };
 
     const days = eachDayOfInterval({
@@ -98,12 +126,41 @@ export default function CalendarPage() {
                         <Settings size={16} /> Configuración
                     </button>
 
-                    <button
-                        onClick={openNewEvent}
-                        className="h-10 px-5 bg-violet-600 text-white font-bold rounded-[14px] hover:bg-violet-700 hover:-translate-y-0.5 transition-all shadow-[0_4px_12px_rgba(139,92,246,0.3)] flex items-center gap-2 text-[14px]"
-                    >
-                        <Plus size={16} /> Nuevo Evento
-                    </button>
+
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowNewDropdown(!showNewDropdown)}
+                            className="h-10 px-5 bg-violet-600 text-white font-bold rounded-[14px] hover:bg-violet-700 hover:-translate-y-0.5 transition-all shadow-[0_4px_12px_rgba(139,92,246,0.3)] flex items-center gap-2 text-[14px]"
+                        >
+                            <Plus size={16} /> Crear <ChevronDown size={14} className={`transition-transform ${showNewDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {showNewDropdown && (
+                            <>
+                                <div className="fixed inset-0 z-40" onClick={() => setShowNewDropdown(false)}></div>
+                                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-[14px] shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
+                                    <button
+                                        onClick={() => {
+                                            setShowNewDropdown(false);
+                                            openNewEvent();
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] font-bold text-slate-700 hover:bg-violet-50 hover:text-violet-700 flex items-center gap-2"
+                                    >
+                                        <Video size={16} /> Evento o Reunión
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowNewDropdown(false);
+                                            openNewTask();
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2"
+                                    >
+                                        <CheckSquare size={16} /> Tarea Programada
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -148,11 +205,16 @@ export default function CalendarPage() {
                                             <div
                                                 key={event._id}
                                                 onClick={(e) => { e.stopPropagation(); openEditEvent(event); }}
-                                                className={`px-2 py-1.5 rounded-[8px] text-[11px] font-bold shrink-0 cursor-pointer transition-all hover:scale-[1.02] border border-l-4 ${event.type === 'meet' ? 'bg-violet-50 border-violet-100 border-l-violet-500 text-violet-700' : 'bg-amber-50 border-amber-100 border-l-amber-500 text-amber-700'}`}
+                                                className={`px-2 py-1.5 rounded-[8px] text-[11px] font-bold shrink-0 cursor-pointer transition-all hover:scale-[1.02] border border-l-4 
+                                                    ${event.type === 'meet' ? 'bg-violet-50 border-violet-100 border-l-violet-500 text-violet-700' :
+                                                        event.type === 'task' ? 'bg-emerald-50 border-emerald-100 border-l-emerald-500 text-emerald-700' :
+                                                            'bg-amber-50 border-amber-100 border-l-amber-500 text-amber-700'}`}
                                             >
                                                 <div className="flex items-center justify-between gap-1">
                                                     <span className="truncate">{event.title}</span>
-                                                    {event.type === 'meet' ? <Video size={10} className="shrink-0 opacity-70" /> : <MapPin size={10} className="shrink-0 opacity-70" />}
+                                                    {event.type === 'meet' ? <Video size={10} className="shrink-0 opacity-70" /> :
+                                                        event.type === 'task' ? <CheckSquare size={10} className="shrink-0 opacity-70" /> :
+                                                            <MapPin size={10} className="shrink-0 opacity-70" />}
                                                 </div>
                                                 <div className="text-[10px] font-medium opacity-80 mt-1 truncate flex items-center gap-1 text-slate-500">
                                                     {event.startTime} - {event.endTime}
@@ -185,6 +247,14 @@ export default function CalendarPage() {
                 onSaved={loadEvents}
             />
 
+            <TaskFormDrawer
+                open={isTaskDrawerOpen}
+                task={selectedTask}
+                initialDate={selectedDate || currentDate}
+                onClose={() => setIsTaskDrawerOpen(false)}
+                onSaved={loadEvents}
+            />
+
             <DailyEventsDrawer
                 open={isDailyDrawerOpen}
                 date={selectedDate}
@@ -194,11 +264,15 @@ export default function CalendarPage() {
                     setIsDailyDrawerOpen(false);
                     openEditEvent(event);
                 }}
-                onNewEvent={(date) => {
+                onNewEvent={(date, type) => {
                     setIsDailyDrawerOpen(false);
                     setTimeout(() => {
                         setSelectedDate(date);
-                        openNewEvent();
+                        if (type === 'task') {
+                            openNewTask();
+                        } else {
+                            openNewEvent();
+                        }
                     }, 50); // Small delay to allow daily drawer to unmount and avoid event conflicts
                 }}
             />

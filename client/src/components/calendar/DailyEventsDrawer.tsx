@@ -1,4 +1,5 @@
-import { X, Calendar as CalendarIcon, MapPin, Video, User, Plus } from 'lucide-react';
+import { X, Calendar as CalendarIcon, MapPin, Video, User, Plus, CheckSquare, ChevronDown } from 'lucide-react';
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { EventData } from '../../services/crm.service';
@@ -10,10 +11,12 @@ interface DailyEventsDrawerProps {
     events: EventData[];
     onClose: () => void;
     onEditEvent: (event: EventData) => void;
-    onNewEvent: (date: Date) => void;
+    onNewEvent: (date: Date, type: 'event' | 'task') => void;
 }
 
 export default function DailyEventsDrawer({ open, date, events, onClose, onEditEvent, onNewEvent }: DailyEventsDrawerProps) {
+    const [showNewDropdown, setShowNewDropdown] = useState(false);
+
     if (!open || !date) return null;
 
     // Filter events for the selected date and sort them chronologically
@@ -91,15 +94,26 @@ export default function DailyEventsDrawer({ open, date, events, onClose, onEditE
                                     className="relative pl-6 group cursor-pointer"
                                 >
                                     {/* Timeline dot */}
-                                    <div className={`absolute -left-[5px] top-1.5 w-[9px] h-[9px] rounded-full border-2 border-white ring-2 transition-all group-hover:scale-125 ${event.type === 'meet' ? 'bg-violet-500 ring-violet-200' : 'bg-amber-500 ring-amber-200'}`} />
+                                    <div className={`absolute -left-[5px] top-1.5 w-[9px] h-[9px] rounded-full border-2 border-white ring-2 transition-all group-hover:scale-125 
+                                        ${event.type === 'meet' ? 'bg-violet-500 ring-violet-200' :
+                                            event.type === 'task' ? 'bg-emerald-500 ring-emerald-200' :
+                                                'bg-amber-500 ring-amber-200'}`} />
 
                                     {/* Event Card */}
-                                    <div className={`bg-white/80 backdrop-blur-sm border rounded-[16px] p-4 transition-all hover:shadow-md hover:-translate-y-0.5 ${event.type === 'meet' ? 'border-violet-100/80 group-hover:border-violet-300' : 'border-amber-100/80 group-hover:border-amber-300'}`}>
+                                    <div className={`bg-white/80 backdrop-blur-sm border rounded-[16px] p-4 transition-all hover:shadow-md hover:-translate-y-0.5 
+                                        ${event.type === 'meet' ? 'border-violet-100/80 group-hover:border-violet-300' :
+                                            event.type === 'task' ? 'border-emerald-100/80 group-hover:border-emerald-300' :
+                                                'border-amber-100/80 group-hover:border-amber-300'}`}>
 
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex flex-col">
-                                                <span className={`text-[11px] font-extrabold uppercase tracking-wider mb-1 flex items-center gap-1 ${event.type === 'meet' ? 'text-violet-600' : 'text-amber-600'}`}>
-                                                    {event.type === 'meet' ? <Video size={10} /> : <MapPin size={10} />}
+                                                <span className={`text-[11px] font-extrabold uppercase tracking-wider mb-1 flex items-center gap-1 
+                                                    ${event.type === 'meet' ? 'text-violet-600' :
+                                                        event.type === 'task' ? 'text-emerald-600' :
+                                                            'text-amber-600'}`}>
+                                                    {event.type === 'meet' ? <Video size={10} /> :
+                                                        event.type === 'task' ? <CheckSquare size={10} /> :
+                                                            <MapPin size={10} />}
                                                     {event.startTime} - {event.endTime}
                                                 </span>
                                                 <h3 className="text-[15px] font-bold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">
@@ -129,17 +143,43 @@ export default function DailyEventsDrawer({ open, date, events, onClose, onEditE
                 </div>
 
                 {/* Footer Actions */}
-                <div className="p-6 border-t border-slate-200/50 bg-white/50 backdrop-blur-md shrink-0">
+                <div className="p-6 border-t border-slate-200/50 bg-white/50 backdrop-blur-md shrink-0 relative">
                     <button
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            onNewEvent(date);
+                            setShowNewDropdown(!showNewDropdown);
                         }}
                         className="w-full h-11 bg-violet-600 text-white font-bold rounded-[14px] hover:bg-violet-700 hover:-translate-y-0.5 transition-all shadow-[0_4px_12px_rgba(139,92,246,0.3)] flex items-center justify-center gap-2 text-[14px]"
                     >
-                        <Plus size={18} /> Crear Evento
+                        <Plus size={18} /> Crear <ChevronDown size={16} className={`transition-transform ${showNewDropdown ? 'rotate-180' : ''}`} />
                     </button>
+
+                    {showNewDropdown && (
+                        <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowNewDropdown(false)}></div>
+                            <div className="absolute bottom-full left-6 right-6 mb-2 bg-white rounded-[14px] shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2">
+                                <button
+                                    onClick={() => {
+                                        setShowNewDropdown(false);
+                                        onNewEvent(date, 'event');
+                                    }}
+                                    className="w-full text-left px-4 py-3 text-[14px] font-bold text-slate-700 hover:bg-violet-50 hover:text-violet-700 flex items-center gap-2"
+                                >
+                                    <Video size={18} /> Evento o Reunión
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowNewDropdown(false);
+                                        onNewEvent(date, 'task');
+                                    }}
+                                    className="w-full text-left px-4 py-3 text-[14px] font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2"
+                                >
+                                    <CheckSquare size={18} /> Tarea Programada
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
