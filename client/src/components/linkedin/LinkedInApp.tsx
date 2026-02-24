@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import MobileBottomNav from '../layout/MobileBottomNav';
+import MobileMorePage from '../layout/MobileMorePage';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, LayoutDashboard, Database, CheckSquare, Columns3, Calendar as CalendarIcon } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
@@ -68,15 +70,16 @@ const bottomGroup: SidebarItem[] = [
 export default function LinkedInApp() {
     const { tab } = useParams<{ tab: string }>();
     const navigate = useNavigate();
+    const [showMore, setShowMore] = useState(false);
 
     // Default to 'dashboard' if no tab or invalid tab is provided
     const activeTab = (tab as SidebarTab) || 'dashboard';
 
     return (
         <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'linear-gradient(135deg, #f8f7ff 0%, #f0ecff 50%, #ede9fe 100%)' }}>
-            {/* ── Sidebar ───────────────────────────────── */}
+            {/* ── Sidebar (Desktop only) ───────────────────────────────── */}
             <aside
-                className="flex flex-col items-center justify-between py-6 shrink-0"
+                className="hidden md:flex flex-col items-center justify-between py-6 shrink-0"
                 style={{
                     width: 60,
                     background: 'linear-gradient(180deg, #1a0533 0%, #2d1054 100%)',
@@ -144,7 +147,7 @@ export default function LinkedInApp() {
             <main className="flex-1 flex flex-col overflow-hidden">
                 {/* Header */}
                 <header
-                    className="px-6 py-4 flex items-center justify-between shrink-0"
+                    className="px-4 md:px-6 py-3 md:py-4 flex items-center justify-between shrink-0"
                     style={{
                         background: 'rgba(255, 255, 255, 0.7)',
                         backdropFilter: 'blur(20px)',
@@ -183,7 +186,7 @@ export default function LinkedInApp() {
                 </header>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto p-6" style={activeTab === 'voice' || activeTab === 'extension' || activeTab === 'dashboard' || activeTab === 'pipeline' || activeTab === 'companies' || activeTab === 'contacts' || activeTab === 'partners' || activeTab === 'tasks' || activeTab === 'prospecting-crm' ? { padding: '0 24px' } : {}}>
+                <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-20 md:pb-6" style={activeTab === 'voice' || activeTab === 'extension' || activeTab === 'dashboard' || activeTab === 'pipeline' || activeTab === 'companies' || activeTab === 'contacts' || activeTab === 'partners' || activeTab === 'tasks' || activeTab === 'prospecting-crm' ? { paddingLeft: 12, paddingRight: 12, paddingTop: 0, paddingBottom: undefined } : {}}>
                     {activeTab === 'dashboard' && <CRMDashboard />}
                     {activeTab === 'pipeline' && <PipelineBoard />}
                     {activeTab === 'companies' && <CompanyList />}
@@ -202,6 +205,14 @@ export default function LinkedInApp() {
                     {activeTab === 'profile' && <ProfileSettings />}
                 </div>
             </main>
+
+            {/* ── Mobile Bottom Nav ──────────────────────── */}
+            <MobileBottomNav activeTab={activeTab} onMoreClick={() => setShowMore(true)} />
+
+            {/* ── Mobile More Page ────────────────────────── */}
+            {showMore && (
+                <MobileMorePage activeTab={activeTab} onClose={() => setShowMore(false)} />
+            )}
         </div>
     );
 }

@@ -59,7 +59,7 @@ export default function PartnerList() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4">
+        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
             {/* Premium Header Reutilizable */}
             <div className="shrink-0 z-10 bg-white/40 backdrop-blur-2xl rounded-[24px] overflow-hidden mb-4 border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
                 <PremiumHeader

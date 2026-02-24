@@ -89,7 +89,7 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4">
+        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
             {/* Premium Header Reutilizable */}
             <div className="shrink-0 z-10 bg-white/40 backdrop-blur-2xl rounded-[24px] overflow-hidden mb-4 border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
                 <PremiumHeader
@@ -106,7 +106,7 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
             <div className="flex-1 bg-white/40 backdrop-blur-2xl rounded-[32px] shadow-[0_8px_32px_rgba(30,27,75,0.05)] border border-white/60 overflow-hidden relative flex flex-col">
                 {/* Filter Bar */}
                 {showFilters && (
-                    <div className="px-6 py-3 border-b border-white/50 bg-white/40 backdrop-blur-md flex items-center gap-4 animate-in fade-in slide-in-from-top-2 shrink-0">
+                    <div className="px-4 md:px-6 py-3 border-b border-white/50 bg-white/40 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4 animate-in fade-in slide-in-from-top-2 shrink-0">
                         <div className="flex bg-white/50 backdrop-blur-md rounded-[10px] p-1 shadow-sm border border-slate-200/60 divide-x divide-slate-200">
                             <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Rol:</span>
@@ -148,7 +148,7 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
                 )}
 
                 {/* List */}
-                <div className="flex-1 overflow-y-auto p-6 hidden-scrollbar bg-white/20">
+                <div className="flex-1 overflow-y-auto p-3 md:p-6 hidden-scrollbar bg-white/20">
                     {loading ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                             {[4, 5, 6, 7].map(i => (

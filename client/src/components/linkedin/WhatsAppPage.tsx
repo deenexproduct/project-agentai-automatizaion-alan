@@ -127,19 +127,19 @@ export default function WhatsAppPage() {
     ];
 
     return (
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col pb-20 md:pb-0">
             {/* Connection Status + Sub Tabs */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-6 gap-3">
                 <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: '#25D366' }} />
                     <span className="text-sm font-medium" style={{ color: '#25D366' }}>WhatsApp conectado</span>
                 </div>
-                <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'rgba(124, 58, 237, 0.06)' }}>
+                <div className="flex gap-1 p-1 rounded-xl w-full md:w-auto" style={{ background: 'rgba(124, 58, 237, 0.06)' }}>
                     {subTabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveSubTab(tab.id)}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                            className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-all"
                             style={{
                                 background: activeSubTab === tab.id ? 'white' : 'transparent',
                                 color: activeSubTab === tab.id ? '#7c3aed' : '#94a3b8',
@@ -490,7 +490,7 @@ function SchedulerPanel() {
                 </div> {/* End Form Card (Left Column) */}
 
                 {/* Right Column: High-Fidelity WhatsApp Preview Pane */}
-                <div className="rounded-[24px] overflow-hidden flex flex-col sticky top-6 mt-1.5" style={{ height: '580px', border: '6px solid #f1f5f9', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)' }}>
+                <div className="hidden lg:flex rounded-[24px] overflow-hidden flex-col sticky top-6 mt-1.5" style={{ height: '580px', border: '6px solid #f1f5f9', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)' }}>
                     {/* Header */}
                     <div className="px-4 py-3 flex items-center gap-3 relative z-10" style={{ background: '#075E54' }}>
                         <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">

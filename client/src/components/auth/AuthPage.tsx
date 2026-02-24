@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Mail, KeyRound, ArrowRight, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { Mail, KeyRound, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 
 export default function AuthPage() {
     const navigate = useNavigate();
@@ -48,41 +48,58 @@ export default function AuthPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-violet-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="flex justify-center">
-                    <div className="w-16 h-16 bg-gradient-to-tr from-violet-600 to-indigo-500 rounded-2xl shadow-xl flex items-center justify-center transform rotate-3 hover:rotate-6 transition-transform">
-                        <Sparkles className="w-8 h-8 text-white" />
+        <div className="min-h-screen relative flex flex-col justify-center py-12 sm:px-6 lg:px-8 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-violet-50">
+            {/* Background Effects — light mode */}
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+                <div className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-violet-200/40 rounded-full filter blur-[120px] animate-pulse" />
+                <div className="absolute top-40 -right-40 w-[500px] h-[500px] bg-indigo-200/40 rounded-full filter blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
+                <div className="absolute -bottom-40 left-1/2 w-[400px] h-[400px] bg-fuchsia-200/30 rounded-full filter blur-[140px] animate-pulse" style={{ animationDelay: '4s' }} />
+            </div>
+
+            <div className="relative z-10 sm:mx-auto sm:w-full sm:max-w-md">
+                <div className="flex justify-center mb-6">
+                    {/* Brand Logo Container */}
+                    <div className="relative group">
+                        <div className="absolute -inset-1.5 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+                        <div className="relative w-20 h-20 bg-gradient-to-tr from-violet-600 to-indigo-500 backdrop-blur-xl border border-violet-500/30 rounded-3xl shadow-xl shadow-violet-500/20 flex items-center justify-center transform group-hover:scale-105 transition-all duration-300">
+                            <img src="/isotipo.png" alt="Deenex Logo" className="w-12 h-12 object-contain" />
+                        </div>
                     </div>
                 </div>
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
-                    {step === 'email' ? 'Bienvenido a VoiceCommand' : 'Verifica tu identidad'}
+
+                <h2 className="mt-2 text-center text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 drop-shadow-sm">
+                    {step === 'email' ? 'Deenex Comercial' : 'Verifica tu identidad'}
                 </h2>
-                <p className="mt-2 text-center text-sm text-slate-500">
+                <p className="mt-3 text-center text-base text-slate-500 max-w-sm mx-auto">
                     {step === 'email'
-                        ? 'Ingresa tu email para recibir un código de acceso sin contraseñas.'
-                        : `Código enviado a ${email}`}
+                        ? 'Accede de forma segura con tu correo electrónico. No necesitas contraseña.'
+                        : `Hemos enviado un código mágico a ${email}`}
                 </p>
             </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white/80 backdrop-blur-xl py-8 px-4 shadow-2xl sm:rounded-3xl sm:px-10 border border-white/50 ring-1 ring-slate-100">
+            <div className="relative z-10 mt-10 sm:mx-auto sm:w-full sm:max-w-[420px]">
+                {/* Main Card */}
+                <div className="relative bg-white/80 backdrop-blur-2xl py-10 px-6 sm:px-12 shadow-xl shadow-slate-200/50 sm:rounded-[2rem] border border-slate-200/60 overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-violet-500/10">
+
+                    {/* Inner glowing top border */}
+                    <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent"></div>
+
                     {error && (
-                        <div className="mb-6 bg-red-50/80 border border-red-100 rounded-2xl p-4 flex items-start gap-3">
+                        <div className="mb-8 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
                             <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                             <p className="text-sm text-red-600 font-medium leading-relaxed">{error}</p>
                         </div>
                     )}
 
                     {step === 'email' ? (
-                        <form className="space-y-6" onSubmit={handleRequestOTP}>
-                            <div>
-                                <label htmlFor="email" className="block text-sm font-semibold text-slate-700">
+                        <form className="space-y-7" onSubmit={handleRequestOTP}>
+                            <div className="group">
+                                <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2 transition-colors group-focus-within:text-violet-600">
                                     Correo Electrónico
                                 </label>
-                                <div className="mt-2 relative rounded-xl shadow-sm">
-                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                        <Mail className="h-5 w-5 text-slate-400" />
+                                <div className="relative rounded-2xl transition-all duration-300 group-focus-within:shadow-[0_0_20px_-5px_rgba(139,92,246,0.2)] group-focus-within:-translate-y-0.5">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Mail className="h-5 w-5 text-slate-400 transition-colors group-focus-within:text-violet-500" />
                                     </div>
                                     <input
                                         id="email"
@@ -90,8 +107,8 @@ export default function AuthPage() {
                                         required
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="block w-full pl-11 pr-4 py-3 border-0 ring-1 ring-inset ring-slate-200 rounded-xl bg-slate-50 text-slate-900 focus:ring-2 focus:ring-inset focus:ring-violet-600 sm:text-sm sm:leading-6 transition-all"
-                                        placeholder="alannaimtapia@example.com"
+                                        className="block w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 sm:text-sm transition-all duration-300"
+                                        placeholder="tu@empresa.com"
                                     />
                                 </div>
                             </div>
@@ -99,27 +116,36 @@ export default function AuthPage() {
                             <button
                                 type="submit"
                                 disabled={isLoading || !email}
-                                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                                className="relative w-full flex justify-center items-center py-4 px-4 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-violet-500/25 hover:shadow-xl hover:shadow-violet-500/30 hover:-translate-y-1 group overflow-hidden"
                             >
+                                {/* Shine effect */}
+                                <div className="absolute inset-0 -translate-x-full group-hover:animate-[wave_1.5s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12"></div>
+
                                 {isLoading ? (
                                     <Loader2 className="w-5 h-5 animate-spin" />
                                 ) : (
-                                    <span className="flex items-center gap-2">
-                                        Enviar Código
+                                    <span className="flex items-center gap-2 relative z-10">
+                                        Continuar
                                         <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                     </span>
                                 )}
                             </button>
                         </form>
                     ) : (
-                        <form className="space-y-6" onSubmit={handleVerifyOTP}>
-                            <div>
-                                <label htmlFor="otp" className="block text-sm font-semibold text-slate-700">
-                                    Código de 6 dígitos
-                                </label>
-                                <div className="mt-2 relative rounded-xl shadow-sm">
-                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                        <KeyRound className="h-5 w-5 text-slate-400" />
+                        <form className="space-y-7" onSubmit={handleVerifyOTP}>
+                            <div className="group">
+                                <div className="flex justify-between items-center mb-2">
+                                    <label htmlFor="otp" className="block text-sm font-semibold text-slate-700 transition-colors group-focus-within:text-violet-600">
+                                        Código de 6 dígitos
+                                    </label>
+                                    <span className="text-xs text-slate-400 font-mono">
+                                        {otp.length}/6
+                                    </span>
+                                </div>
+
+                                <div className="relative rounded-2xl transition-all duration-300 group-focus-within:shadow-[0_0_20px_-5px_rgba(139,92,246,0.2)] group-focus-within:-translate-y-0.5">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <KeyRound className="h-5 w-5 text-slate-400 transition-colors group-focus-within:text-violet-500" />
                                     </div>
                                     <input
                                         id="otp"
@@ -128,41 +154,60 @@ export default function AuthPage() {
                                         maxLength={6}
                                         value={otp}
                                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                        className="block w-full pl-11 pr-4 py-3 border-0 ring-1 ring-inset ring-slate-200 rounded-xl bg-slate-50 text-slate-900 text-center tracking-[0.5em] text-xl font-mono focus:ring-2 focus:ring-inset focus:ring-violet-600 sm:leading-6 transition-all"
-                                        placeholder="000000"
+                                        className="block w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-center tracking-[0.7em] text-2xl font-mono focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 sm:leading-6 transition-all duration-300"
+                                        placeholder="······"
                                         autoComplete="one-time-code"
                                     />
+                                </div>
+                                <div className="mt-3 text-center">
+                                    <p className="text-xs text-slate-400">
+                                        Revisa tu bandeja de entrada o spam.
+                                    </p>
                                 </div>
                             </div>
 
                             <button
                                 type="submit"
                                 disabled={isLoading || otp.length < 6}
-                                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-violet-500/30 hover:shadow-xl hover:-translate-y-0.5"
+                                className="relative w-full flex justify-center items-center py-4 px-4 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-violet-500/25 hover:shadow-xl hover:shadow-violet-500/30 hover:-translate-y-1 group overflow-hidden"
                             >
+                                <div className="absolute inset-0 -translate-x-full group-hover:animate-[wave_1.5s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12"></div>
                                 {isLoading ? (
                                     <Loader2 className="w-5 h-5 animate-spin" />
                                 ) : (
-                                    'Completar Ingreso'
+                                    <span className="relative z-10">Verificar Código</span>
                                 )}
                             </button>
 
-                            <div className="text-center pt-2">
+                            <div className="text-center pt-4 border-t border-slate-100">
                                 <button
                                     type="button"
                                     onClick={() => setStep('email')}
-                                    className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors"
+                                    className="text-sm font-medium text-slate-400 hover:text-violet-600 transition-colors hover:underline decoration-violet-300/50 underline-offset-4"
                                 >
-                                    Volver e intentar con otro email
+                                    ¿Necesitas usar otro correo?
                                 </button>
                             </div>
                         </form>
                     )}
                 </div>
-                <p className="mt-10 text-center text-xs text-slate-400">
-                    Protegido por seguridad Multi-Tenant (RLS)
-                </p>
+
+                {/* Footer */}
+                <div className="mt-8 text-center">
+                    <p className="text-xs text-slate-400">
+                        Creado por Deenex Technologies
+                    </p>
+                </div>
             </div>
+
+            {/* Custom Animation Styles */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @keyframes wave {
+                    0% { transform: translateX(-100%) skewX(-15deg); }
+                    100% { transform: translateX(200%) skewX(-15deg); }
+                }
+            `}} />
         </div>
     );
 }

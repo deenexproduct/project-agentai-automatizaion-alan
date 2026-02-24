@@ -254,7 +254,7 @@ export default function ProspectingPage() {
                 <div className="absolute -bottom-40 left-1/4 w-80 h-80 bg-cyan-400/10 rounded-full blur-3xl opacity-40 animate-pulse" style={{ animationDuration: '10s' }} />
             </div>
 
-            <div className="relative z-10 w-full flex flex-col space-y-6 pb-12">
+            <div className="relative z-10 w-full flex flex-col space-y-6 pb-24 md:pb-12">
                 {/* ── Notification Banner ──────────────── */}
                 {notification && (
                     <div

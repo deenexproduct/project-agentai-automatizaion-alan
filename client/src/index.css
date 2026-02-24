@@ -35,3 +35,50 @@
     background-clip: text;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MOBILE RESPONSIVE
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Safe area for iPhone notch / home indicator */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Mobile More Page slide-up animation */
+@keyframes mobileMoreSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Prevent body scroll when mobile more page is open */
+body.mobile-more-open {
+  overflow: hidden;
+}
+
+/* Mobile-specific touch improvements */
+@media (max-width: 767px) {
+  /* Ensure smooth scrolling on mobile */
+  .overflow-y-auto,
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Ensure content area has bottom padding for bottom nav */
+  .mobile-content-pad {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Fix viewport height on mobile browsers */
+  .h-screen {
+    height: 100dvh;
+  }
+}

@@ -33,7 +33,7 @@ export default function ProfileSettings() {
         : (user?.email?.substring(0, 2).toUpperCase() || '??');
 
     return (
-        <div className="flex-1 flex items-start justify-center p-8 overflow-y-auto">
+        <div className="flex-1 flex items-start justify-center p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
             <div className="w-full max-w-md space-y-8">
                 {/* Header */}
                 <div className="text-center">

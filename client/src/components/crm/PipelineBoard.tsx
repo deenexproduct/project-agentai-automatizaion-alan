@@ -102,7 +102,7 @@ export default function PipelineBoard() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4">
+        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
             {/* Atmospheric Background Effects */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[32px] -z-10 bg-slate-50/30">
                 <div className="absolute -top-[20%] -left-[10%] w-[70vw] h-[70vw] rounded-full bg-gradient-to-br from-violet-400/20 to-fuchsia-400/20 blur-[120px] mix-blend-multiply opacity-70 animate-[pulse_15s_ease-in-out_infinite_reverse]" />
@@ -148,7 +148,7 @@ export default function PipelineBoard() {
                             {stages.map(stage => (
                                 <div
                                     key={stage.key}
-                                    className="flex flex-col w-[320px] rounded-[28px] h-full border border-white/60 overflow-hidden"
+                                    className="flex flex-col w-[260px] md:w-[320px] rounded-[28px] h-full border border-white/60 overflow-hidden"
                                     style={{
                                         background: 'rgba(255, 255, 255, 0.45)',
                                         backdropFilter: 'blur(24px)',

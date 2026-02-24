@@ -64,12 +64,12 @@ export default function TeamPermissions() {
 
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 py-4 md:py-6 pb-24 md:pb-6">
 
             {/* Left Column: Team List */}
             <div className="lg:col-span-2 space-y-6">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
+                    <div className="px-4 md:px-6 py-4 md:py-5 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
                                 <Users className="w-5 h-5" />
@@ -79,12 +79,12 @@ export default function TeamPermissions() {
                                 <p className="text-sm text-slate-500">{members.length} usuarios registrados en la plataforma</p>
                             </div>
                         </div>
-                        <div className="relative">
+                        <div className="relative w-full md:w-auto">
                             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                                 type="text"
                                 placeholder="Buscar usuario..."
-                                className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none w-64 transition-all"
+                                className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none w-full md:w-64 transition-all"
                             />
                         </div>
                     </div>
@@ -101,7 +101,7 @@ export default function TeamPermissions() {
                             </div>
                         ) : (
                             members.map((member) => (
-                                <div key={member._id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
+                                <div key={member._id} className="p-4 hover:bg-slate-50 transition-colors flex flex-col md:flex-row items-start md:items-center justify-between group gap-3">
                                     <div className="flex items-center gap-4">
                                         <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-100 to-violet-100 flex items-center justify-center shadow-inner border border-white">
                                             <span className="text-indigo-700 font-bold text-lg">
@@ -136,7 +136,7 @@ export default function TeamPermissions() {
                                             </p>
                                         </div>
 
-                                        <button className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Eliminar Acceso">
+                                        <button className="md:opacity-0 md:group-hover:opacity-100 p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Eliminar Acceso">
                                             Eliminar
                                         </button>
                                     </div>

@@ -56,7 +56,7 @@ export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4">
+        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
             {/* Premium Header Reutilizable */}
             <div className="shrink-0 z-10 bg-white/40 backdrop-blur-2xl rounded-[24px] overflow-hidden mb-4 border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
                 <PremiumHeader
@@ -73,7 +73,7 @@ export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id
 
             {/* List */}
             <div className="flex-1 bg-white/40 backdrop-blur-2xl rounded-[32px] shadow-[0_8px_32px_rgba(30,27,75,0.05)] border border-white/60 overflow-hidden relative flex flex-col">
-                <div className="flex-1 overflow-y-auto p-6 hidden-scrollbar bg-white/20">
+                <div className="flex-1 overflow-y-auto p-3 md:p-6 hidden-scrollbar bg-white/20">
                     {loading ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                             {[4, 5, 6].map(i => (

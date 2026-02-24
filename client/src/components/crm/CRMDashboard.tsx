@@ -78,7 +78,7 @@ export default function CRMDashboard() {
     }
 
     return (
-        <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full relative min-h-[calc(100vh-140px)] mt-4">
+        <div className="flex flex-col gap-4 md:gap-6 max-w-7xl mx-auto w-full relative min-h-[calc(100vh-140px)] mt-4 pb-20 md:pb-0">
             {/* Atmospheric Background Effects */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[32px] -z-10">
                 <div className="absolute top-0 -left-20 w-[600px] h-[600px] bg-white/40 rounded-full blur-3xl opacity-50 animate-[pulse_10s_ease-in-out_infinite_reverse]" />
@@ -86,7 +86,7 @@ export default function CRMDashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10 w-full">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 relative z-10 w-full">
                 {/* 1. Monto Mensual */}
                 <StatCard
                     title="Monto Mensual Ganado"
@@ -180,7 +180,7 @@ export default function CRMDashboard() {
                         </div>
 
                         {/* Tasas Generales */}
-                        <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-slate-50/50 rounded-[20px] border border-slate-100">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6 p-3 md:p-4 bg-slate-50/50 rounded-[20px] border border-slate-100">
                             <div className="flex flex-col text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Win Rate (Ganados vs Fallidos)</p>
                                 <div className="text-2xl font-extrabold text-slate-800">{(stats.conversion?.winRate || 0).toFixed(1)}%</div>
@@ -252,7 +252,7 @@ export default function CRMDashboard() {
                 </div>
 
                 {/* Right Column: Timeline */}
-                <div className="bg-white/80 backdrop-blur-xl border border-white/90 rounded-[28px] p-6 shadow-[0_8px_32px_rgba(30,27,75,0.05)] overflow-hidden flex flex-col h-[650px] transition-all duration-300 hover:bg-white/95 hover:shadow-[0_12px_40px_rgba(30,27,75,0.08)]">
+                <div className="bg-white/80 backdrop-blur-xl border border-white/90 rounded-[28px] p-4 md:p-6 shadow-[0_8px_32px_rgba(30,27,75,0.05)] overflow-hidden flex flex-col h-auto md:h-[650px] transition-all duration-300 hover:bg-white/95 hover:shadow-[0_12px_40px_rgba(30,27,75,0.08)]">
                     <div className="flex items-center justify-between mb-5 shrink-0">
                         <h3 className="text-[16px] font-bold text-slate-800 flex items-center gap-2 tracking-tight">
                             <div className="w-8 h-8 rounded-[10px] bg-blue-100 text-blue-600 flex items-center justify-center shadow-inner">

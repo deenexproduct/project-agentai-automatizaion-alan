@@ -240,19 +240,19 @@ export default function VoiceCommandPage() {
 
                 <button
                     onClick={() => setActiveTab('dictate')}
-                    className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 px-6 rounded-full text-sm font-semibold transition-colors duration-300 w-32 ${activeTab === 'dictate' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}
+                    className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-2.5 px-3 md:px-6 rounded-full text-xs md:text-sm font-semibold transition-colors duration-300 ${activeTab === 'dictate' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}
                 >
                     <Mic size={16} /> Grabar
                 </button>
                 <button
                     onClick={() => setActiveTab('upload')}
-                    className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 px-6 rounded-full text-sm font-semibold transition-colors duration-300 w-32 ${activeTab === 'upload' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}
+                    className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-2.5 px-3 md:px-6 rounded-full text-xs md:text-sm font-semibold transition-colors duration-300 ${activeTab === 'upload' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}
                 >
                     <UploadCloud size={16} /> Subir
                 </button>
                 <button
                     onClick={() => setActiveTab('history')}
-                    className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2.5 px-6 rounded-full text-sm font-semibold transition-colors duration-300 w-32 ${activeTab === 'history' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}
+                    className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-2.5 px-3 md:px-6 rounded-full text-xs md:text-sm font-semibold transition-colors duration-300 ${activeTab === 'history' ? 'text-white' : 'text-slate-500 hover:text-slate-800'}`}
                 >
                     <Clock size={16} /> Historial
                 </button>
@@ -261,7 +261,7 @@ export default function VoiceCommandPage() {
     );
 
     return (
-        <div className="flex flex-col h-full bg-transparent overflow-hidden relative">
+        <div className="flex flex-col h-full bg-transparent overflow-hidden relative pb-20 md:pb-0">
 
             {/* Ambient Background Glows */}
             <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-violet-400/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
@@ -371,7 +371,7 @@ export default function VoiceCommandPage() {
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={handleDrop}
-                                className={`relative rounded-[2.5rem] p-20 text-center transition-all duration-500 ease-out overflow-hidden
+                                className={`relative rounded-[1.5rem] md:rounded-[2.5rem] p-8 md:p-20 text-center transition-all duration-500 ease-out overflow-hidden
                                     ${isDragging
                                         ? 'border-2 border-violet-400 bg-violet-50/50 shadow-[0_20px_60px_rgba(124,58,237,0.15)] scale-[1.02] backdrop-blur-xl'
                                         : 'border-2 border-dashed border-slate-300 bg-white/40 backdrop-blur-md hover:border-violet-300 hover:bg-white/60 hover:shadow-[0_20px_40px_rgba(0,0,0,0.03)]'

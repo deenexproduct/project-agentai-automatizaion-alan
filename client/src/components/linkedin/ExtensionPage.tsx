@@ -2,9 +2,9 @@ import { Download, Puzzle, Settings, Upload, CheckCircle2 } from 'lucide-react';
 
 export default function ExtensionPage() {
     return (
-        <div className="max-w-4xl mx-auto h-full overflow-y-auto pb-12 px-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="max-w-4xl mx-auto h-full overflow-y-auto pb-24 md:pb-12 px-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header Area */}
-            <div className="bg-white rounded-3xl p-8 mb-8 shadow-sm border border-purple-100 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+            <div className="bg-white rounded-3xl p-5 md:p-8 mb-6 md:mb-8 shadow-sm border border-purple-100 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-purple-50 rounded-full blur-3xl -mr-10 -mt-20 opacity-50 pointer-events-none" />
                 <div className="absolute bottom-0 left-0 w-40 h-40 bg-blue-50 rounded-full blur-3xl -ml-10 -mb-10 opacity-50 pointer-events-none" />
 

@@ -124,7 +124,7 @@ export default function PublicacionesPage() {
     }, []);
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6 pb-20 md:pb-0">
             {/* Notification */}
             {notification && (
                 <div

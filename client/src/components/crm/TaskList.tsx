@@ -212,7 +212,7 @@ export default function TaskList() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4">
+        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
             {/* Atmospheric Background */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[32px] -z-10">
                 <div className="absolute top-0 -right-20 w-[600px] h-[600px] bg-violet-400/20 rounded-full blur-3xl opacity-50 animate-[pulse_10s_ease-in-out_infinite]" />
