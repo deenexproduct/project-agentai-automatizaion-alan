@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Save, AlertTriangle, Key, Mail, LayoutTemplate, Calendar, CheckSquare } from 'lucide-react';
 import api from '../../lib/axios';
 import { useToastContext } from '../../contexts/ToastContext';
+import { API_BASE } from '../../config';
 
 interface CalendarConfigModalProps {
     open: boolean;
@@ -204,7 +205,7 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
         const top = window.screenY + (window.outerHeight - height) / 2;
 
         const popup = window.open(
-            `http://localhost:3000/api/calendar/auth/google?t=${Date.now()}`,
+            `${API_BASE}/api/calendar/auth/google?t=${Date.now()}`,
             'Google Auth',
             `width=${width},height=${height},left=${left},top=${top}`
         );
