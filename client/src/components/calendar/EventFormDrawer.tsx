@@ -335,6 +335,12 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
                                 />
 
                                 <label className="flex items-center gap-3 p-3 bg-violet-50/50 border border-violet-100 rounded-[12px] cursor-pointer hover:bg-violet-50 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        className="hidden"
+                                        checked={sendInvite}
+                                        onChange={(e) => setSendInvite(e.target.checked)}
+                                    />
                                     <div className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center transition-all ${sendInvite ? 'bg-violet-600 border-violet-600 text-white' : 'border-slate-300 bg-white'}`}>
                                         {sendInvite && <CheckSquare size={12} strokeWidth={3} />}
                                     </div>

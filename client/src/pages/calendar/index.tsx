@@ -93,7 +93,7 @@ export default function CalendarPage() {
         <div className="flex-1 flex flex-col p-8 overflow-y-auto min-h-[calc(100vh-80px)] custom-scrollbar">
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-8 shrink-0 relative z-10">
+            <div className="flex items-center justify-between mb-8 shrink-0 relative z-30">
                 <div className="flex items-center gap-4">
                     <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
                         Calendario
