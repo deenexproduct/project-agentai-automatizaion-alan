@@ -19,69 +19,58 @@ export default function MobileBottomNav({ activeTab, onMoreClick }: MobileBottom
 
     return (
         <>
-            {/* Inline styles for animations */}
             <style>{`
-                @keyframes navPulse {
-                    0%, 100% { transform: scale(1); }
-                    50% { transform: scale(1.08); }
+                @keyframes navSlideUp {
+                    from { transform: translateY(4px); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
                 }
-                @keyframes navDotAppear {
-                    from { transform: translateX(-50%) scaleX(0); opacity: 0; }
-                    to { transform: translateX(-50%) scaleX(1); opacity: 1; }
-                }
-                .mobile-bottom-nav {
-                    -webkit-backdrop-filter: blur(28px) saturate(180%);
-                    backdrop-filter: blur(28px) saturate(180%);
+                .mobile-nav-glass {
+                    -webkit-backdrop-filter: blur(24px) saturate(180%);
+                    backdrop-filter: blur(24px) saturate(180%);
                 }
             `}</style>
 
             <nav
-                className="md:hidden fixed bottom-0 left-0 right-0 z-50 mobile-bottom-nav"
+                className="md:hidden fixed bottom-0 left-0 right-0 z-50 mobile-nav-glass"
                 style={{
-                    background: 'linear-gradient(180deg, rgba(15, 3, 30, 0.92) 0%, rgba(10, 2, 20, 0.98) 100%)',
-                    borderTop: '1px solid rgba(139, 92, 246, 0.12)',
-                    boxShadow: '0 -4px 30px rgba(0, 0, 0, 0.25), 0 -1px 0 rgba(139, 92, 246, 0.08)',
+                    background: 'rgba(255, 255, 255, 0.72)',
+                    borderTop: '1px solid rgba(139, 92, 246, 0.08)',
+                    boxShadow: '0 -1px 20px rgba(124, 58, 237, 0.06), 0 -1px 0 rgba(0, 0, 0, 0.03)',
                     paddingBottom: 'env(safe-area-inset-bottom, 0px)',
                 }}
             >
-                <div className="flex items-end justify-around px-1 pt-2 pb-2.5">
+                <div className="flex items-end justify-around px-2 pt-2 pb-2">
                     {primaryTabs.map(({ id, Icon, label }) => {
                         const isActive = activeTab === id;
                         return (
                             <button
                                 key={id}
                                 onClick={() => navigate(`/linkedin/${id}`)}
-                                className="relative flex flex-col items-center justify-center gap-1 py-1.5 rounded-2xl transition-all duration-300"
+                                className="relative flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl transition-all duration-300"
                                 style={{
-                                    minWidth: 64,
+                                    minWidth: 60,
                                     WebkitTapHighlightColor: 'transparent',
                                 }}
                             >
-                                {/* Active background pill */}
+                                {/* Active pill background */}
                                 <div
-                                    className="absolute inset-x-2 inset-y-0 rounded-2xl transition-all duration-300"
+                                    className="absolute inset-x-1.5 inset-y-0 rounded-2xl transition-all duration-300"
                                     style={{
                                         background: isActive
-                                            ? 'linear-gradient(135deg, rgba(124, 58, 237, 0.18) 0%, rgba(168, 85, 247, 0.10) 100%)'
+                                            ? 'linear-gradient(135deg, rgba(124, 58, 237, 0.10) 0%, rgba(168, 85, 247, 0.06) 100%)'
                                             : 'transparent',
                                         opacity: isActive ? 1 : 0,
-                                        transform: isActive ? 'scale(1)' : 'scale(0.8)',
+                                        transform: isActive ? 'scale(1)' : 'scale(0.85)',
                                     }}
                                 />
 
-                                {/* Icon container */}
-                                <div
-                                    className="relative z-10 flex items-center justify-center w-7 h-7 transition-all duration-300"
-                                    style={{
-                                        animation: isActive ? 'navPulse 2s ease-in-out infinite' : 'none',
-                                    }}
-                                >
+                                {/* Icon */}
+                                <div className="relative z-10 flex items-center justify-center w-7 h-7 transition-all duration-300">
                                     <Icon
-                                        size={isActive ? 23 : 21}
-                                        strokeWidth={isActive ? 2.2 : 1.8}
+                                        size={isActive ? 22 : 20}
+                                        strokeWidth={isActive ? 2.3 : 1.7}
                                         style={{
-                                            color: isActive ? '#c4b5fd' : 'rgba(148, 130, 180, 0.5)',
-                                            filter: isActive ? 'drop-shadow(0 0 8px rgba(167, 139, 250, 0.4))' : 'none',
+                                            color: isActive ? '#7c3aed' : '#94a3b8',
                                             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                         }}
                                     />
@@ -93,25 +82,26 @@ export default function MobileBottomNav({ activeTab, onMoreClick }: MobileBottom
                                     style={{
                                         fontSize: isActive ? 10.5 : 10,
                                         fontWeight: isActive ? 700 : 500,
-                                        color: isActive ? '#c4b5fd' : 'rgba(148, 130, 180, 0.45)',
-                                        letterSpacing: isActive ? '0.02em' : '0',
-                                        textShadow: isActive ? '0 0 12px rgba(167, 139, 250, 0.3)' : 'none',
+                                        color: isActive ? '#7c3aed' : '#94a3b8',
+                                        letterSpacing: isActive ? '0.01em' : '0',
                                     }}
                                 >
                                     {label}
                                 </span>
 
-                                {/* Active indicator line */}
+                                {/* Active indicator dot */}
                                 {isActive && (
                                     <div
-                                        className="absolute -top-[1px] left-1/2"
                                         style={{
-                                            width: 20,
+                                            position: 'absolute',
+                                            top: -1,
+                                            left: '50%',
+                                            transform: 'translateX(-50%)',
+                                            width: 16,
                                             height: 3,
-                                            borderRadius: '0 0 4px 4px',
-                                            background: 'linear-gradient(90deg, #8b5cf6, #a78bfa, #8b5cf6)',
-                                            boxShadow: '0 2px 12px rgba(139, 92, 246, 0.5), 0 0px 20px rgba(139, 92, 246, 0.2)',
-                                            animation: 'navDotAppear 0.3s ease-out forwards',
+                                            borderRadius: '0 0 3px 3px',
+                                            background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)',
+                                            animation: 'navSlideUp 0.25s ease-out forwards',
                                         }}
                                     />
                                 )}
@@ -119,50 +109,43 @@ export default function MobileBottomNav({ activeTab, onMoreClick }: MobileBottom
                         );
                     })}
 
-                    {/* More Button — distinct visual treatment */}
+                    {/* More Button */}
                     <button
                         onClick={onMoreClick}
-                        className="relative flex flex-col items-center justify-center gap-1 py-1.5 rounded-2xl transition-all duration-300"
+                        className="relative flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-2xl transition-all duration-300"
                         style={{
-                            minWidth: 64,
+                            minWidth: 60,
                             WebkitTapHighlightColor: 'transparent',
                         }}
                     >
-                        {/* Active state (when a non-primary tab is selected) */}
                         <div
-                            className="absolute inset-x-2 inset-y-0 rounded-2xl transition-all duration-300"
+                            className="absolute inset-x-1.5 inset-y-0 rounded-2xl transition-all duration-300"
                             style={{
                                 background: !isPrimaryActive
-                                    ? 'linear-gradient(135deg, rgba(124, 58, 237, 0.18) 0%, rgba(168, 85, 247, 0.10) 100%)'
+                                    ? 'linear-gradient(135deg, rgba(124, 58, 237, 0.10) 0%, rgba(168, 85, 247, 0.06) 100%)'
                                     : 'transparent',
                                 opacity: !isPrimaryActive ? 1 : 0,
-                                transform: !isPrimaryActive ? 'scale(1)' : 'scale(0.8)',
+                                transform: !isPrimaryActive ? 'scale(1)' : 'scale(0.85)',
                             }}
                         />
 
-                        <div
-                            className="relative z-10 flex items-center justify-center w-7 h-7 transition-all duration-300"
-                            style={{
-                                animation: !isPrimaryActive ? 'navPulse 2s ease-in-out infinite' : 'none',
-                            }}
-                        >
+                        <div className="relative z-10 flex items-center justify-center w-7 h-7 transition-all duration-300">
                             <div
-                                className="flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-300"
+                                className="flex items-center justify-center w-6 h-6 rounded-lg transition-all duration-300"
                                 style={{
                                     background: !isPrimaryActive
-                                        ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(168, 85, 247, 0.15))'
-                                        : 'rgba(148, 130, 180, 0.08)',
+                                        ? 'rgba(124, 58, 237, 0.10)'
+                                        : 'rgba(148, 163, 184, 0.08)',
                                     border: !isPrimaryActive
-                                        ? '1px solid rgba(167, 139, 250, 0.25)'
-                                        : '1px solid rgba(148, 130, 180, 0.1)',
+                                        ? '1px solid rgba(139, 92, 246, 0.15)'
+                                        : '1px solid rgba(148, 163, 184, 0.12)',
                                 }}
                             >
                                 <Menu
-                                    size={!isPrimaryActive ? 16 : 15}
-                                    strokeWidth={!isPrimaryActive ? 2.2 : 1.8}
+                                    size={14}
+                                    strokeWidth={!isPrimaryActive ? 2.2 : 1.7}
                                     style={{
-                                        color: !isPrimaryActive ? '#c4b5fd' : 'rgba(148, 130, 180, 0.5)',
-                                        filter: !isPrimaryActive ? 'drop-shadow(0 0 8px rgba(167, 139, 250, 0.4))' : 'none',
+                                        color: !isPrimaryActive ? '#7c3aed' : '#94a3b8',
                                         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                     }}
                                 />
@@ -174,9 +157,8 @@ export default function MobileBottomNav({ activeTab, onMoreClick }: MobileBottom
                             style={{
                                 fontSize: !isPrimaryActive ? 10.5 : 10,
                                 fontWeight: !isPrimaryActive ? 700 : 500,
-                                color: !isPrimaryActive ? '#c4b5fd' : 'rgba(148, 130, 180, 0.45)',
-                                letterSpacing: !isPrimaryActive ? '0.02em' : '0',
-                                textShadow: !isPrimaryActive ? '0 0 12px rgba(167, 139, 250, 0.3)' : 'none',
+                                color: !isPrimaryActive ? '#7c3aed' : '#94a3b8',
+                                letterSpacing: !isPrimaryActive ? '0.01em' : '0',
                             }}
                         >
                             Más
@@ -184,14 +166,16 @@ export default function MobileBottomNav({ activeTab, onMoreClick }: MobileBottom
 
                         {!isPrimaryActive && (
                             <div
-                                className="absolute -top-[1px] left-1/2"
                                 style={{
-                                    width: 20,
+                                    position: 'absolute',
+                                    top: -1,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    width: 16,
                                     height: 3,
-                                    borderRadius: '0 0 4px 4px',
-                                    background: 'linear-gradient(90deg, #8b5cf6, #a78bfa, #8b5cf6)',
-                                    boxShadow: '0 2px 12px rgba(139, 92, 246, 0.5), 0 0px 20px rgba(139, 92, 246, 0.2)',
-                                    animation: 'navDotAppear 0.3s ease-out forwards',
+                                    borderRadius: '0 0 3px 3px',
+                                    background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)',
+                                    animation: 'navSlideUp 0.25s ease-out forwards',
                                 }}
                             />
                         )}

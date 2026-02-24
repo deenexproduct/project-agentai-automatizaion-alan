@@ -68,6 +68,8 @@ export default function TaskList() {
             } else {
                 await updateTask(draggableId, { status: newStatus });
             }
+            // Reload to stay in sync with backend
+            loadData();
         } catch (error) {
             console.error("Failed to move task", error);
             loadData(); // revert

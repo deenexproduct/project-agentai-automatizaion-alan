@@ -244,7 +244,18 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
             if (!payload.dueDate) delete payload.dueDate;
 
             if (task?._id) {
-                await updateTask(task._id, payload);
+                // If status changed to completed, use the completeTask endpoint
+                if (formData.status === 'completed' && task.status !== 'completed') {
+                    await completeTask(task._id);
+                    // Also update other fields if any changed
+                    const { status, ...otherPayload } = payload;
+                    const hasOtherChanges = Object.keys(otherPayload).some(k => (otherPayload as any)[k] !== undefined);
+                    if (hasOtherChanges) {
+                        await updateTask(task._id, otherPayload);
+                    }
+                } else {
+                    await updateTask(task._id, payload);
+                }
             } else {
                 await createTask(payload);
             }
@@ -356,6 +367,30 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                             </select>
                         </div>
                     </div>
+
+                    {/* Status Selector — only show when editing an existing task */}
+                    {task && task._id && (
+                        <div className="space-y-2">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                <Clock size={14} className="text-violet-500" />
+                                Estado
+                            </label>
+                            <select
+                                value={formData.status}
+                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                className={`w-full px-4 py-3 bg-white/60 backdrop-blur-sm border rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold shadow-inner appearance-none cursor-pointer ${formData.status === 'pending' ? 'border-slate-300 text-slate-700' :
+                                        formData.status === 'in_progress' ? 'border-blue-300 text-blue-700 bg-blue-50/50' :
+                                            formData.status === 'completed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50/50' :
+                                                'border-red-300 text-red-700 bg-red-50/50'
+                                    }`}
+                            >
+                                <option value="pending">Pendiente</option>
+                                <option value="in_progress">En Progreso</option>
+                                <option value="completed">Completada</option>
+                                <option value="cancelled">Cancelada</option>
+                            </select>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
