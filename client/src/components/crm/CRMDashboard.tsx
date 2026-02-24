@@ -211,7 +211,7 @@ export default function CRMDashboard() {
 
                         {tasks.length === 0 ? (
                             <div className="text-center py-10 bg-white/40 rounded-[20px] border border-white/50 shadow-inner">
-                                <CheckCircleIcon size={40} className="mx-auto mb-3 opacity-30 text-emerald-500" />
+                                <CheckCircleIcon className="w-10 h-10 mx-auto mb-3 opacity-30 text-emerald-500" />
                                 <p className="text-[14px] font-bold text-slate-500">No hay tareas pendientes para hoy.</p>
                             </div>
                         ) : (

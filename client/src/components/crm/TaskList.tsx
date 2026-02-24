@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getTasks, completeTask, updateTask, TaskData } from '../../services/crm.service';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, Search, Plus, AlertCircle, LayoutList, GripVertical } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, CalendarDays, Search, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical } from 'lucide-react';
 import { formatToArgentineDateTime, isTodayInArgentina, isOverdueExact } from '../../utils/date';
 import TaskFormDrawer from './TaskFormDrawer';
 import PremiumHeader from './PremiumHeader';
@@ -231,18 +231,22 @@ export default function TaskList() {
                     addLabel="Nueva Tarea"
                     containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
                 >
-                    <div className="hidden md:flex bg-white/50 backdrop-blur-sm p-1 rounded-[12px] border border-white/60 shadow-inner mr-1">
+                    <div className="flex bg-white/50 backdrop-blur-sm p-1 rounded-[12px] border border-white/60 shadow-inner">
                         <button
                             onClick={() => setViewMode('date')}
-                            className={`px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'date' ? 'bg-white shadow-sm text-violet-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
+                            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'date' ? 'bg-white shadow-sm text-violet-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
+                            title="Vista por Fecha"
                         >
-                            Vista por Fecha
+                            <CalendarDays size={14} />
+                            <span className="hidden md:inline">Fecha</span>
                         </button>
                         <button
                             onClick={() => setViewMode('kanban')}
-                            className={`px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'kanban' ? 'bg-white shadow-sm text-violet-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
+                            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'kanban' ? 'bg-white shadow-sm text-violet-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
+                            title="Vista Kanban"
                         >
-                            Vista Kanban
+                            <LayoutGrid size={14} />
+                            <span className="hidden md:inline">Kanban</span>
                         </button>
                     </div>
                 </PremiumHeader>

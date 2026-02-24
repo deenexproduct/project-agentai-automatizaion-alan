@@ -234,25 +234,37 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
         e.preventDefault();
         setSaving(true);
         try {
-            const payload = {
-                ...formData,
-                company: formData.company?._id as any,
-                contact: formData.contact?._id as any,
-                deal: formData.deal?._id as any,
-                assignedTo: (formData as any).assignedTo ? (formData as any).assignedTo._id || (formData as any).assignedTo : null,
+            // Build a clean payload with ONLY the fields the backend schema accepts.
+            // This prevents sending virtual fields (isOverdue), metadata (_id, createdAt, __v),
+            // or populated objects that would cause Mongoose CastErrors.
+            const assignedToRaw = (formData as any).assignedTo;
+            const assignedToId = assignedToRaw
+                ? (typeof assignedToRaw === 'string' ? assignedToRaw : assignedToRaw._id || null)
+                : null;
+
+            const payload: Record<string, any> = {
+                title: formData.title,
+                type: formData.type,
+                priority: formData.priority,
+                status: formData.status,
+                company: formData.company?._id || null,
+                contact: formData.contact?._id || null,
+                deal: formData.deal?._id || null,
+                assignedTo: assignedToId,
             };
-            if (!payload.dueDate) delete payload.dueDate;
+
+            // Only send dueDate if it has a value; convert datetime-local to ISO
+            if (formData.dueDate) {
+                payload.dueDate = new Date(formData.dueDate as string).toISOString();
+            }
 
             if (task?._id) {
-                // If status changed to completed, use the completeTask endpoint
+                // If status changed to completed, use the completeTask endpoint for Activity creation
                 if (formData.status === 'completed' && task.status !== 'completed') {
                     await completeTask(task._id);
-                    // Also update other fields if any changed
-                    const { status, ...otherPayload } = payload;
-                    const hasOtherChanges = Object.keys(otherPayload).some(k => (otherPayload as any)[k] !== undefined);
-                    if (hasOtherChanges) {
-                        await updateTask(task._id, otherPayload);
-                    }
+                    // Also update other changed fields (excluding status, already handled)
+                    const { status, ...otherFields } = payload;
+                    await updateTask(task._id, otherFields);
                 } else {
                     await updateTask(task._id, payload);
                 }
@@ -261,9 +273,9 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
             }
             onSaved();
             onClose();
-        } catch (error) {
-            console.error('Error saving task:', error);
-            alert('Error al guardar la tarea');
+        } catch (error: any) {
+            console.error('Error saving task:', error?.response?.data || error?.message || error);
+            alert(`Error al guardar la tarea: ${error?.response?.data?.error || error?.message || 'Error desconocido'}`);
         } finally {
             setSaving(false);
         }
@@ -379,9 +391,9 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                                 value={formData.status}
                                 onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                                 className={`w-full px-4 py-3 bg-white/60 backdrop-blur-sm border rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold shadow-inner appearance-none cursor-pointer ${formData.status === 'pending' ? 'border-slate-300 text-slate-700' :
-                                        formData.status === 'in_progress' ? 'border-blue-300 text-blue-700 bg-blue-50/50' :
-                                            formData.status === 'completed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50/50' :
-                                                'border-red-300 text-red-700 bg-red-50/50'
+                                    formData.status === 'in_progress' ? 'border-blue-300 text-blue-700 bg-blue-50/50' :
+                                        formData.status === 'completed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50/50' :
+                                            'border-red-300 text-red-700 bg-red-50/50'
                                     }`}
                             >
                                 <option value="pending">Pendiente</option>

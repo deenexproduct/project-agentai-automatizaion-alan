@@ -25,8 +25,8 @@ export default function PremiumHeader({
     containerClassName
 }: PremiumHeaderProps) {
     return (
-        <div className={`flex flex-col gap-3 bg-white/80 backdrop-blur-2xl shrink-0 relative z-10 border-b border-white/50 shadow-[0_4px_20px_rgba(30,27,75,0.03)] ${containerClassName || 'px-6 py-4'}`}>
-            {/* Row 1: Search + Add (always same line) */}
+        <div className={`bg-white/80 backdrop-blur-2xl shrink-0 relative z-10 border-b border-white/50 shadow-[0_4px_20px_rgba(30,27,75,0.03)] ${containerClassName || 'px-6 py-4'}`}>
+            {/* Single row: Search + Children + Filter + Add */}
             <div className="flex items-center gap-2 md:gap-3 w-full">
                 {/* Search Bar */}
                 <div className="relative group/search flex-1 min-w-0">
@@ -50,7 +50,14 @@ export default function PremiumHeader({
                     )}
                 </div>
 
-                {/* Filter button (inline on mobile too) */}
+                {/* Inline children (view toggle, metrics, etc.) */}
+                {children && (
+                    <div className="flex items-center shrink-0">
+                        {children}
+                    </div>
+                )}
+
+                {/* Filter button */}
                 {onFilter && (
                     <button
                         onClick={onFilter}
@@ -72,13 +79,6 @@ export default function PremiumHeader({
                     <span className="relative z-10 drop-shadow-sm hidden md:inline">{addLabel}</span>
                 </button>
             </div>
-
-            {/* Row 2: Custom Content (e.g. Metrics) - only if children exist */}
-            {children && (
-                <div className="flex items-center gap-2 shrink-0">
-                    {children}
-                </div>
-            )}
         </div>
     );
 }

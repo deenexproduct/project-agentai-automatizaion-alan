@@ -120,7 +120,7 @@ export default function PipelineBoard() {
                     addLabel="Nuevo Deal"
                     containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
                 >
-                    <div className="flex gap-2 items-center mx-2">
+                    <div className="hidden md:flex gap-2 items-center mx-2">
                         <div className="px-3 py-1.5 bg-emerald-50/80 border border-emerald-100 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] rounded-[12px] text-[12px] font-bold text-emerald-700 flex items-center gap-1.5 transition-all hover:bg-emerald-100/80 whitespace-nowrap">
                             <DollarSign size={14} strokeWidth={2.5} className="text-emerald-500" />
                             {stages.reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.value || 0), 0), 0).toLocaleString()} <span className="text-emerald-500/70 font-medium">en juego</span>
