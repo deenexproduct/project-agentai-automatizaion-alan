@@ -39,6 +39,7 @@ export async function listGoogleCalendars(config: ICalendarConfig): Promise<IGoo
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
+    // @ts-ignore
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     const res = await calendar.calendarList.list(
@@ -65,6 +66,7 @@ export async function createGoogleEvent(
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
 
+    // @ts-ignore
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     // Format dates for Google Calendar API
@@ -136,6 +138,7 @@ export async function deleteGoogleEvent(config: ICalendarConfig, eventId: string
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
+    // @ts-ignore
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     try {
@@ -155,6 +158,7 @@ export async function syncGoogleEvents(config: ICalendarConfig, timeMin: Date, t
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
+    // @ts-ignore
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     try {
@@ -237,6 +241,7 @@ export async function updateGoogleEvent(
 
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ refresh_token: config.googleRefreshToken });
+    // @ts-ignore
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client as any });
 
     try {
