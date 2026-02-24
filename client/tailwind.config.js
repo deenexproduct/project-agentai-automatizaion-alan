@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-import branding from '../branding.json' assert { type: 'json' };
+import branding from './branding.json' assert { type: 'json' };
 
 export default {
     content: [

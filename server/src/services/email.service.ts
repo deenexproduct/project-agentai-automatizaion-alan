@@ -466,15 +466,15 @@ class EmailService {
         const html = this.compileEventTemplate(template, event, locationOrLink, contactName);
 
         await mailTransporter.sendMail({
-          from: \`"\${pName} Calendar" <\${senderEmail}>\`,
+          from: `"${pName} Calendar" <${senderEmail}>`,
           to: attendeeEmail,
-          subject: \`Invitación Confirmada: \${event.title}\`,
-          text: \`Has sido invitado a \${event.title}. Fecha: \${format(new Date(event.date), 'dd/MM/yyyy')} a las \${event.startTime}.\`,
+          subject: `Invitación Confirmada: ${event.title}`,
+          text: `Has sido invitado a ${event.title}. Fecha: ${format(new Date(event.date), 'dd/MM/yyyy')} a las ${event.startTime}.`,
           html: html,
         });
       }
 
-      console.log(`[emailService] ✅ Invitaciones enviadas para el evento ${ event.title }`);
+      console.log(`[emailService] ✅ Invitaciones enviadas para el evento ${event.title}`);
       return true;
     } catch (error: any) {
       console.error(`[emailService] ❌ Error al enviar invitaciones de evento: `, error.message);
