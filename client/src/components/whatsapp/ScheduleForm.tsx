@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import AudioRecorder from './AudioRecorder'
 import ChatPicker, { ChatItem } from '../shared/ChatPicker'
+import { formatToLocalDateInput } from '../../utils/date';
 
 import api from '../../lib/axios';
 
@@ -364,7 +365,7 @@ export default function ScheduleForm() {
                                     type="date"
                                     value={scheduledDate}
                                     onChange={(e) => setScheduledDate(e.target.value)}
-                                    min={new Date().toISOString().split('T')[0]}
+                                    min={formatToLocalDateInput(new Date())}
                                     className="w-full rounded-[16px] p-4 text-[14px] transition-all outline-none text-slate-700"
                                     style={{
                                         background: 'rgba(255, 255, 255, 0.6)',

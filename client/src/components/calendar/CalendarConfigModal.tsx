@@ -111,6 +111,9 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
 
     // Google Calendar State
     const [googleConnected, setGoogleConnected] = useState(false);
+    const [calendars, setCalendars] = useState<{ id: string, summary: string, primary?: boolean }[]>([]);
+    const [selectedCalendarId, setSelectedCalendarId] = useState<string>('primary');
+    const [loadingCalendars, setLoadingCalendars] = useState(false);
 
     // SMTP Config State
     const [smtpHost, setSmtpHost] = useState('');
@@ -140,9 +143,50 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                 if (res.data.emailTemplate) {
                     setTemplateBody(res.data.emailTemplate);
                 }
+
+                // Fetch calendars if connected
+                if (res.data.googleRefreshToken) {
+                    fetchCalendars();
+                    if (res.data.googleCalendarId) setSelectedCalendarId(res.data.googleCalendarId);
+                }
             }
         } catch (error) {
             console.error('Error loading calendar config:', error);
+        }
+    };
+
+    const fetchCalendars = async () => {
+        setLoadingCalendars(true);
+        try {
+            const res = await api.get('/calendar/calendars');
+            if (res.data && res.data.calendars) {
+                console.log('All calendars fetched:', res.data.calendars);
+
+                const filtered = res.data.calendars.filter((c: any) =>
+                    c.summary && c.summary.toLowerCase().includes('deenex')
+                );
+
+                console.log('Filtered calendars:', filtered);
+
+                // If the filter resulted in empty, fallback to showing all calendars so they aren't stuck
+                if (filtered.length > 0) {
+                    setCalendars(filtered);
+                    // Automatically select the first specific one if NO specific one is currently selected in the DB
+                    setSelectedCalendarId((currentId) => {
+                        if (currentId === 'primary' || !currentId) {
+                            api.put('/calendar/config', { googleCalendarId: filtered[0].id });
+                            return filtered[0].id;
+                        }
+                        return currentId;
+                    });
+                } else {
+                    setCalendars(res.data.calendars);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching google calendars:', error);
+        } finally {
+            setLoadingCalendars(false);
         }
     };
 
@@ -153,7 +197,43 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
     }, [open]);
 
     const handleGoogleConnect = () => {
-        window.location.href = 'http://localhost:3000/api/calendar/auth/google';
+        // Open the auth URL in a popup
+        const width = 500;
+        const height = 600;
+        const left = window.screenX + (window.outerWidth - width) / 2;
+        const top = window.screenY + (window.outerHeight - height) / 2;
+
+        const popup = window.open(
+            `http://localhost:3000/api/calendar/auth/google?t=${Date.now()}`,
+            'Google Auth',
+            `width=${width},height=${height},left=${left},top=${top}`
+        );
+
+        // Listen for the callback message from the popup
+        const handleMessage = async (event: MessageEvent) => {
+            // In production, verify event.origin matches backend URL
+            if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+                window.removeEventListener('message', handleMessage);
+
+                // Save the token to config
+                try {
+                    setSaving(true);
+                    await api.put('/calendar/config', {
+                        googleRefreshToken: event.data.refreshToken
+                    });
+                    setGoogleConnected(true);
+                    addToast('success', 'Google Calendar conectado exitosamente.');
+                    fetchCalendars();
+                } catch (error) {
+                    console.error('Error saving google token:', error);
+                    addToast('error', 'Error al guardar conexión de Google.');
+                } finally {
+                    setSaving(false);
+                }
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
     };
 
     const handleSaveSMTP = async (e: React.FormEvent) => {
@@ -219,21 +299,21 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                         <nav className="space-y-1">
                             <button
                                 onClick={() => setActiveTab('google')}
-                                className={`w-full text - left px - 4 py - 3 rounded - [12px] flex items - center gap - 3 transition - colors ${activeTab === 'google' ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'} `}
+                                className={`w-full text-left px-4 py-3 rounded-[12px] flex items-center gap-3 transition-colors ${activeTab === 'google' ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'}`}
                             >
                                 <Calendar size={18} className={activeTab === 'google' ? 'text-violet-600' : 'text-slate-400'} />
                                 Google Calendar
                             </button>
                             <button
                                 onClick={() => setActiveTab('smtp')}
-                                className={`w - full text - left px - 4 py - 3 rounded - [12px] flex items - center gap - 3 transition - colors ${activeTab === 'smtp' ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'} `}
+                                className={`w-full text-left px-4 py-3 rounded-[12px] flex items-center gap-3 transition-colors ${activeTab === 'smtp' ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'}`}
                             >
                                 <Mail size={18} className={activeTab === 'smtp' ? 'text-violet-600' : 'text-slate-400'} />
                                 Servidor SMTP
                             </button>
                             <button
                                 onClick={() => setActiveTab('template')}
-                                className={`w - full text - left px - 4 py - 3 rounded - [12px] flex items - center gap - 3 transition - colors ${activeTab === 'template' ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'} `}
+                                className={`w-full text-left px-4 py-3 rounded-[12px] flex items-center gap-3 transition-colors ${activeTab === 'template' ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'}`}
                             >
                                 <LayoutTemplate size={18} className={activeTab === 'template' ? 'text-violet-600' : 'text-slate-400'} />
                                 Plantilla Invitaciones
@@ -258,7 +338,62 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                                             <div>
                                                 <h4 className="text-[16px] font-bold text-slate-800 mb-2">Cuenta Conectada</h4>
                                                 <p className="text-[14px] text-green-600 font-medium bg-green-50 py-1.5 px-3 rounded-full inline-block mb-6">Sincronización Activa</p>
-                                                <button className="px-6 py-2.5 bg-red-50 text-red-600 font-bold rounded-[12px] hover:bg-red-100 transition-colors w-full">
+
+                                                <div className="mb-6 text-left">
+                                                    <label className="block text-[13px] font-bold text-slate-700 mb-2">Calendario a Sincronizar</label>
+                                                    {loadingCalendars ? (
+                                                        <div className="flex items-center gap-2 text-slate-500 text-sm">
+                                                            <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                                                            Cargando calendarios...
+                                                        </div>
+                                                    ) : (
+                                                        <select
+                                                            className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-[12px] text-[14px] text-slate-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm outline-none"
+                                                            value={selectedCalendarId}
+                                                            onChange={async (e) => {
+                                                                const newId = e.target.value;
+                                                                console.log('User selected new calendar:', newId);
+                                                                setSelectedCalendarId(newId);
+                                                                try {
+                                                                    await api.put('/calendar/config', { googleCalendarId: newId });
+                                                                    console.log('Successfully saved to backend:', newId);
+                                                                    addToast('success', 'Calendario seleccionado guardado.');
+                                                                } catch (err) {
+                                                                    console.error('Failed to save to backend:', err);
+                                                                    addToast('error', 'Error al guardar el calendario.');
+                                                                }
+                                                            }}
+                                                        >
+                                                            {calendars.map(cal => (
+                                                                <option key={cal.id} value={cal.id}>
+                                                                    {cal.summary} {cal.primary ? '(Principal)' : ''}
+                                                                </option>
+                                                            ))}
+                                                            {!calendars.find(c => c.primary)?.id && selectedCalendarId === 'primary' && (
+                                                                <option value="primary">Calendario Principal</option>
+                                                            )}
+                                                        </select>
+                                                    )}
+                                                    <p className="text-[12px] text-slate-500 mt-2">Los eventos se crearán en este calendario exclusivo.</p>
+                                                </div>
+
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            setSaving(true);
+                                                            await api.put('/calendar/config', { googleRefreshToken: null, googleCalendarId: null });
+                                                            setGoogleConnected(false);
+                                                            setCalendars([]);
+                                                            setSelectedCalendarId('primary');
+                                                            addToast('success', 'Google Calendar desconectado.');
+                                                        } catch (err) {
+                                                            addToast('error', 'Error al desconectar.');
+                                                        } finally {
+                                                            setSaving(false);
+                                                        }
+                                                    }}
+                                                    className="px-6 py-2.5 bg-red-50 text-red-600 font-bold rounded-[12px] hover:bg-red-100 transition-colors w-full"
+                                                >
                                                     Desconectar
                                                 </button>
                                             </div>
@@ -272,26 +407,6 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                                                 </button>
                                             </div>
                                         )}
-                                    </div>
-                                    <div className="mt-8">
-                                        <div className="flex items-start gap-4 p-5 bg-amber-50/50 border border-amber-100 rounded-[16px]">
-                                            <AlertTriangle size={24} className="text-amber-500 shrink-0 mt-0.5" />
-                                            <div>
-                                                <h4 className="text-[14px] font-bold text-amber-900 mb-1">Requiere Configuración de Proyecto GCP</h4>
-                                                <p className="text-[13px] text-amber-800 leading-relaxed mb-3">
-                                                    Para que la integración funcione correctamente, es necesario configurar las credenciales OAuth 2.0 en Google Cloud Platform.
-                                                </p>
-                                                <div className="bg-white/80 p-3 rounded-[10px] border border-amber-200/50 shadow-sm">
-                                                    <p className="text-[12px] text-amber-800 mb-2 flex items-center gap-2">
-                                                        <Key size={14} /> <strong>Variables de Entorno Necesarias:</strong>
-                                                    </p>
-                                                    <code className="text-[11px] bg-white border border-amber-100 px-2 py-1 rounded block mb-1 break-all">GOOGLE_CLIENT_ID="tu-client-id"</code>
-                                                    <code className="text-[11px] bg-white border border-amber-100 px-2 py-1 rounded block mb-2 break-all">GOOGLE_CLIENT_SECRET="tu-client-secret"</code>
-                                                    <p className="text-[12px] text-amber-800 mt-2">Redirect URI Autorizado:</p>
-                                                    <code className="text-[11px] bg-white border border-amber-100 px-1 py-0.5 rounded break-all select-all">http://localhost:3000/api/calendar/auth/google/callback</code>
-                                                </div>
-                                            </div>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -379,13 +494,13 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                                     <div className="flex bg-slate-100 p-1 rounded-[10px]">
                                         <button
                                             onClick={() => setShowPreview(false)}
-                                            className={`px - 4 py - 1.5 rounded - [8px] text - [13px] font - bold flex items - center gap - 2 transition - all ${!showPreview ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'} `}
+                                            className={`px-4 py-1.5 rounded-[8px] text-[13px] font-bold flex items-center gap-2 transition-all ${!showPreview ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                                         >
                                             <CheckSquare size={14} /> Editor de Código
                                         </button>
                                         <button
                                             onClick={() => setShowPreview(true)}
-                                            className={`px - 4 py - 1.5 rounded - [8px] text - [13px] font - bold flex items - center gap - 2 transition - all ${showPreview ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'} `}
+                                            className={`px-4 py-1.5 rounded-[8px] text-[13px] font-bold flex items-center gap-2 transition-all ${showPreview ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                                         >
                                             <LayoutTemplate size={14} /> Vista Previa
                                         </button>
@@ -469,10 +584,10 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
             <style>{`
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideInUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-                .custom - scrollbar - dark:: -webkit - scrollbar { width: 8px; }
-                .custom - scrollbar - dark:: -webkit - scrollbar - track { background: transparent; }
-                .custom - scrollbar - dark:: -webkit - scrollbar - thumb { background: rgba(255, 255, 255, 0.1); border - radius: 4px; }
-                .custom - scrollbar - dark:: -webkit - scrollbar - thumb:hover { background: rgba(255, 255, 255, 0.2); }
+                .custom-scrollbar-dark::-webkit-scrollbar { width: 8px; }
+                .custom-scrollbar-dark::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar-dark::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+                .custom-scrollbar-dark::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 `}</style>
         </div>
     );

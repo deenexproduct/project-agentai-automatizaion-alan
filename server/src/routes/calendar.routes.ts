@@ -1,14 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { getAuthUrl, getOAuthClient, createGoogleEvent, deleteGoogleEvent } from '../services/google-calendar.service';
+import { getAuthUrl, getOAuthClient, createGoogleEvent, deleteGoogleEvent, listGoogleCalendars } from '../services/google-calendar.service';
 import { CalendarConfig } from '../models/calendar-config.model';
 import { Event } from '../models/event.model';
 import { emailService } from '../services/email.service';
+import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
 
 // ── Google OAuth Routes ────────────────────────────────────────
 
 router.get('/auth/google', (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     const url = getAuthUrl();
     res.redirect(url);
 });
@@ -56,6 +58,9 @@ router.get('/auth/google/callback', async (req: Request, res: Response) => {
     }
 });
 
+// Apply auth middleware to all subsequent routes (but not the Google Auth redirects/callbacks)
+router.use(authMiddleware);
+
 // ── Configuration CRUD ─────────────────────────────────────────
 
 router.get('/config', async (req: Request, res: Response) => {
@@ -82,6 +87,20 @@ router.put('/config', async (req: Request, res: Response) => {
     }
 });
 
+router.get('/calendars', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id.toString();
+        const config = await CalendarConfig.findOne({ userId }).lean();
+        if (!config || !config.googleRefreshToken) {
+            return res.status(400).json({ error: 'Google Calendar no conectado' });
+        }
+        const calendars = await listGoogleCalendars(config as any);
+        res.json({ calendars });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ── Events CRUD ─────────────────────────────────────────
 
 router.get('/events', async (req: Request, res: Response) => {
@@ -93,6 +112,23 @@ router.get('/events', async (req: Request, res: Response) => {
         let query: any = { $or: [{ userId }, { assignedTo: userId }] };
         if (start && end) {
             query.date = { $gte: new Date(start as string), $lte: new Date(end as string) };
+        }
+
+        // Pull Sync from Google Calendar
+        try {
+            const config = await CalendarConfig.findOne({ userId }).lean();
+            if (config?.googleRefreshToken && start && end) {
+                // Determine sync window (extend by a bit just in case)
+                const syncStart = new Date(start as string);
+                const syncEnd = new Date(end as string);
+
+                // Fetch and upsert any external changes first
+                await import('../services/google-calendar.service').then(m =>
+                    m.syncGoogleEvents(config as any, syncStart, syncEnd)
+                );
+            }
+        } catch (syncErr) {
+            console.error('Failed background sync with Google Calendar:', syncErr);
         }
 
         const events = await Event.find(query)
@@ -165,6 +201,19 @@ router.put('/events/:id', async (req: Request, res: Response) => {
         ).lean();
 
         if (!event) return res.status(404).json({ error: 'Event not found' });
+
+        // Update Google Calendar if linked
+        const assigneeId = event.assignedTo || event.userId;
+        const config = await CalendarConfig.findOne({ userId: assigneeId }).lean();
+        if (config?.googleRefreshToken && event.googleEventId) {
+            try {
+                await import('../services/google-calendar.service').then(m =>
+                    m.updateGoogleEvent(config as any, event.googleEventId as string, event as any)
+                );
+            } catch (err) {
+                console.error('Failed updating google event', err);
+            }
+        }
 
         // Send updated invitations if requested
         if (sendInvite) {

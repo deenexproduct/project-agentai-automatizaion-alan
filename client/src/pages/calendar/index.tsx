@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Settings, ChevronLeft, ChevronRight, Plus, MapPin, Video } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday } from 'date-fns';
+import { format, addMonths, subMonths, subDays, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { parseSafeDate } from '../../utils/date';
 import CalendarConfigModal from '../../components/calendar/CalendarConfigModal';
 import EventFormDrawer from '../../components/calendar/EventFormDrawer';
+import DailyEventsDrawer from '../../components/calendar/DailyEventsDrawer';
 import { getEvents, EventData } from '../../services/crm.service';
 
 export default function CalendarPage() {
@@ -14,12 +16,14 @@ export default function CalendarPage() {
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [isEventDrawerOpen, setIsEventDrawerOpen] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<EventData | undefined>(undefined);
+    const [isDailyDrawerOpen, setIsDailyDrawerOpen] = useState(false);
+    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
     const loadEvents = async () => {
         try {
             setLoading(true);
-            const start = startOfWeek(startOfMonth(currentDate));
-            const end = endOfWeek(endOfMonth(currentDate));
+            const start = subDays(startOfWeek(startOfMonth(currentDate)), 1);
+            const end = addDays(endOfWeek(endOfMonth(currentDate)), 1);
             const data = await getEvents({
                 start: start.toISOString(),
                 end: end.toISOString()
@@ -58,7 +62,7 @@ export default function CalendarPage() {
     const weekDays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
     return (
-        <div className="flex-1 flex flex-col p-8 overflow-hidden h-[calc(100vh-80px)]">
+        <div className="flex-1 flex flex-col p-8 overflow-y-auto min-h-[calc(100vh-80px)] custom-scrollbar">
 
             {/* Header */}
             <div className="flex items-center justify-between mb-8 shrink-0 relative z-10">
@@ -115,7 +119,7 @@ export default function CalendarPage() {
                 </div>
 
                 {/* Days Grid */}
-                <div className="flex-1 grid grid-cols-7 grid-rows-5 overflow-hidden">
+                <div className="flex-1 grid grid-cols-7 overflow-hidden">
                     {loading ? (
                         <div className="col-span-7 row-span-5 flex items-center justify-center bg-white/50 backdrop-blur-sm">
                             <div className="animate-spin w-10 h-10 border-4 border-transparent border-t-violet-600 rounded-full" />
@@ -123,16 +127,15 @@ export default function CalendarPage() {
                     ) : (
                         days.map((day, idx) => {
                             const isCurrentMonth = isSameMonth(day, currentDate);
-                            const dayEvents = events.filter(e => isSameDay(new Date(e.date), day));
+                            const dayEvents = events.filter(e => isSameDay(parseSafeDate(e.date), day));
 
                             return (
                                 <div
                                     key={day.toISOString()}
-                                    className={`min-h-[100px] border-r border-b border-slate-100 p-2 flex flex-col gap-1 transition-colors ${!isCurrentMonth ? 'bg-slate-50/50' : 'bg-white hover:bg-violet-50/20'}`}
+                                    className={` border-r border-b border-slate-100 p-2 flex flex-col gap-1 transition-colors ${!isCurrentMonth ? 'bg-slate-50/50' : 'bg-white hover:bg-violet-50/20'} ${dayEvents.length > 0 ? 'min-h-[200px]' : 'min-h-[100px]'}`}
                                     onClick={() => {
-                                        // Optional: set initial date for new event based on clicked day
-                                        setSelectedEvent(undefined);
-                                        // We'd need to lift state to pass initialDate, skipping for simplicity now
+                                        setSelectedDate(day);
+                                        setIsDailyDrawerOpen(true);
                                     }}
                                 >
                                     <div className="flex justify-end p-1">
@@ -145,7 +148,7 @@ export default function CalendarPage() {
                                             <div
                                                 key={event._id}
                                                 onClick={(e) => { e.stopPropagation(); openEditEvent(event); }}
-                                                className={`px-2 py-1.5 rounded-[8px] text-[11px] font-bold truncate cursor-pointer transition-all hover:scale-[1.02] border border-l-4 ${event.type === 'meet' ? 'bg-violet-50 border-violet-100 border-l-violet-500 text-violet-700' : 'bg-amber-50 border-amber-100 border-l-amber-500 text-amber-700'}`}
+                                                className={`px-2 py-1.5 rounded-[8px] text-[11px] font-bold shrink-0 cursor-pointer transition-all hover:scale-[1.02] border border-l-4 ${event.type === 'meet' ? 'bg-violet-50 border-violet-100 border-l-violet-500 text-violet-700' : 'bg-amber-50 border-amber-100 border-l-amber-500 text-amber-700'}`}
                                             >
                                                 <div className="flex items-center justify-between gap-1">
                                                     <span className="truncate">{event.title}</span>
@@ -179,6 +182,17 @@ export default function CalendarPage() {
                 event={selectedEvent}
                 onClose={() => setIsEventDrawerOpen(false)}
                 onSaved={loadEvents}
+            />
+
+            <DailyEventsDrawer
+                open={isDailyDrawerOpen}
+                date={selectedDate}
+                events={events}
+                onClose={() => setIsDailyDrawerOpen(false)}
+                onEditEvent={(event) => {
+                    setIsDailyDrawerOpen(false);
+                    openEditEvent(event);
+                }}
             />
         </div>
     );

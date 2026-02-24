@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Clock, Send, CheckCircle2, XCircle, RefreshCw, Loader2, BarChart3, Trash2, Zap, MessageCircle } from 'lucide-react';
+import { formatToLocalDateInput } from '../../utils/date';
 import QRLogin from '../whatsapp/QRLogin';
 import AudioRecorder from '../whatsapp/AudioRecorder';
 import ChatPicker, { ChatItem } from '../shared/ChatPicker';
@@ -439,7 +440,7 @@ function SchedulerPanel() {
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">📅 Fecha</label>
-                            <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} min={new Date().toISOString().split('T')[0]} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none text-sm" />
+                            <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} min={formatToLocalDateInput(new Date())} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none text-sm" />
                         </div>
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">🕐 Hora</label>

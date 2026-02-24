@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2 } from 'lucide-react';
-import { TaskData, createTask, updateTask, deleteTask, getCompanies, getContacts, getDealsPipeline, getCompany, CompanyData, ContactData, DealData, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { TaskData, createTask, updateTask, deleteTask, getContacts, getCompanies, getDealsPipeline, getCompany, ContactData, CompanyData, DealData, getTeamUsers, TeamUser, completeTask } from '../../services/crm.service';
+import { formatToLocalDateTimeInput } from '../../utils/date';
 import AutocompleteInput from '../common/AutocompleteInput';
 import OwnerAvatar from '../common/OwnerAvatar';
 
@@ -45,7 +46,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                 type: task.type || 'follow_up',
                 priority: task.priority || 'medium',
                 status: task.status || 'pending',
-                dueDate: task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '', // 'YYYY-MM-DDTHH:mm'
+                dueDate: task.dueDate ? formatToLocalDateTimeInput(task.dueDate) : '', // 'YYYY-MM-DDTHH:mm'
                 company: task.company,
                 contact: task.contact,
                 deal: task.deal,
@@ -93,13 +94,15 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
         if (formData.contact && formData.contact.fullName === contactSearch) return;
         const fetchConts = async () => {
             try {
-                const res = await getContacts({ search: contactSearch, limit: 10 });
+                // If a company is selected, filter contacts by that company
+                const companyId = formData.company?._id;
+                const res = await getContacts({ search: contactSearch, limit: companyId ? 100 : 10, company: companyId });
                 setContacts(res.contacts);
             } catch { /* ignore */ }
         };
         const timeoutId = setTimeout(fetchConts, 300);
         return () => clearTimeout(timeoutId);
-    }, [contactSearch, open, formData.contact]);
+    }, [contactSearch, open, formData.contact, formData.company]);
 
     // Autocomplete Deals
     useEffect(() => {
@@ -175,14 +178,45 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
         }
     };
 
-    const handleSelectContact = (cont: ContactData) => {
+    const handleSelectContact = async (cont: ContactData) => {
         setFormData(prev => ({ ...prev, contact: { _id: cont._id, fullName: cont.fullName } as any }));
         setContactSearch(cont.fullName);
+
+        // Auto-select company from contact if one isn't selected
+        if (!formData.company && cont.company) {
+            try {
+                // Fetch the full company details or just use the nested object if it has id and name
+                setFormData(prev => ({ ...prev, company: cont.company as any }));
+                setCompanySearch(cont.company.name || '');
+            } catch (error) {
+                console.error("Error auto-selecting company from contact", error);
+            }
+        }
     };
 
-    const handleSelectDeal = (deal: DealData) => {
+    const handleSelectDeal = async (deal: DealData) => {
         setFormData(prev => ({ ...prev, deal: { _id: deal._id, title: deal.title } as any }));
         setDealSearch(deal.title);
+
+        // Auto-select company from deal
+        if (!formData.company && deal.company) {
+            setFormData(prev => ({ ...prev, company: deal.company as any }));
+            setCompanySearch(deal.company.name || '');
+
+            // Fetch company details to see if there's only 1 contact
+            if (!formData.contact || !formData.contact._id) {
+                try {
+                    const companyDetails = await getCompany(deal.company._id!);
+                    if (companyDetails.contacts && companyDetails.contacts.length === 1) {
+                        const singleContact = companyDetails.contacts[0];
+                        setFormData(prev => ({ ...prev, contact: { _id: singleContact._id, fullName: singleContact.fullName } as any }));
+                        setContactSearch(singleContact.fullName);
+                    }
+                } catch (error) {
+                    console.error("Error auto-selecting contact from deal's company", error);
+                }
+            }
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -242,7 +276,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                             <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-sm">
                                 <Flag size={16} className="text-white" />
                             </div>
-                            {task ? `Editar ${formData.title || 'Tarea'}` : 'Nueva Tarea'}
+                            {task ? `Editar ${formData.title || 'Tarea'} ` : 'Nueva Tarea'}
                         </h2>
                         <p className="text-[13px] font-medium text-slate-500 mt-1 ml-10">
                             {task ? 'Modifica los datos de la tarea.' : 'Programa una nueva tarea.'}
@@ -375,7 +409,7 @@ export default function TaskFormDrawer({ task, open, onClose, onSaved }: Props) 
                         options={deals.map(d => ({
                             _id: d._id,
                             title: d.title,
-                            subtitle: d.value != null ? `$${d.value}` : undefined,
+                            subtitle: d.value != null ? `$${d.value} ` : undefined,
                             data: d
                         }))}
                         onSelect={(opt) => handleSelectDeal(opt.data)}

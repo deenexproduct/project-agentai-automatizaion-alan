@@ -12,6 +12,7 @@ export interface ICalendarConfig extends Document {
     userId: mongoose.Types.ObjectId;
     googleRefreshToken?: string;
     googleEmail?: string;
+    googleCalendarId?: string;
     smtp?: ISmtpConfig;
     emailTemplate?: string;
     createdAt: Date;
@@ -23,6 +24,7 @@ const CalendarConfigSchema = new Schema(
         userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
         googleRefreshToken: { type: String },
         googleEmail: { type: String },
+        googleCalendarId: { type: String },
         smtp: {
             host: { type: String },
             port: { type: Number },

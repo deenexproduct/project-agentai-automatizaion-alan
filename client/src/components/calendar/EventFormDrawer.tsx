@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, Clock, Calendar as CalendarIcon, MapPin, Video, Users, CheckSquare, Trash2, AlertTriangle, Search } from 'lucide-react';
-import { EventData, createEvent, updateEvent, deleteEvent, getContacts, getCompanies, getDealsPipeline, ContactData, CompanyData, DealData, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { EventData, createEvent, updateEvent, deleteEvent, getContacts, getCompanies, getDealsPipeline, getCompany, ContactData, CompanyData, DealData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import AutocompleteInput from '../common/AutocompleteInput';
 import { useAuth } from '../../contexts/AuthContext';
+import { formatToLocalDateInput } from '../../utils/date';
 
 interface EventFormDrawerProps {
     open: boolean;
@@ -14,7 +15,7 @@ interface EventFormDrawerProps {
 export default function EventFormDrawer({ open, event, onClose, onSaved }: EventFormDrawerProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(formatToLocalDateInput(new Date()));
     const [startTime, setStartTime] = useState('09:00');
     const [endTime, setEndTime] = useState('10:00');
     const [type, setType] = useState<'meet' | 'physical'>('meet');
@@ -48,23 +49,25 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
             if (event) {
                 setTitle(event.title || '');
                 setDescription(event.description || '');
-                const eventDate = new Date(event.date);
-                if (!isNaN(eventDate.getTime())) {
-                    setDate(eventDate.toISOString().split('T')[0]);
-                }
+                setDate(formatToLocalDateInput(event.date));
                 setStartTime(event.startTime || '09:00');
                 setEndTime(event.endTime || '10:00');
                 setType(event.type || 'meet');
                 setLocation(event.location || '');
                 setAttendeesInput(event.attendees?.join(', ') || '');
                 setSelectedContacts((event.linkedTo?.contacts as any) || (event.linkedTo?.contact ? [event.linkedTo.contact] : []));
-                setSelectedCompany(event.linkedTo?.company || null);
-                setSelectedDeal(event.linkedTo?.deal || null);
+                const company = event.linkedTo?.company as any;
+                const deal = event.linkedTo?.deal as any;
+                setSelectedCompany(company || null);
+                setSelectedDeal(deal || null);
+                setCompanySearch(company?.name || '');
+                setDealSearch(deal?.title || '');
+                setContactSearch(''); // Contacts are multiple, search stays empty
                 setSelectedUser((event.assignedTo as any)?._id || event.userId?._id || user?._id || '');
             } else {
                 setTitle('');
                 setDescription('');
-                setDate(new Date().toISOString().split('T')[0]);
+                setDate(formatToLocalDateInput(new Date()));
                 setStartTime('09:00');
                 setEndTime('10:00');
                 setType('meet');
@@ -73,6 +76,9 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
                 setSelectedContacts([]);
                 setSelectedCompany(null);
                 setSelectedDeal(null);
+                setCompanySearch('');
+                setDealSearch('');
+                setContactSearch('');
                 setSelectedUser(user?._id || '');
             }
             setSendInvite(true);
@@ -82,7 +88,7 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
 
     useEffect(() => {
         if (!open) return;
-        getContacts({ limit: 50 }).then(data => setContacts(data.contacts)).catch(console.error);
+        // We don't fetch contacts globally anymore, it will be handled by the company filter effect
         getCompanies({ limit: 50 }).then(data => setCompanies(data.companies)).catch(console.error);
         getDealsPipeline().then(data => {
             const allDeals = data.stages.flatMap(s => s.deals);
@@ -90,6 +96,21 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
         }).catch(console.error);
         getTeamUsers().then(setTeamUsers).catch(console.error);
     }, [open]);
+
+    // Autocomplete Contacts
+    useEffect(() => {
+        if (!open) return;
+        const fetchConts = async () => {
+            try {
+                // If a company is selected, filter contacts by that company
+                const companyId = selectedCompany?._id;
+                const res = await getContacts({ search: contactSearch, limit: companyId ? 100 : 10, company: companyId });
+                setContacts(res.contacts);
+            } catch { /* ignore */ }
+        };
+        const timeoutId = setTimeout(fetchConts, 300);
+        return () => clearTimeout(timeoutId);
+    }, [contactSearch, open, selectedCompany]);
 
     useEffect(() => {
         const emails = selectedContacts.map(c => c.email).filter(e => e) as string[];
@@ -334,9 +355,20 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
                                         options={contacts.filter(c => !selectedContacts.some(sc => sc._id === c._id)).map(c => ({ _id: c._id!, title: c.fullName, subtitle: c.company?.name, data: c }))}
                                         value={contactSearch}
                                         onChangeSearch={setContactSearch}
-                                        onSelect={(item) => {
+                                        onSelect={async (item) => {
                                             setContactSearch('');
-                                            setSelectedContacts(prev => [...prev, item.data as any]);
+                                            const cont = item.data as ContactData;
+                                            setSelectedContacts(prev => [...prev, cont]);
+
+                                            // Auto-select company from contact if one isn't selected
+                                            if (!selectedCompany && cont.company) {
+                                                try {
+                                                    setSelectedCompany(cont.company as any);
+                                                    setCompanySearch(cont.company.name || '');
+                                                } catch (error) {
+                                                    console.error("Error auto-selecting company from contact", error);
+                                                }
+                                            }
                                         }}
                                     />
                                     {selectedContacts.length > 0 && (
@@ -359,9 +391,29 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
                                     options={companies.map(c => ({ _id: c._id!, title: c.name, data: c }))}
                                     value={companySearch}
                                     onChangeSearch={setCompanySearch}
-                                    onSelect={(item) => {
+                                    onSelect={async (item) => {
                                         setCompanySearch(item.title);
-                                        setSelectedCompany(item.data as any);
+                                        const comp = item.data as CompanyData;
+                                        setSelectedCompany(comp);
+
+                                        try {
+                                            const companyDetails = await getCompany(comp._id!);
+
+                                            // Auto-select contact if only 1 exists and none are selected
+                                            if (companyDetails.contacts && companyDetails.contacts.length === 1 && selectedContacts.length === 0) {
+                                                const singleContact = companyDetails.contacts[0];
+                                                setSelectedContacts([singleContact as any]);
+                                            }
+
+                                            // Auto-select deal if only 1 exists and none are selected
+                                            if (companyDetails.deals && companyDetails.deals.length === 1 && !selectedDeal) {
+                                                const singleDeal = companyDetails.deals[0];
+                                                setSelectedDeal(singleDeal as any);
+                                                setDealSearch(singleDeal.title);
+                                            }
+                                        } catch (error) {
+                                            console.error('Error fetching company details for auto-selection', error);
+                                        }
                                     }}
                                 />
                                 <AutocompleteInput
@@ -371,9 +423,29 @@ export default function EventFormDrawer({ open, event, onClose, onSaved }: Event
                                     options={deals.map(d => ({ _id: d._id!, title: d.title, subtitle: d.company?.name, data: d }))}
                                     value={dealSearch}
                                     onChangeSearch={setDealSearch}
-                                    onSelect={(item) => {
+                                    onSelect={async (item) => {
                                         setDealSearch(item.title);
-                                        setSelectedDeal(item.data as any);
+                                        const deal = item.data as DealData;
+                                        setSelectedDeal(deal);
+
+                                        // Auto-select company from deal
+                                        if (!selectedCompany && deal.company) {
+                                            setSelectedCompany(deal.company as any);
+                                            setCompanySearch(deal.company.name || '');
+
+                                            // Fetch company details to see if there's only 1 contact
+                                            if (selectedContacts.length === 0) {
+                                                try {
+                                                    const companyDetails = await getCompany(deal.company._id!);
+                                                    if (companyDetails.contacts && companyDetails.contacts.length === 1) {
+                                                        const singleContact = companyDetails.contacts[0];
+                                                        setSelectedContacts([singleContact as any]);
+                                                    }
+                                                } catch (error) {
+                                                    console.error("Error auto-selecting contact from deal's company", error);
+                                                }
+                                            }
+                                        }
                                     }}
                                 />
                             </div>

@@ -259,7 +259,7 @@ console.log('📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard'
 // System Settings & Partners
 app.use('/api/system-config', authMiddleware, systemConfigRoutes);
 app.use('/api/partners', authMiddleware, partnerRoutes);
-app.use('/api/calendar', authMiddleware, calendarRoutes);
+app.use('/api/calendar', calendarRoutes);
 console.log('⚙️ System Config & Partners routes mounted');
 
 // Start server
