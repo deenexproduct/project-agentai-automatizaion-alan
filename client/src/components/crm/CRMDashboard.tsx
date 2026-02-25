@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Building2, Users, Briefcase, CheckSquare, Clock, ArrowUpRight, Plus, Activity, Trophy, XCircle, AlertCircle } from 'lucide-react';
 import { getDashboardStats, getTasks, getActivities, DashboardStats, TaskData, ActivityData, completeTask, getDealsPipeline } from '../../services/crm.service';
 import { formatToArgentineDate } from '../../utils/date';
 import ActivityTimeline from './ActivityTimeline';
-import CompanyFormDrawer from './CompanyFormDrawer';
-import DealFormDrawer from './DealFormDrawer';
-import ContactActivityDrawer from './ContactActivityDrawer';
 
 export default function CRMDashboard() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -14,25 +12,32 @@ export default function CRMDashboard() {
     const [pipelineStages, setPipelineStages] = useState<{ key: string, label: string }[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const [isCompanyDrawerOpen, setIsCompanyDrawerOpen] = useState(false);
-    const [isDealDrawerOpen, setIsDealDrawerOpen] = useState(false);
-    const [isContactDrawerOpen, setIsContactDrawerOpen] = useState(false);
 
-    // Store selected IDs to pass to Drawers when clicked from timeline
-    const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
-    const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
-    const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
 
-    const handleTimelineClick = (item: ActivityData & { source?: string }) => {
-        if (item.source === 'deal' || item.deal) {
-            setSelectedDealId(item._id ? item._id : (typeof item.deal === 'object' && item.deal ? item.deal._id : (item.deal as unknown as string || '')));
-            setIsDealDrawerOpen(true);
-        } else if (item.source === 'company' || item.company) {
-            setSelectedCompanyId(item._id ? item._id : (typeof item.company === 'object' && item.company ? item.company._id : (item.company as unknown as string || '')));
-            setIsCompanyDrawerOpen(true);
-        } else if (item.source === 'contact' || item.contact) {
-            setSelectedContactId(item._id ? item._id : (typeof item.contact === 'object' && item.contact ? item.contact._id : (item.contact as unknown as string || '')));
-            setIsContactDrawerOpen(true);
+    const navigate = useNavigate();
+
+    // Editing rate state
+    const [estimatedSuccessRate, setEstimatedSuccessRate] = useState(25);
+    const [isEditingRate, setIsEditingRate] = useState(false);
+    const [tempRate, setTempRate] = useState("25");
+
+    const handleTimelineClick = (item: ActivityData & { source?: string, contact?: any, deal?: any, company?: any }) => {
+        console.log("Timeline clicked:", item);
+        if (item.source === 'deal') {
+            navigate(`/linkedin/pipeline/${item._id}`);
+        } else if (item.source === 'company') {
+            navigate(`/linkedin/companies/${item._id}`);
+        } else if (item.source === 'contact') {
+            navigate(`/linkedin/contacts/${item._id}`);
+        } else {
+            // It's a standard activity or task
+            if (item.deal) {
+                navigate(`/linkedin/pipeline/${typeof item.deal === 'object' ? item.deal._id : item.deal}`);
+            } else if (item.company) {
+                navigate(`/linkedin/companies/${typeof item.company === 'object' ? item.company._id : item.company}`);
+            } else if (item.contact) {
+                navigate(`/linkedin/contacts/${typeof item.contact === 'object' ? item.contact._id : item.contact}`);
+            }
         }
     };
 
@@ -59,6 +64,13 @@ export default function CRMDashboard() {
     useEffect(() => {
         loadData();
     }, []);
+
+    // Debugging the stats object here directly to help trace the metrics issue
+    useEffect(() => {
+        if (stats) {
+            console.log('--- RAW DASHBOARD STATS ---', stats);
+        }
+    }, [stats]);
 
     const handleCompleteTask = async (taskId: string) => {
         try {
@@ -106,13 +118,42 @@ export default function CRMDashboard() {
                     title="Mensual Estimado"
                     value={
                         (stats.revenue?.wonThisMonth || []).length > 0
-                            ? (stats.revenue?.wonThisMonth || []).map(r => `${r.currency || '$'} ${Math.round(r.amount * 0.25).toLocaleString()}`).join(' + ')
+                            ? (stats.revenue?.wonThisMonth || []).map(r => `${r.currency || '$'} ${Math.round(r.amount * (estimatedSuccessRate / 100)).toLocaleString()}`).join(' + ')
                             : '$0'
                     }
                     icon={Briefcase}
                     color="text-cyan-600"
                     bg="bg-cyan-100"
-                    subtitle="25% tasa de éxito proyectada"
+                    subtitle={
+                        isEditingRate ? (
+                            <form
+                                onSubmit={(e) => { e.preventDefault(); setEstimatedSuccessRate(Number(tempRate) || 0); setIsEditingRate(false); }}
+                                className="flex items-center gap-1.5 inline-flex relative z-20"
+                            >
+                                <input
+                                    type="number"
+                                    value={tempRate}
+                                    onChange={(e) => setTempRate(e.target.value)}
+                                    className="w-14 px-1.5 py-0.5 text-xs border border-cyan-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-slate-700 bg-white"
+                                    autoFocus
+                                    onBlur={() => { setEstimatedSuccessRate(Number(tempRate) || 0); setIsEditingRate(false); }}
+                                    min="0"
+                                    max="100"
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                <span className="text-slate-500 text-[11px] font-bold">% tasa proyectada</span>
+                            </form>
+                        ) : (
+                            <span
+                                onClick={(e) => { e.preventDefault(); setIsEditingRate(true); setTempRate(estimatedSuccessRate.toString()); }}
+                                className="cursor-pointer hover:text-cyan-600 flex items-center gap-1 transition-colors group/edit"
+                                title="Haga clic para editar el porcentaje"
+                            >
+                                {estimatedSuccessRate}% tasa de éxito proyectada
+                                <span className="opacity-0 group-hover/edit:opacity-100 transition-opacity text-[10px]">✏️</span>
+                            </span>
+                        )
+                    }
                 />
 
                 {/* 2. Locales */}
@@ -198,17 +239,25 @@ export default function CRMDashboard() {
                         </div>
 
                         {/* Tasas Generales */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6 p-3 md:p-4 bg-slate-50/50 rounded-[20px] border border-slate-100">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6 p-3 md:p-4 bg-slate-50/50 rounded-[20px] border border-slate-100">
                             <div className="flex flex-col text-center">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Win Rate (Ganados vs Fallidos)</p>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Lead a Reuniones</p>
+                                <div className="text-2xl font-extrabold text-blue-600">{(stats.conversion?.leadToMeeting || 0).toFixed(1)}%</div>
+                            </div>
+                            <div className="flex flex-col text-center border-l lg:border-r border-slate-200">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1" title="Tasa de Conversión de Mensajes">Lead a Coordinando</p>
+                                <div className="text-2xl font-extrabold text-indigo-500">{(stats.conversion?.leadToScheduling || 0).toFixed(1)}%</div>
+                            </div>
+                            <div className="flex flex-col text-center lg:border-r border-slate-200">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Win Rate</p>
                                 <div className="text-2xl font-extrabold text-slate-800">{(stats.conversion?.winRate || 0).toFixed(1)}%</div>
                             </div>
-                            <div className="flex flex-col text-center border-l border-r border-slate-200">
+                            <div className="flex flex-col text-center border-l lg:border-l-0 lg:border-r border-slate-200">
                                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Lead a Ganado</p>
                                 <div className="text-2xl font-extrabold text-emerald-600">{(stats.conversion?.leadToWon || 0).toFixed(1)}%</div>
                             </div>
-                            <div className="flex flex-col text-center">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Rechazo (Lead a Denegado)</p>
+                            <div className="flex flex-col text-center col-span-2 lg:col-span-1">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Rechazo</p>
                                 <div className="text-2xl font-extrabold text-red-500">{(stats.conversion?.leadToRejected || 0).toFixed(1)}%</div>
                             </div>
                         </div>
@@ -285,27 +334,6 @@ export default function CRMDashboard() {
                 </div>
             </div>
 
-            <CompanyFormDrawer
-                open={isCompanyDrawerOpen}
-                company={selectedCompanyId ? { _id: selectedCompanyId } as any : undefined}
-                onClose={() => { setIsCompanyDrawerOpen(false); setSelectedCompanyId(null); }}
-                onSaved={loadData}
-            />
-
-            <DealFormDrawer
-                open={isDealDrawerOpen}
-                deal={selectedDealId ? { _id: selectedDealId } as any : undefined}
-                stages={pipelineStages}
-                onClose={() => { setIsDealDrawerOpen(false); setSelectedDealId(null); }}
-                onSaved={loadData}
-            />
-
-            <ContactActivityDrawer
-                open={isContactDrawerOpen}
-                contactId={selectedContactId || ''}
-                onClose={() => { setIsContactDrawerOpen(false); setSelectedContactId(null); }}
-                onSaved={loadData}
-            />
         </div>
     );
 }
@@ -329,10 +357,10 @@ function StatCard({ title, value, subtitle, icon: Icon, color, bg, trend }: any)
                     <p className="text-[13px] font-bold text-slate-500 mb-1 uppercase tracking-wide">{title}</p>
                     <h3 className="text-3xl font-bold text-slate-800 tracking-tight">{value}</h3>
                     {(subtitle || trend) && (
-                        <p className={`text-[12px] mt-2 font-bold ${trend ? 'text-emerald-500 bg-emerald-50/80 px-2 py-0.5 rounded-[6px] inline-block border border-emerald-100/50' : 'text-slate-500'}`}>
+                        <div className={`text-[12px] mt-2 font-bold ${trend ? 'text-emerald-500 bg-emerald-50/80 px-2 py-0.5 rounded-[6px] inline-block border border-emerald-100/50' : 'text-slate-500'}`}>
                             {trend && <ArrowUpRight size={12} className="inline mr-0.5" />}
                             {trend || subtitle}
-                        </p>
+                        </div>
                     )}
                 </div>
                 <div className={`w-12 h-12 rounded-[16px] ${bg} flex items-center justify-center shadow-inner`}>

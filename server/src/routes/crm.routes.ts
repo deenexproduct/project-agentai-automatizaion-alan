@@ -103,8 +103,19 @@ router.get('/companies', async (req: Request, res: Response) => {
         const companyIds = companies.map(c => c._id);
         const [contactCounts, dealCounts] = await Promise.all([
             CrmContact.aggregate([
-                { $match: { company: { $in: companyIds }, userId: (req as any).user._id } },
-                { $group: { _id: '$company', count: { $sum: 1 } } },
+                { $match: { $or: [{ company: { $in: companyIds } }, { companies: { $in: companyIds } }], userId: (req as any).user._id } },
+                {
+                    $project: {
+                        matchedCompanies: {
+                            $setUnion: [
+                                { $cond: [{ $in: ['$company', companyIds] }, ['$company'], []] },
+                                { $filter: { input: { $ifNull: ['$companies', []] }, cond: { $in: ['$$this', companyIds] } } }
+                            ]
+                        }
+                    }
+                },
+                { $unwind: '$matchedCompanies' },
+                { $group: { _id: '$matchedCompanies', count: { $sum: 1 } } },
             ]),
             Deal.aggregate([
                 { $match: { company: { $in: companyIds }, userId: (req as any).user._id } },
@@ -113,9 +124,14 @@ router.get('/companies', async (req: Request, res: Response) => {
         ]);
 
         const contactMap: Record<string, number> = {};
-        for (const c of contactCounts) contactMap[c._id.toString()] = c.count;
+        for (const c of contactCounts) {
+            console.log(`[DEBUG] mapped ObjectId`, c._id, `to count`, c.count);
+            contactMap[c._id.toString()] = c.count;
+        }
         const dealMap: Record<string, number> = {};
         for (const d of dealCounts) dealMap[d._id.toString()] = d.count;
+
+        console.log(`[DEBUG] Final contactMap`, contactMap);
 
         const enriched = companies.map(c => ({
             ...c,
@@ -178,7 +194,7 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
         if (!company) return res.status(404).json({ error: 'Company not found' });
 
         const [contacts, deals, tasks, activities] = await Promise.all([
-            CrmContact.find({ company: req.params.id, userId }).sort({ isResponsible: -1, fullName: 1 }).lean(),
+            CrmContact.find({ $or: [{ company: req.params.id }, { companies: req.params.id }], userId }).sort({ isResponsible: -1, fullName: 1 }).lean(),
             Deal.find({ company: req.params.id, userId })
                 .populate('primaryContact', 'fullName position profilePhotoUrl')
                 .populate('assignedTo', 'name email profilePhotoUrl')
@@ -431,6 +447,14 @@ router.get('/contacts/:id', async (req: Request, res: Response) => {
 router.patch('/contacts/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
+
+        // Fetch original to detect if the LinkedIn URL actually changed
+        const originalContact = await CrmContact.findOne({ _id: req.params.id, userId }).lean();
+        if (!originalContact) return res.status(404).json({ error: 'Contact not found' });
+
+        const isLinkedInUrlNewOrChanged = req.body.linkedInProfileUrl &&
+            req.body.linkedInProfileUrl !== originalContact.linkedInProfileUrl;
+
         const contact = await CrmContact.findOneAndUpdate(
             { _id: req.params.id, userId },
             { $set: req.body },
@@ -440,7 +464,7 @@ router.patch('/contacts/:id', async (req: Request, res: Response) => {
         if (!contact) return res.status(404).json({ error: 'Contact not found' });
 
         // Auto-prospect if LinkedIn URL was just added/updated
-        if (req.body.linkedInProfileUrl) {
+        if (isLinkedInUrlNewOrChanged) {
             // First: Check if there's already a LinkedInContact with this URL
             // and immediately sync photo/position (avoids waiting for prospecting)
             try {
@@ -451,8 +475,13 @@ router.patch('/contacts/:id', async (req: Request, res: Response) => {
                 }).lean();
                 if (existingLinkedIn) {
                     const immediateUpdate: Record<string, any> = {};
-                    if (existingLinkedIn.profilePhotoUrl) immediateUpdate.profilePhotoUrl = existingLinkedIn.profilePhotoUrl;
-                    if (existingLinkedIn.currentPosition) immediateUpdate.position = existingLinkedIn.currentPosition;
+                    // Only sync if they were empty in the original contact
+                    if (existingLinkedIn.profilePhotoUrl && !originalContact.profilePhotoUrl) {
+                        immediateUpdate.profilePhotoUrl = existingLinkedIn.profilePhotoUrl;
+                    }
+                    if (existingLinkedIn.currentPosition && !originalContact.position) {
+                        immediateUpdate.position = existingLinkedIn.currentPosition;
+                    }
                     immediateUpdate.linkedInContactId = existingLinkedIn._id;
                     if (Object.keys(immediateUpdate).length > 0) {
                         await CrmContact.updateOne({ _id: req.params.id }, { $set: immediateUpdate });
@@ -612,6 +641,46 @@ router.get('/deals', async (req: Request, res: Response) => {
     } catch (err: any) {
         console.error('CRM deals pipeline error:', err.message);
         res.status(500).json({ error: 'Failed to fetch deals' });
+    }
+});
+
+import mongoose from 'mongoose';
+
+// ── GET /deals/:id — Get a single deal ───────────────────────
+router.get('/deals/:id', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id.toString();
+        const dealId = req.params.id;
+
+        // 1. Validación estricta de parámetros de entrada (Seguridad y Robustez)
+        if (!mongoose.isValidObjectId(dealId)) {
+            console.warn(`[WARN] Intento de acceso a Deal con ID inválido: ${dealId} por el usuario: ${userId}`);
+            return res.status(400).json({ error: 'El ID proporcionado no tiene un formato válido.' });
+        }
+
+        console.log(`[INFO] Fetching Deal ID: ${dealId} para el usuario: ${userId}`);
+
+        // 2. Consulta a BD optimizada usando lean() y proyecciones específicas
+        const deal = await Deal.findOne({ _id: dealId, userId })
+            .populate('company', 'name logo sector localesCount')
+            .populate('primaryContact', 'fullName position profilePhotoUrl email phone')
+            .populate('contacts', 'fullName position profilePhotoUrl email phone')
+            .populate('assignedTo', 'name email profilePhotoUrl')
+            .lean();
+
+        // 3. Manejo de caso borde: Recurso inexistente o sin permisos
+        if (!deal) {
+            console.warn(`[WARN] Deal no encontrado o acceso denegado. Deal ID: ${dealId}, Usuario: ${userId}`);
+            return res.status(404).json({ error: 'Oportunidad de negocio no encontrada.' });
+        }
+
+        // 4. Respuesta exitosa
+        console.log(`[SUCCESS] Deal ID: ${dealId} recuperado exitosamente.`);
+        res.json(deal);
+    } catch (err: any) {
+        // 5. Manejo centralizado de excepciones y observabilidad
+        console.error(`[ERROR] Fallo crítico al obtener el Deal ID: ${req.params.id}. Detalles:`, err.message);
+        res.status(500).json({ error: 'Error interno del servidor al procesar la solicitud del Deal.' });
     }
 });
 
@@ -788,6 +857,34 @@ router.get('/tasks', async (req: Request, res: Response) => {
     }
 });
 
+// ── GET /tasks/:id — Get a single task ───────────────────────
+router.get('/tasks/:id', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id.toString();
+        const taskId = req.params.id;
+
+        if (!mongoose.isValidObjectId(taskId)) {
+            return res.status(400).json({ error: 'El ID proporcionado no tiene un formato válido.' });
+        }
+
+        const task = await Task.findOne({ _id: taskId, userId })
+            .populate('contact', 'fullName profilePhotoUrl email phone')
+            .populate('deal', 'title')
+            .populate('company', 'name logo sector localesCount')
+            .populate('assignedTo', 'name email profilePhotoUrl')
+            .lean();
+
+        if (!task) {
+            return res.status(404).json({ error: 'Tarea no encontrada.' });
+        }
+
+        res.json(task);
+    } catch (err: any) {
+        console.error('CRM get task error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch task' });
+    }
+});
+
 // ── POST /tasks — Create task ────────────────────────────────
 router.post('/tasks', async (req: Request, res: Response) => {
     try {
@@ -899,10 +996,10 @@ router.get('/activities', async (req: Request, res: Response) => {
         // If 'unified' is true, we aggregate across multiple collections for a richer dashboard feed
         if (unified === 'true') {
             const [activities, tasks, deals, companies] = await Promise.all([
-                Activity.find({ userId }).populate('contact', 'fullName').populate('company', 'name').sort({ createdAt: -1 }).limit(limitNum).lean(),
-                Task.find({ userId }).populate('contact', 'fullName').populate('company', 'name').sort({ createdAt: -1 }).limit(limitNum).lean(),
-                Deal.find({ userId }).populate('company', 'name').sort({ createdAt: -1 }).limit(limitNum).lean(),
-                Company.find({ userId }).sort({ createdAt: -1 }).limit(limitNum).lean()
+                Activity.find({ userId }).populate('contact', 'fullName').populate('company', 'name').populate('createdBy', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Task.find({ userId }).populate('contact', 'fullName').populate('company', 'name').populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Deal.find({ userId }).populate('company', 'name').populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Company.find({ userId }).populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean()
             ]);
 
             const unifiedFeed: any[] = [];
@@ -914,6 +1011,7 @@ router.get('/activities', async (req: Request, res: Response) => {
                 createdAt: a.createdAt,
                 contact: a.contact,
                 company: a.company,
+                createdBy: a.createdBy,
                 source: 'activity'
             }));
 
@@ -924,6 +1022,7 @@ router.get('/activities', async (req: Request, res: Response) => {
                 createdAt: t.createdAt,
                 contact: t.contact,
                 company: t.company,
+                createdBy: (t as any).assignedTo,
                 source: 'task'
             }));
 
@@ -933,6 +1032,7 @@ router.get('/activities', async (req: Request, res: Response) => {
                 description: `Nuevo Deal: ${d.title} (${d.currency} ${d.value})`,
                 createdAt: d.createdAt,
                 company: d.company,
+                createdBy: (d as any).assignedTo,
                 source: 'deal'
             }));
 
@@ -941,6 +1041,7 @@ router.get('/activities', async (req: Request, res: Response) => {
                 type: 'company_created',
                 description: `Nueva Empresa: ${(c as any).name}`,
                 createdAt: c.createdAt,
+                createdBy: (c as any).assignedTo,
                 source: 'company'
             }));
 

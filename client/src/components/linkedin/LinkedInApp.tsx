@@ -68,7 +68,7 @@ const bottomGroup: SidebarItem[] = [
 ];
 
 export default function LinkedInApp() {
-    const { tab } = useParams<{ tab: string }>();
+    const { tab, id } = useParams<{ tab: string; id?: string }>();
     const navigate = useNavigate();
     const [showMore, setShowMore] = useState(false);
 
@@ -188,12 +188,12 @@ export default function LinkedInApp() {
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-20 md:pb-6" style={activeTab === 'voice' || activeTab === 'extension' || activeTab === 'dashboard' || activeTab === 'pipeline' || activeTab === 'companies' || activeTab === 'contacts' || activeTab === 'partners' || activeTab === 'tasks' || activeTab === 'prospecting-crm' ? { paddingLeft: 12, paddingRight: 12, paddingTop: 0, paddingBottom: undefined } : {}}>
                     {activeTab === 'dashboard' && <CRMDashboard />}
-                    {activeTab === 'pipeline' && <PipelineBoard />}
-                    {activeTab === 'companies' && <CompanyList />}
-                    {activeTab === 'contacts' && <ContactList />}
+                    {activeTab === 'pipeline' && <PipelineBoard urlDealId={id} />}
+                    {activeTab === 'companies' && <CompanyList urlCompanyId={id} />}
+                    {activeTab === 'contacts' && <ContactList urlContactId={id} />}
                     {activeTab === 'partners' && <PartnerList />}
-                    {activeTab === 'tasks' && <TaskList />}
-                    {activeTab === 'calendar' && <CalendarPage />}
+                    {activeTab === 'tasks' && <TaskList urlTaskId={id} />}
+                    {activeTab === 'calendar' && <CalendarPage urlEventId={id} />}
                     {activeTab === 'prospecting-crm' && <CRMPage />}
                     {activeTab === 'publicaciones' && <PublicacionesPage />}
                     {activeTab === 'prospecting' && <ProspectingPage />}

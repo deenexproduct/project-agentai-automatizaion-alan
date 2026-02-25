@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTasks, completeTask, updateTask, TaskData } from '../../services/crm.service';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, CalendarDays, Search, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical } from 'lucide-react';
@@ -7,7 +8,7 @@ import TaskFormDrawer from './TaskFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
 
-export default function TaskList() {
+export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
     const [tasks, setTasks] = useState<TaskData[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -15,6 +16,18 @@ export default function TaskList() {
     const [viewMode, setViewMode] = useState<'date' | 'kanban'>('date');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<TaskData | null>(null);
+    const navigate = useNavigate();
+
+    // Deep-linking effect
+    useEffect(() => {
+        if (urlTaskId) {
+            setEditingTask({ _id: urlTaskId } as any);
+            setIsDrawerOpen(true);
+        } else if (isDrawerOpen && editingTask?._id) {
+            setIsDrawerOpen(false);
+            setEditingTask(null);
+        }
+    }, [urlTaskId]);
 
     const loadData = async () => {
         setLoading(true);
@@ -77,17 +90,19 @@ export default function TaskList() {
     };
 
     const handleEdit = (task: TaskData, e: React.MouseEvent) => {
+        e.preventDefault();
         e.stopPropagation();
-        setEditingTask(task);
-        setIsDrawerOpen(true);
+        navigate(`/linkedin/tasks/${task._id}`);
     };
 
     const handleAdd = () => {
         setEditingTask(null);
         setIsDrawerOpen(true);
+        if (urlTaskId) navigate('/linkedin/tasks');
     };
 
     const handleComplete = async (id: string, e: React.MouseEvent) => {
+        e.preventDefault();
         e.stopPropagation();
         try {
             setTasks(prev => prev.filter(t => t._id !== id));
@@ -190,13 +205,6 @@ export default function TaskList() {
                                 <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block" />
                                 <Users size={13} className="text-slate-400" />
                                 <span className="truncate max-w-[120px]">{task.contact.fullName}</span>
-                            </div>
-                        )}
-                        {task.deal && (
-                            <div className="flex items-center gap-1.5 text-slate-500" title={`Negocio: ${task.deal.title}`}>
-                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block" />
-                                <Briefcase size={13} className="text-slate-400" />
-                                <span className="truncate max-w-[120px]">{task.deal.title}</span>
                             </div>
                         )}
 
@@ -442,7 +450,10 @@ export default function TaskList() {
             <TaskFormDrawer
                 open={isDrawerOpen}
                 task={editingTask}
-                onClose={() => setIsDrawerOpen(false)}
+                onClose={() => {
+                    setIsDrawerOpen(false);
+                    if (urlTaskId) navigate('/linkedin/tasks');
+                }}
                 onSaved={loadData}
             />
         </div>

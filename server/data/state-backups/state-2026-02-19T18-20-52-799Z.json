@@ -1,15 +1,15 @@
 {
-  "batchId": "2026-02-24T22:29:07.198Z",
+  "batchId": "2026-02-19T18:16:52.234Z",
   "accountEmail": "unknown",
   "profiles": [
     {
-      "url": "https://www.linkedin.com/in/paula-rodr%c3%adguez-4bb131122",
+      "url": "https://www.linkedin.com/in/jose-maria-sanchez-026a8566/",
       "status": "pending",
       "attempts": 0
     }
   ],
   "currentIndex": 0,
-  "startTime": "2026-02-24T22:29:07.246Z",
+  "startTime": "2026-02-19T18:16:52.281Z",
   "isPaused": false,
   "options": {
     "totalLimit": 1,
@@ -21,6 +21,6 @@
     "failed": 0,
     "pending": 1
   },
-  "lastUpdate": "2026-02-24T22:29:07.246Z",
+  "lastUpdate": "2026-02-19T18:16:52.281Z",
   "version": 1
 }

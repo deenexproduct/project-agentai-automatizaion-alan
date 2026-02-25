@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2 } from 'lucide-react';
-import { TaskData, createTask, updateTask, deleteTask, getContacts, getCompanies, getDealsPipeline, getCompany, ContactData, CompanyData, DealData, getTeamUsers, TeamUser, completeTask } from '../../services/crm.service';
-import { formatToLocalDateTimeInput } from '../../utils/date';
+import { TaskData, createTask, updateTask, deleteTask, getTask, getContacts, getCompanies, getDealsPipeline, getCompany, ContactData, CompanyData, DealData, getTeamUsers, TeamUser, completeTask } from '../../services/crm.service';
+import { formatToLocalDateTimeInput, getDefaultTaskDueDate } from '../../utils/date';
 import AutocompleteInput from '../common/AutocompleteInput';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
@@ -19,7 +19,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
     const [formData, setFormData] = useState<Partial<TaskData>>({
         title: '',
         type: 'follow_up',
-        priority: 'medium',
+        priority: 'high',
         status: 'pending',
         dueDate: '',
         company: undefined,
@@ -46,39 +46,55 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
     // Initial data
     useEffect(() => {
         if (open && task) {
-            setFormData({
-                title: task.title || '',
-                type: task.type || 'follow_up',
-                priority: task.priority || 'medium',
-                status: task.status || 'pending',
-                dueDate: task.dueDate ? formatToLocalDateTimeInput(task.dueDate) : '', // 'YYYY-MM-DDTHH:mm'
-                company: task.company,
-                contact: task.contact,
-                deal: task.deal,
-                assignedTo: (task as any).assignedTo,
-            });
-            setCompanySearch(task.company?.name || '');
-            setContactSearch(task.contact?.fullName || '');
-            setDealSearch(task.deal?.title || '');
-        } else if (open && !task) {
-            let defaultDueDate = '';
-            if (initialDate) {
-                // Keep the initial date (which is usually midnight local time) and set it to 09:00 for the task default
-                const dateObj = new Date(initialDate);
-                dateObj.setHours(9, 0, 0, 0);
-                defaultDueDate = formatToLocalDateTimeInput(dateObj);
+            if (task._id && !task.title && !task.dueDate) {
+                // Fetch full task data when only _id is provided (e.g., deep linking)
+                getTask(task._id).then(fullTask => {
+                    setFormData({
+                        title: fullTask.title || '',
+                        type: fullTask.type || 'follow_up',
+                        priority: fullTask.priority || 'medium',
+                        status: fullTask.status || 'pending',
+                        dueDate: fullTask.dueDate ? formatToLocalDateTimeInput(fullTask.dueDate) : '', // 'YYYY-MM-DDTHH:mm'
+                        company: fullTask.company,
+                        contact: fullTask.contact,
+                        deal: fullTask.deal,
+                        assignedTo: (fullTask as any).assignedTo,
+                    });
+                    setCompanySearch(fullTask.company?.name || '');
+                    setContactSearch(fullTask.contact?.fullName || '');
+                    setDealSearch(fullTask.deal?.title || '');
+                }).catch(err => {
+                    console.error("Failed to fetch task details", err);
+                });
+            } else {
+                setFormData({
+                    title: task.title || '',
+                    type: task.type || 'follow_up',
+                    priority: task.priority || 'medium',
+                    status: task.status || 'pending',
+                    dueDate: task.dueDate ? formatToLocalDateTimeInput(task.dueDate) : '', // 'YYYY-MM-DDTHH:mm'
+                    company: task.company,
+                    contact: task.contact,
+                    deal: task.deal,
+                    assignedTo: (task as any).assignedTo,
+                });
+                setCompanySearch(task.company?.name || '');
+                setContactSearch(task.contact?.fullName || '');
+                setDealSearch(task.deal?.title || '');
             }
+        } else if (open && !task) {
+            const defaultDueDate = getDefaultTaskDueDate(initialDate);
 
             setFormData({
                 title: '',
                 type: 'follow_up',
-                priority: 'medium',
+                priority: 'high',
                 status: 'pending',
                 dueDate: defaultDueDate,
                 company: undefined,
                 contact: undefined,
                 deal: undefined,
-                assignedTo: user?._id as any,
+                assignedTo: (user?._id || (user as any)?.id) as any,
             });
             setCompanySearch('');
             setContactSearch('');
@@ -86,7 +102,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
         }
         setShowDeleteConfirm(false);
         setIsDirty(false);
-    }, [open, task, user?._id]);
+    }, [open, task, user?._id, (user as any)?.id]);
 
     // Autocomplete Companies
     useEffect(() => {

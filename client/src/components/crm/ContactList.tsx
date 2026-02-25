@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getContacts, ContactData } from '../../services/crm.service';
 import { Search, MapPin, Building2, Link2, Plus, Filter, MessageCircle, Mail, Phone, Linkedin } from 'lucide-react';
 import ContactFormDrawer from './ContactFormDrawer';
@@ -6,7 +7,7 @@ import ContactActivityDrawer from './ContactActivityDrawer';
 import OwnerAvatar from '../common/OwnerAvatar';
 import PremiumHeader from './PremiumHeader';
 
-export default function ContactList({ onSelectContact }: { onSelectContact?: (id: string) => void }) {
+export default function ContactList({ onSelectContact, urlContactId }: { onSelectContact?: (id: string) => void, urlContactId?: string }) {
     const [contacts, setContacts] = useState<ContactData[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -16,6 +17,17 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
     const [isNewDrawerOpen, setIsNewDrawerOpen] = useState(false);
     const [activityContactId, setActivityContactId] = useState<string | null>(null);
     const [activityContactPreview, setActivityContactPreview] = useState<ContactData | null>(null);
+    const navigate = useNavigate();
+
+    // Deep-linking effect
+    useEffect(() => {
+        if (urlContactId) {
+            setActivityContactId(urlContactId);
+            setActivityContactPreview({ _id: urlContactId } as any);
+        } else if (activityContactId && activityContactPreview?._id) {
+            setActivityContactId(null);
+        }
+    }, [urlContactId]);
 
     // Derive unique companies for the filter
     const uniqueCompanies = Array.from(new Set(
@@ -65,8 +77,11 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
     }, [search]);
 
     const handleOpenContact = (contact: ContactData) => {
-        setActivityContactId(contact._id);
-        setActivityContactPreview(contact);
+        if (onSelectContact) {
+            onSelectContact(contact._id);
+            return;
+        }
+        navigate(`/linkedin/contacts/${contact._id}`);
     };
 
     const handleAdd = () => {
@@ -310,7 +325,10 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
                 contactId={activityContactId}
                 contactPreview={activityContactPreview}
                 open={!!activityContactId}
-                onClose={() => setActivityContactId(null)}
+                onClose={() => {
+                    setActivityContactId(null);
+                    if (urlContactId) navigate('/linkedin/contacts');
+                }}
                 onSaved={handleSaved}
             />
         </div>

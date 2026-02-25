@@ -61,24 +61,60 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     }, []);
 
     useEffect(() => {
-        if (open && company) {
-            setActiveTab('info');
-            setShowDeleteConfirm(false);
-            setHasManuallyUploadedLogo(false);
-            lastFetchedWebsite.current = company.website || '';
-            setFormData({
-                name: company.name || '',
-                website: company.website || '',
-                logo: company.logo || '',
-                description: company.description || '',
-                localesCount: company.localesCount || 1,
-                costPerLocation: company.costPerLocation || 0,
-                category: company.category || '',
-                partner: company.partner || undefined,
-                assignedTo: (company as any).assignedTo,
-            });
-            // Fetch contacts for this company
-            if (company._id) {
+        if (open && company?._id) {
+            // Check if we only have an _id (e.g. from timeline) and fetch the rest
+            if (!company.name) {
+                getCompany(company._id).then(fullCompany => {
+                    setActiveTab('info');
+                    setShowDeleteConfirm(false);
+                    setHasManuallyUploadedLogo(false);
+                    lastFetchedWebsite.current = fullCompany.website || '';
+                    setFormData({
+                        name: fullCompany.name || '',
+                        website: fullCompany.website || '',
+                        logo: fullCompany.logo || '',
+                        description: fullCompany.description || '',
+                        localesCount: fullCompany.localesCount || 1,
+                        costPerLocation: fullCompany.costPerLocation || 0,
+                        category: fullCompany.category || '',
+                        partner: fullCompany.partner || undefined,
+                        assignedTo: (fullCompany as any).assignedTo,
+                    });
+
+                    // Fetch contacts for this company
+                    setLoadingContacts(true);
+                    getContacts({ company: fullCompany._id, limit: 100 })
+                        .then(res => setCompanyContacts(res.contacts))
+                        .catch(err => console.error("Error loading company contacts", err))
+                        .finally(() => setLoadingContacts(false));
+
+                    // Load deals for this company
+                    setLoadingDeals(true);
+                    setCompanyDeals((fullCompany as any).deals || []);
+                    setLoadingDeals(false);
+
+                    // Load pipeline stages for label/color mapping
+                    getPipelineConfig()
+                        .then(config => setPipelineStages(config.stages || []))
+                        .catch(() => { });
+                }).catch(console.error);
+            } else {
+                setActiveTab('info');
+                setShowDeleteConfirm(false);
+                setHasManuallyUploadedLogo(false);
+                lastFetchedWebsite.current = company.website || '';
+                setFormData({
+                    name: company.name || '',
+                    website: company.website || '',
+                    logo: company.logo || '',
+                    description: company.description || '',
+                    localesCount: company.localesCount || 1,
+                    costPerLocation: company.costPerLocation || 0,
+                    category: company.category || '',
+                    partner: company.partner || undefined,
+                    assignedTo: (company as any).assignedTo,
+                });
+                // Fetch contacts for this company
                 setLoadingContacts(true);
                 getContacts({ company: company._id, limit: 100 })
                     .then(res => setCompanyContacts(res.contacts))
@@ -111,11 +147,11 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                 costPerLocation: 0,
                 category: '',
                 partner: undefined,
-                assignedTo: user?._id as any,
+                assignedTo: (user?._id || (user as any)?.id) as any,
             });
             setIsDirty(false);
         }
-    }, [open, company, user?._id]);
+    }, [open, company, user?._id, (user as any)?.id]);
 
     useEffect(() => {
         if (!open) return;

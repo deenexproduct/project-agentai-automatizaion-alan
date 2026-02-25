@@ -1157,26 +1157,42 @@ export class LinkedInTenant extends EventEmitter {
                     // ── AUTO-SYNC: Update CrmContact with scraped data ──
                     // Any CrmContact whose linkedInProfileUrl matches this URL gets the photo + link
                     try {
-                        const crmUpdate: Record<string, any> = {};
-                        if (scraped.profilePhotoUrl) crmUpdate.profilePhotoUrl = scraped.profilePhotoUrl;
-                        if (scraped.currentPosition) crmUpdate.position = scraped.currentPosition;
-                        if (savedLinkedInContact?._id) crmUpdate.linkedInContactId = savedLinkedInContact._id;
+                        const urlVariants = [
+                            normalizedUrl,
+                            normalizedUrl + '/',
+                            normalizedUrl.replace('http://', 'https://'),
+                            normalizedUrl.replace('https://', 'http://'),
+                        ];
 
-                        if (Object.keys(crmUpdate).length > 0) {
-                            // Match both the exact URL and normalized variants
-                            const urlVariants = [
-                                normalizedUrl,
-                                normalizedUrl + '/',
-                                normalizedUrl.replace('http://', 'https://'),
-                                normalizedUrl.replace('https://', 'http://'),
-                            ];
-                            const result = await CrmContact.updateMany(
-                                { linkedInProfileUrl: { $in: urlVariants } },
-                                { $set: crmUpdate }
-                            );
-                            if (result.modifiedCount > 0) {
-                                logger.log(`  🔗 AUTO-SYNC: Updated ${result.modifiedCount} CRM contact(s) with scraped data (photo, position, link)`);
+                        const matchingContacts = await CrmContact.find({ linkedInProfileUrl: { $in: urlVariants } }).lean();
+                        let updatedCount = 0;
+
+                        for (const contact of matchingContacts) {
+                            const crmUpdate: Record<string, any> = {};
+
+                            // Only backfill photo if missing
+                            if (scraped.profilePhotoUrl && !contact.profilePhotoUrl) {
+                                crmUpdate.profilePhotoUrl = scraped.profilePhotoUrl;
                             }
+
+                            // Only backfill position if missing
+                            if (scraped.currentPosition && !contact.position) {
+                                crmUpdate.position = scraped.currentPosition;
+                            }
+
+                            // Always update LinkedIn association
+                            if (savedLinkedInContact?._id) {
+                                crmUpdate.linkedInContactId = savedLinkedInContact._id;
+                            }
+
+                            if (Object.keys(crmUpdate).length > 0) {
+                                await CrmContact.updateOne({ _id: contact._id }, { $set: crmUpdate });
+                                updatedCount++;
+                            }
+                        }
+
+                        if (updatedCount > 0) {
+                            logger.log(`  🔗 AUTO-SYNC: Backfilled scraped data to ${updatedCount} CRM contact(s) (preserved manual entries)`);
                         }
                     } catch (syncErr: any) {
                         logger.log(`  ⚠️ AUTO-SYNC error: ${syncErr.message?.substring(0, 60)}`);

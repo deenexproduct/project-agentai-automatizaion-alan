@@ -1,0 +1,36 @@
+{
+  "batchId": "2026-02-25T13:00:10.964Z",
+  "accountEmail": "unknown",
+  "profiles": [
+    {
+      "url": "https://www.linkedin.com/in/santiago-copani-337238101",
+      "status": "processing",
+      "attempts": 0
+    },
+    {
+      "url": "https://www.linkedin.com/in/daniel-garre-138151203",
+      "status": "pending",
+      "attempts": 0
+    },
+    {
+      "url": "https://www.linkedin.com/in/pablo-perez-venini-73892251",
+      "status": "pending",
+      "attempts": 0
+    }
+  ],
+  "currentIndex": 0,
+  "startTime": "2026-02-25T13:00:25.071Z",
+  "isPaused": false,
+  "options": {
+    "totalLimit": 3,
+    "dailyLimit": 3
+  },
+  "stats": {
+    "processed": 1,
+    "successful": 0,
+    "failed": 0,
+    "pending": 2
+  },
+  "lastUpdate": "2026-02-25T13:00:25.071Z",
+  "version": 1
+}

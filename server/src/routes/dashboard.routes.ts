@@ -138,10 +138,16 @@ router.get('/metrics', async (req: Request, res: Response) => {
         let pausedDeals = 0;
         const stageCounts: Record<string, number> = {};
 
+        // Variables for new metrics
+        let reachedCoordinandoOrFurther = 0;
+        let reachedFurtherThanCoordinando = 0;
+        let currentlyInCoordinando = 0;
+
         deals.forEach((deal: any) => {
             if (wonStageKeys.includes(deal.status)) wonDeals++;
             if (lostStageKeys.includes(deal.status)) lostDeals++;
             if (deal.status === 'pausado') pausedDeals++; // Using default paused key
+            if (deal.status === 'coordinando') currentlyInCoordinando++;
 
             const touchedStages = new Set<string>();
             touchedStages.add(deal.status);
@@ -155,11 +161,47 @@ router.get('/metrics', async (req: Request, res: Response) => {
             touchedStages.forEach(stage => {
                 stageCounts[stage] = (stageCounts[stage] || 0) + 1;
             });
+
+            // Check if it reached "coordinando" or something after
+            // We use the 'order' from config to determine "further"
+            const maxOrderTouched = Array.from(touchedStages).reduce((max, stageKey) => {
+                const stageDef = config.stages.find(s => s.key === stageKey);
+                return Math.max(max, stageDef ? stageDef.order : 0);
+            }, 0);
+
+            const coordinandoStageDef = config.stages.find(s => s.key === 'coordinando');
+            const coordinandoOrder = coordinandoStageDef ? coordinandoStageDef.order : 3;
+
+            if (maxOrderTouched >= coordinandoOrder) {
+                reachedCoordinandoOrFurther++;
+                if (maxOrderTouched > coordinandoOrder) {
+                    reachedFurtherThanCoordinando++;
+                }
+            }
         });
 
         const winRate = (wonDeals + lostDeals) > 0 ? (wonDeals / (wonDeals + lostDeals)) * 100 : 0;
         const leadToWon = totalDealsAllTime > 0 ? (wonDeals / totalDealsAllTime) * 100 : 0;
         const leadToRejected = totalDealsAllTime > 0 ? ((lostDeals + pausedDeals) / totalDealsAllTime) * 100 : 0;
+
+        // Nuevas Metricas
+        const baseExcluyendoPerdidos = totalDealsAllTime - lostDeals;
+        const baseExcluyendoPerdidosYCoordinando = baseExcluyendoPerdidos - currentlyInCoordinando;
+
+        const leadToMeeting = baseExcluyendoPerdidosYCoordinando > 0 ? (reachedFurtherThanCoordinando / baseExcluyendoPerdidosYCoordinando) * 100 : 0;
+        const leadToScheduling = baseExcluyendoPerdidos > 0 ? (reachedCoordinandoOrFurther / baseExcluyendoPerdidos) * 100 : 0;
+
+        console.log("--- METRICS DEBUG ---");
+        console.log("totalDealsAllTime", totalDealsAllTime);
+        console.log("lostDeals", lostDeals);
+        console.log("currentlyInCoordinando", currentlyInCoordinando);
+        console.log("reachedCoordinandoOrFurther", reachedCoordinandoOrFurther);
+        console.log("reachedFurtherThanCoordinando", reachedFurtherThanCoordinando);
+        console.log("baseExcluyendoPerdidos", baseExcluyendoPerdidos);
+        console.log("baseExcluyendoPerdidosYCoordinando", baseExcluyendoPerdidosYCoordinando);
+        console.log("leadToMeeting", leadToMeeting);
+        console.log("leadToScheduling", leadToScheduling);
+        console.log("---------------------");
 
         const funnel = config.stages.map(stage => {
             return {
@@ -200,6 +242,8 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 winRate,
                 leadToWon,
                 leadToRejected,
+                leadToMeeting,
+                leadToScheduling,
                 dealsWon: wonDeals,
                 dealsLost: lostDeals,
                 dealsPaused: pausedDeals,

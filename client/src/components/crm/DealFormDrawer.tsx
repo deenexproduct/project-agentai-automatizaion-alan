@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, DollarSign, Calendar, Building2, User, Briefcase, MessageCircle, Mail, History, FileText, ListTodo, CheckSquare, Plus, ChevronRight, Check, UserPlus, XCircle, Phone, Linkedin, Users, Send, Loader2, Clock } from 'lucide-react';
-import { DealData, createDeal, updateDeal, getCompanies, getContacts, CompanyData, ContactData, getTasks, TaskData, updateCompany, updateTask, getDealActivities, createActivity, ActivityData, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { X, Save, DollarSign, Calendar, Building2, User, Briefcase, MessageCircle, Mail, History, FileText, ListTodo, CheckSquare, Plus, ChevronRight, Check, UserPlus, XCircle, Phone, Linkedin, Users, Send, Loader2, Clock, AlertTriangle } from 'lucide-react';
+import { DealData, getDeal, createDeal, updateDeal, getCompanies, getContacts, CompanyData, ContactData, getTasks, TaskData, updateCompany, updateTask, getDealActivities, createActivity, ActivityData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { formatToArgentineDateTime, formatToArgentineDate } from '../../utils/date';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
@@ -70,40 +70,79 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
     // Initial data
     useEffect(() => {
         if (open && deal?._id) {
-            setFormData({
-                value: deal.value || 0,
-                status: deal.status || (stages.length > 0 ? stages[0].key : 'lead'),
-                expectedCloseDate: deal.expectedCloseDate ? deal.expectedCloseDate.substring(0, 10) : '',
-                company: deal.company as any,
-                primaryContact: deal.primaryContact as any,
-                assignedTo: (deal as any).assignedTo,
-            });
-            setCompanySearch(deal.company?.name || '');
-            setCompanyLocales(deal.company?.localesCount || 0);
-            setInitialLocales(deal.company?.localesCount || 0);
-            setInitialValue(deal.value || 0);
+            // Check if we need to fetch the full deal (e.g. from timeline or pipeline partial object)
+            // A partial deal won't have `contacts` array from the pipeline board.
+            if (!deal.contacts || !deal.company || !deal.title) {
+                getDeal(deal._id).then(fullDeal => {
+                    setFormData({
+                        title: fullDeal.title || '',
+                        value: fullDeal.value || 0,
+                        status: fullDeal.status || (stages.length > 0 ? stages[0].key : 'lead'),
+                        expectedCloseDate: fullDeal.expectedCloseDate ? fullDeal.expectedCloseDate.substring(0, 10) : '',
+                        company: fullDeal.company as any,
+                        primaryContact: fullDeal.primaryContact as any,
+                        assignedTo: (fullDeal as any).assignedTo,
+                    });
+                    setCompanySearch(fullDeal.company?.name || '');
+                    setCompanyLocales(fullDeal.company?.localesCount || 0);
+                    setInitialLocales(fullDeal.company?.localesCount || 0);
+                    setInitialValue(fullDeal.value || 0);
 
-            // Initialize selected contacts from deal.contacts or fallback to primaryContact
-            if (deal.contacts && deal.contacts.length > 0) {
-                setSelectedContacts(deal.contacts as any);
-            } else if (deal.primaryContact) {
-                setSelectedContacts([deal.primaryContact as any]);
+                    if (fullDeal.contacts && fullDeal.contacts.length > 0) {
+                        setSelectedContacts(fullDeal.contacts as any);
+                    } else if (fullDeal.primaryContact) {
+                        setSelectedContacts([fullDeal.primaryContact as any]);
+                    } else {
+                        setSelectedContacts([]);
+                    }
+
+                    setNotes((fullDeal as any).notes?.length ? (fullDeal as any).notes[0].text : '');
+
+                    // Load tasks
+                    getTasks({ deal: deal._id, limit: 50 }).then(res => setDealTasks(res.tasks)).catch(() => { });
+
+                    // Load contacts for this company
+                    if (fullDeal.company?._id) {
+                        getContacts({ company: fullDeal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
+                    }
+                }).catch(console.error);
             } else {
-                setSelectedContacts([]);
+                setFormData({
+                    title: deal.title || '',
+                    value: deal.value || 0,
+                    status: deal.status || (stages.length > 0 ? stages[0].key : 'lead'),
+                    expectedCloseDate: deal.expectedCloseDate ? deal.expectedCloseDate.substring(0, 10) : '',
+                    company: deal.company as any,
+                    primaryContact: deal.primaryContact as any,
+                    assignedTo: (deal as any).assignedTo,
+                });
+                setCompanySearch(deal.company?.name || '');
+                setCompanyLocales(deal.company?.localesCount || 0);
+                setInitialLocales(deal.company?.localesCount || 0);
+                setInitialValue(deal.value || 0);
+
+                // Initialize selected contacts from deal.contacts or fallback to primaryContact
+                if (deal.contacts && deal.contacts.length > 0) {
+                    setSelectedContacts(deal.contacts as any);
+                } else if (deal.primaryContact) {
+                    setSelectedContacts([deal.primaryContact as any]);
+                } else {
+                    setSelectedContacts([]);
+                }
+
+                // Note: Assuming API maps notes property. We load the first note text if any.
+                setNotes((deal as any).notes?.length ? (deal as any).notes[0].text : '');
+
+                // Load tasks
+                getTasks({ deal: deal._id, limit: 50 }).then(res => setDealTasks(res.tasks)).catch(() => { });
+
+                // Load contacts for this company
+                if (deal.company?._id) {
+                    getContacts({ company: deal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
+                }
             }
 
-            // Note: Assuming API maps notes property. We load the first note text if any.
-            setNotes((deal as any).notes?.length ? (deal as any).notes[0].text : '');
-
-            // Load tasks
-            getTasks({ deal: deal._id, limit: 50 }).then(res => setDealTasks(res.tasks)).catch(() => { });
-
-            // Load contacts for this company
-            if (deal.company?._id) {
-                getContacts({ company: deal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
-            }
-
-        } else if (open) {
+        } else if (open && !deal?._id) {
             const defaultDate = new Date();
             defaultDate.setDate(defaultDate.getDate() + 30);
 
@@ -113,7 +152,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                 expectedCloseDate: defaultDate.toISOString().split('T')[0],
                 company: deal?.company as any || undefined,
                 primaryContact: deal?.primaryContact as any || undefined,
-                assignedTo: user?._id as any,
+                assignedTo: (user?._id || (user as any)?.id) as any,
             });
             setSelectedContacts([]);
             setCompanySearch('');
@@ -125,7 +164,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             setDealTasks([]);
             setActiveTab('info');
         }
-    }, [open, deal, stages, user?._id]);
+    }, [open, deal?._id, stages, user?._id, (user as any)?.id]);
 
     // Load activities when Actividad tab opens
     useEffect(() => {

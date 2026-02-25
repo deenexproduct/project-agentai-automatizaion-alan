@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, User, Building2, Briefcase, Mail, Phone, Tag, AlertTriangle, Loader2, Camera, ImagePlus, Trash2 } from 'lucide-react';
-import { ContactData, createContact, updateContact, deleteContact, getCompanies, CompanyData, getSystemConfig, getPartners, SystemConfig, PartnerData, addContactRole, addContactPosition } from '../../services/crm.service';
+import { ContactData, createContact, updateContact, deleteContact, getCompanies, CompanyData, getSystemConfig, getPartners, SystemConfig, PartnerData, addContactRole, addContactPosition, getContact } from '../../services/crm.service';
 import api from '../../lib/axios';
 import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
@@ -59,31 +59,60 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
     }, []);
 
     // Load initial data
+    // Load initial data
     useEffect(() => {
-        if (open && contact) {
-            setShowDeleteConfirm(false);
-            setFormData({
-                fullName: contact.fullName || '',
-                position: contact.position || '',
-                role: contact.role || '',
-                channel: contact.channel || 'linkedin',
-                email: contact.email || '',
-                phone: contact.phone || '',
-                linkedInProfileUrl: contact.linkedInProfileUrl || '',
-                profilePhotoUrl: contact.profilePhotoUrl || '',
-                companies: contact.companies ? (contact.companies as any) : (contact.company ? [contact.company as any] : []),
-                tags: contact.tags || [],
-            });
+        if (open && contact?._id) {
+            // Check if we only have an _id (e.g. from timeline) and fetch the rest
+            if (!contact.fullName) {
+                getContact(contact._id).then((fullContact: any) => {
+                    setShowDeleteConfirm(false);
+                    setFormData({
+                        fullName: fullContact.fullName || '',
+                        position: fullContact.position || '',
+                        role: fullContact.role || '',
+                        channel: fullContact.channel || 'linkedin',
+                        email: fullContact.email || '',
+                        phone: fullContact.phone || '',
+                        linkedInProfileUrl: fullContact.linkedInProfileUrl || '',
+                        profilePhotoUrl: fullContact.profilePhotoUrl || '',
+                        companies: fullContact.companies ? (fullContact.companies as any) : (fullContact.company ? [fullContact.company as any] : []),
+                        tags: fullContact.tags || [],
+                    });
 
-            // Initialize selected companies from contact.companies or fallback to company
-            if (contact.companies && contact.companies.length > 0) {
-                setSelectedCompanies(contact.companies as any);
-            } else if (contact.company) {
-                setSelectedCompanies([contact.company as any]);
+                    if (fullContact.companies && fullContact.companies.length > 0) {
+                        setSelectedCompanies(fullContact.companies as any);
+                    } else if (fullContact.company) {
+                        setSelectedCompanies([fullContact.company as any]);
+                    } else {
+                        setSelectedCompanies([]);
+                    }
+                    setCompanySearch('');
+                }).catch(console.error);
             } else {
-                setSelectedCompanies([]);
+                setShowDeleteConfirm(false);
+                setFormData({
+                    fullName: contact.fullName || '',
+                    position: contact.position || '',
+                    role: contact.role || '',
+                    channel: contact.channel || 'linkedin',
+                    email: contact.email || '',
+                    phone: contact.phone || '',
+                    linkedInProfileUrl: contact.linkedInProfileUrl || '',
+                    profilePhotoUrl: contact.profilePhotoUrl || '',
+                    companies: contact.companies ? (contact.companies as any) : (contact.company ? [contact.company as any] : []),
+                    tags: contact.tags || [],
+                });
+
+                // Initialize selected companies from contact.companies or fallback to company
+                if (contact.companies && contact.companies.length > 0) {
+                    setSelectedCompanies(contact.companies as any);
+                } else if (contact.company) {
+                    setSelectedCompanies([contact.company as any]);
+                } else {
+                    setSelectedCompanies([]);
+                }
+                setCompanySearch('');
             }
-            setCompanySearch('');
         } else if (open && !contact) {
             setShowDeleteConfirm(false);
             setFormData({
@@ -328,7 +357,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                                     <User size={16} className="text-white" />
                                 </div>
                             )}
-                            {contact ? `Editar ${formData.fullName || 'Contacto'}` : 'Nuevo Contacto'}
+                            {contact ? `Editar ${formData.fullName || 'Contacto'} ` : 'Nuevo Contacto'}
                         </h2>
                         <p className="text-[13px] font-medium text-slate-500 mt-1 ml-10">
                             {contact ? 'Modifica los datos del contacto.' : 'Ingresa los datos para registrar un contacto.'}
@@ -348,7 +377,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                     {/* Foto de Perfil Upload */}
                     <div className="flex items-center gap-5">
                         <div
-                            className={`relative group rounded-[16px] transition-all ${isDragging ? 'ring-4 ring-fuchsia-400/30 scale-105' : ''}`}
+                            className={`relative group rounded - [16px] transition - all ${isDragging ? 'ring-4 ring-fuchsia-400/30 scale-105' : ''} `}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
@@ -380,11 +409,11 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={uploadingPhoto || extractingPhoto}
-                                    className={`w-20 h-20 rounded-[16px] bg-gradient-to-br ${extractingPhoto ? 'from-blue-50 to-indigo-50 border-blue-300' : 'from-slate-100 to-slate-50 border-slate-300 hover:border-fuchsia-400 hover:from-fuchsia-50 hover:to-violet-50'} border-2 border-dashed transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group/btn shadow-inner`}
+                                    className={`w - 20 h - 20 rounded - [16px] bg - gradient - to - br ${extractingPhoto ? 'from-blue-50 to-indigo-50 border-blue-300' : 'from-slate-100 to-slate-50 border-slate-300 hover:border-fuchsia-400 hover:from-fuchsia-50 hover:to-violet-50'} border - 2 border - dashed transition - all flex flex - col items - center justify - center gap - 1 cursor - pointer group / btn shadow - inner`}
                                 >
                                     {(uploadingPhoto || extractingPhoto) ? (
                                         <div className="flex flex-col items-center gap-1">
-                                            <Loader2 size={20} className={`${extractingPhoto ? 'text-blue-500' : 'text-fuchsia-400'} animate-spin`} />
+                                            <Loader2 size={20} className={`${extractingPhoto ? 'text-blue-500' : 'text-fuchsia-400'} animate - spin`} />
                                             <span className="text-[8px] font-bold text-blue-500 uppercase">{extractingPhoto ? 'LinkedIn' : 'Subiendo'}</span>
                                         </div>
                                     ) : (
@@ -717,10 +746,10 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
             )}
 
             <style>{`
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-                @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-            `}</style>
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideInRight { from { transform: translateX(100 %); } to { transform: translateX(0); } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+`}</style>
         </div>
     );
 }

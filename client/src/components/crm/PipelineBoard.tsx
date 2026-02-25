@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { getDealsPipeline, updateDeal, DealData } from '../../services/crm.service';
 import { Settings, Plus, DollarSign, Calendar, Clock, CheckSquare, Users, Building2, Columns3, Briefcase } from 'lucide-react';
@@ -14,12 +15,24 @@ interface StageData {
     deals: DealData[];
 }
 
-export default function PipelineBoard() {
+export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
     const [stages, setStages] = useState<StageData[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingDeal, setEditingDeal] = useState<DealData | null>(null);
     const [search, setSearch] = useState('');
+    const navigate = useNavigate();
+
+    // Deep-linking effect
+    useEffect(() => {
+        if (urlDealId) {
+            setEditingDeal({ _id: urlDealId } as any);
+            setIsDrawerOpen(true);
+        } else if (isDrawerOpen && editingDeal?._id) {
+            setIsDrawerOpen(false);
+            setEditingDeal(null);
+        }
+    }, [urlDealId]);
 
     const loadPipeline = async () => {
         setLoading(true);
@@ -93,12 +106,13 @@ export default function PipelineBoard() {
     const handleAddDeal = (stageKey?: string) => {
         setEditingDeal(stageKey ? { status: stageKey } as DealData : null);
         setIsDrawerOpen(true);
+        if (urlDealId) navigate('/linkedin/pipeline');
     };
 
     const handleEditDeal = (deal: DealData, e: React.MouseEvent) => {
+        e.preventDefault();
         e.stopPropagation();
-        setEditingDeal(deal);
-        setIsDrawerOpen(true);
+        navigate(`/linkedin/pipeline/${deal._id}`);
     };
 
     return (
@@ -304,7 +318,10 @@ export default function PipelineBoard() {
                 open={isDrawerOpen}
                 deal={editingDeal}
                 stages={stages.map(s => ({ key: s.key, label: s.label }))}
-                onClose={() => setIsDrawerOpen(false)}
+                onClose={() => {
+                    setIsDrawerOpen(false);
+                    if (urlDealId) navigate('/linkedin/pipeline');
+                }}
                 onSaved={loadPipeline}
             />
         </div>

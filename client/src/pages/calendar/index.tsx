@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Settings, ChevronLeft, ChevronRight, Plus, MapPin, Video, CheckSquare, ChevronDown } from 'lucide-react';
 import { format, addMonths, subMonths, subDays, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -9,7 +10,7 @@ import TaskFormDrawer from '../../components/crm/TaskFormDrawer';
 import DailyEventsDrawer from '../../components/calendar/DailyEventsDrawer';
 import { getEvents, EventData, TaskData } from '../../services/crm.service';
 
-export default function CalendarPage() {
+export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [events, setEvents] = useState<EventData[]>([]);
     const [loading, setLoading] = useState(true);
@@ -23,6 +24,30 @@ export default function CalendarPage() {
     const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
     const [selectedTask, setSelectedTask] = useState<TaskData | undefined>(undefined);
     const [showNewDropdown, setShowNewDropdown] = useState(false);
+
+    const navigate = useNavigate();
+
+    // Deep-linking effect for events/tasks via calendar
+    useEffect(() => {
+        if (urlEventId && events.length > 0) {
+            // First try to find it in loaded events to see if it's a task or an event
+            const loadedItem = events.find(e => e._id === urlEventId || e.sourceId === urlEventId);
+            if (loadedItem) {
+                openEditEvent(loadedItem);
+            } else {
+                // If not found in current view, fallback to treating it as an event drawer
+                setSelectedEvent({ _id: urlEventId } as any);
+                setIsEventDrawerOpen(true);
+            }
+        } else if (urlEventId && events.length === 0) {
+            // Loading state, just fallback to event Drawer with ID
+            setSelectedEvent({ _id: urlEventId } as any);
+            setIsEventDrawerOpen(true);
+        } else if (isEventDrawerOpen && selectedEvent?._id) {
+            setIsEventDrawerOpen(false);
+            setSelectedEvent(undefined);
+        }
+    }, [urlEventId, events.length]);
 
     const loadEvents = async () => {
         try {
@@ -52,6 +77,7 @@ export default function CalendarPage() {
     const openNewEvent = () => {
         setSelectedEvent(undefined);
         setIsEventDrawerOpen(true);
+        if (urlEventId) navigate('/linkedin/calendar');
     };
 
     const openEditEvent = (event: EventData) => {
@@ -74,6 +100,11 @@ export default function CalendarPage() {
         } else {
             setSelectedEvent(event);
             setIsEventDrawerOpen(true);
+        }
+
+        // Don't navigate if we are already coming from a URL to avoid loops
+        if (!urlEventId || urlEventId !== (event.sourceId || event._id)) {
+            navigate(`/linkedin/calendar/${event.sourceId || event._id}`);
         }
     };
 
@@ -246,7 +277,10 @@ export default function CalendarPage() {
                 open={isEventDrawerOpen}
                 event={selectedEvent}
                 initialDate={selectedDate || currentDate}
-                onClose={() => setIsEventDrawerOpen(false)}
+                onClose={() => {
+                    setIsEventDrawerOpen(false);
+                    if (urlEventId) navigate('/linkedin/calendar');
+                }}
                 onSaved={loadEvents}
             />
 
@@ -254,7 +288,10 @@ export default function CalendarPage() {
                 open={isTaskDrawerOpen}
                 task={selectedTask}
                 initialDate={selectedDate || currentDate}
-                onClose={() => setIsTaskDrawerOpen(false)}
+                onClose={() => {
+                    setIsTaskDrawerOpen(false);
+                    if (urlEventId) navigate('/linkedin/calendar');
+                }}
                 onSaved={loadEvents}
             />
 

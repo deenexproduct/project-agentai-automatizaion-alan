@@ -22,6 +22,7 @@ import OwnerAvatar from '../common/OwnerAvatar';
 import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
 import TaskFormDrawer from './TaskFormDrawer';
+import { getDefaultTaskDueDate } from '../../utils/date';
 
 // ── Activity Type Config ─────────────────────────────────────────
 
@@ -166,6 +167,8 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     // ── Contact form state ──
     const [formData, setFormData] = useState<Partial<ContactData>>({});
     const [companies, setCompanies] = useState<CompanyData[]>([]);
+    const [selectedCompanies, setSelectedCompanies] = useState<CompanyData[]>([]);
+    const [showCompanyPicker, setShowCompanyPicker] = useState(false);
     const [companySearch, setCompanySearch] = useState('');
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
@@ -225,11 +228,20 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                     phone: c.phone || '',
                     linkedInProfileUrl: c.linkedInProfileUrl || '',
                     profilePhotoUrl: c.profilePhotoUrl || '',
-                    company: c.company || undefined,
+                    company: undefined,
+                    companies: c.companies ? (c.companies as any) : (c.company ? [c.company as any] : []),
                     assignedTo: c.assignedTo as any,
                     tags: c.tags || [],
                 });
-                setCompanySearch(c.company?.name || '');
+
+                if (c.companies && c.companies.length > 0) {
+                    setSelectedCompanies(c.companies as any);
+                } else if (c.company) {
+                    setSelectedCompanies([c.company as any]);
+                } else {
+                    setSelectedCompanies([]);
+                }
+                setCompanySearch('');
             })
             .catch(console.error)
             .finally(() => setLoadingContact(false));
@@ -272,6 +284,8 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
             setTaskType('follow_up');
             setTaskPriority('medium');
             setTaskDueDate('');
+            setSelectedCompanies([]);
+            setShowCompanyPicker(false);
         }
     }, [open]);
 
@@ -397,8 +411,13 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
             if (formData.role && config && !config.contactRoles.includes(formData.role)) {
                 await addContactRole(formData.role);
             }
-            const companyId = formData.company?._id || formData.company;
-            const payload: any = { ...formData, company: companyId || undefined };
+
+            const payload: any = { ...formData };
+            if (selectedCompanies.length > 0) {
+                payload.companies = selectedCompanies.map(c => c._id);
+            } else {
+                payload.companies = [];
+            }
             if (payload.partner === '' || payload.channel !== 'partners') payload.partner = undefined;
             if (payload.partner && typeof payload.partner === 'object' && '_id' in payload.partner) {
                 payload.partner = (payload.partner as any)._id;
@@ -468,8 +487,19 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     };
 
     const handleSelectCompany = (comp: CompanyData) => {
-        setFormData({ ...formData, company: { _id: comp._id, name: comp.name } as any });
-        setCompanySearch(comp.name);
+        if (!selectedCompanies.find(c => c._id === comp._id)) {
+            const newSelected = [...selectedCompanies, comp];
+            setSelectedCompanies(newSelected);
+            setFormData(prev => ({ ...prev, companies: newSelected.map(c => c._id) as any }));
+        }
+        setCompanySearch('');
+        setShowCompanyPicker(false);
+    };
+
+    const handleRemoveCompany = (compId: string) => {
+        const newSelected = selectedCompanies.filter(c => c._id !== compId);
+        setSelectedCompanies(newSelected);
+        setFormData(prev => ({ ...prev, companies: newSelected.map(c => c._id) as any }));
     };
 
     const displayContact = contact || contactPreview;
@@ -495,91 +525,111 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                 <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-fuchsia-500/50 via-violet-500/50 to-transparent" />
 
                 {/* ── Header ───────────────────────────────── */}
-                <div className="shrink-0 p-5 pb-0 bg-white/50 backdrop-blur-md border-b border-slate-200/50">
-                    <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200/80 flex items-center justify-center overflow-hidden shadow-sm">
-                                {displayContact?.profilePhotoUrl ? (
-                                    <img src={displayContact.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="font-black text-violet-500 text-lg">
-                                        {displayContact?.fullName?.substring(0, 2).toUpperCase() || '??'}
-                                    </span>
-                                )}
+                <div className="shrink-0 relative overflow-hidden bg-white/60 backdrop-blur-2xl border-b border-white/40 pt-6 px-6 pb-0 z-20">
+                    {/* Decorative Background Elements */}
+                    <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-violet-300/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+                    <div className="absolute top-0 left-0 w-[300px] h-[300px] bg-emerald-200/20 rounded-full blur-3xl -translate-y-1/2 -translate-x-1/3 pointer-events-none" />
+
+                    <div className="flex items-start justify-between mb-[10px] relative z-10">
+                        <div className="flex items-center gap-4">
+                            <div className="relative group">
+                                <div className="absolute inset-0 bg-gradient-to-tr from-violet-500 to-emerald-400 rounded-[1.25rem] blur opacity-40 group-hover:opacity-70 transition-opacity duration-500" />
+                                <div className="relative w-16 h-16 rounded-[1.25rem] bg-white border-2 border-white flex items-center justify-center overflow-hidden shadow-[0_8px_16px_-6px_rgba(0,0,0,0.1)] ring-1 ring-black/5 transform transition-transform duration-500 group-hover:scale-105">
+                                    {displayContact?.profilePhotoUrl ? (
+                                        <img src={displayContact.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="font-black bg-gradient-to-br from-violet-600 to-emerald-500 bg-clip-text text-transparent text-2xl">
+                                            {displayContact?.fullName?.substring(0, 2).toUpperCase() || '??'}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
-                            <div>
-                                <h2 className="text-[17px] font-bold text-slate-800 leading-tight">
+                            <div className="flex flex-col justify-center">
+                                <h2 className="text-[20px] font-black tracking-tight text-slate-800 leading-none mb-2">
                                     {displayContact?.fullName || 'Cargando...'}
                                 </h2>
-                                <p className="text-[12px] text-slate-500 font-medium mt-0.5">
-                                    {displayContact?.position || 'Sin cargo'}
-                                    {displayContact?.company && (
-                                        <span className="text-slate-400"> · {displayContact.company.name}</span>
+                                <div className="flex items-center gap-2 text-[12px] font-semibold">
+                                    {displayContact?.position ? (
+                                        <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-600 border border-slate-200/50">
+                                            <Briefcase size={12} className="text-slate-400" />
+                                            {displayContact.position}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400">Sin cargo</span>
                                     )}
-                                </p>
+                                    {displayContact?.company && (
+                                        <>
+                                            <span className="w-1 h-1 rounded-full bg-slate-300" />
+                                            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100/50">
+                                                <Building2 size={12} className="text-violet-500" />
+                                                {displayContact.company.name}
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <button
                             onClick={onClose}
-                            className="w-8 h-8 rounded-[10px] flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700 bg-white border border-slate-200 shadow-sm"
+                            className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-700 shadow-sm border border-slate-200/60 hover:rotate-90 hover:scale-105"
                         >
-                            <X size={16} />
+                            <X size={15} strokeWidth={2.5} />
                         </button>
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-1 bg-slate-100/80 rounded-xl p-1">
+                    <div className="flex gap-1.5 bg-slate-100/60 p-1 rounded-[1rem] relative z-10 border border-slate-200/40 backdrop-blur-sm shadow-inner mb-3">
                         <button
                             onClick={() => setActiveTab('datos')}
-                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'datos'
-                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-[12px] font-bold transition-all duration-300 relative ${activeTab === 'datos'
+                                ? 'bg-white text-violet-700 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] ring-1 ring-slate-200/80 transform scale-[1.02]'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
                                 }`}
                         >
-                            <Pencil size={13} className="inline mr-1.5 -mt-0.5" />
+                            <Pencil size={13} className={activeTab === 'datos' ? "text-violet-600" : "text-slate-400"} />
                             Datos
                         </button>
                         <button
                             onClick={() => setActiveTab('actividad')}
-                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'actividad'
-                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-[12px] font-bold transition-all duration-300 relative ${activeTab === 'actividad'
+                                ? 'bg-white text-violet-700 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] ring-1 ring-slate-200/80 transform scale-[1.02]'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
                                 }`}
                         >
-                            <Clock size={13} className="inline mr-1.5 -mt-0.5" />
+                            <Clock size={13} className={activeTab === 'actividad' ? "text-violet-600" : "text-slate-400"} />
                             Actividad
                             {activities.length > 0 && (
-                                <span className="ml-1.5 text-[10px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full font-bold">
+                                <span className={`flex items-center justify-center h-[18px] min-w-[18px] px-1 text-[9px] rounded-full font-black ml-0.5 transition-colors ${activeTab === 'actividad' ? 'bg-violet-100 text-violet-700' : 'bg-slate-200 text-slate-500'}`}>
                                     {activities.length}
                                 </span>
                             )}
                         </button>
                         <button
                             onClick={() => setActiveTab('tareas')}
-                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'tareas'
-                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-[12px] font-bold transition-all duration-300 relative ${activeTab === 'tareas'
+                                ? 'bg-white text-violet-700 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] ring-1 ring-slate-200/80 transform scale-[1.02]'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
                                 }`}
                         >
-                            <ListTodo size={13} className="inline mr-1.5 -mt-0.5" />
+                            <ListTodo size={13} className={activeTab === 'tareas' ? "text-amber-500" : "text-slate-400"} />
                             Tareas
                             {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length > 0 && (
-                                <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-bold">
+                                <span className={`flex items-center justify-center h-[18px] min-w-[18px] px-1 text-[9px] rounded-full font-black ml-0.5 transition-colors ${activeTab === 'tareas' ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'}`}>
                                     {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length}
                                 </span>
                             )}
                         </button>
                         <button
                             onClick={() => setActiveTab('trazabilidad')}
-                            className={`flex-1 py-2 px-4 rounded-lg text-[13px] font-bold transition-all ${activeTab === 'trazabilidad'
-                                ? 'bg-white text-violet-600 shadow-sm border border-slate-200/60'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-[12px] font-bold transition-all duration-300 relative ${activeTab === 'trazabilidad'
+                                ? 'bg-white text-violet-700 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.08)] ring-1 ring-slate-200/80 transform scale-[1.02]'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
                                 }`}
                         >
-                            <GitBranch size={13} className="inline mr-1.5 -mt-0.5" />
+                            <GitBranch size={13} className={activeTab === 'trazabilidad' ? "text-blue-500" : "text-slate-400"} />
                             Traza
                             {deals.length > 0 && (
-                                <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-bold">
+                                <span className={`flex items-center justify-center h-[18px] min-w-[18px] px-1 text-[9px] rounded-full font-black ml-0.5 transition-colors ${activeTab === 'trazabilidad' ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'}`}>
                                     {deals.length}
                                 </span>
                             )}
@@ -710,18 +760,64 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                         />
                                     </div>
 
-                                    {/* Company */}
+                                    {/* Companies Multi-Select */}
                                     <div className="space-y-1.5">
-                                        <AutocompleteInput
-                                            label="Empresa"
-                                            icon={<Building2 size={13} className="text-blue-500" />}
-                                            placeholder="Buscar empresa..."
-                                            value={companySearch}
-                                            onChangeSearch={(val) => { setCompanySearch(val); setFormData({ ...formData, company: undefined }); }}
-                                            options={companies.map(c => ({ _id: c._id, title: c.name, subtitle: c.sector || c.website, data: c }))}
-                                            onSelect={(opt) => handleSelectCompany(opt.data)}
-                                            colorTheme="indigo"
-                                        />
+                                        <label className="text-[12px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                            <Building2 size={13} className="text-blue-500" />
+                                            Empresas Asociadas
+                                        </label>
+
+                                        {selectedCompanies.length > 0 && (
+                                            <div className="flex flex-col gap-2 mb-3">
+                                                {selectedCompanies.map(comp => (
+                                                    <div key={comp._id} className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-[12px] p-2 shadow-sm group">
+                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200/50 flex items-center justify-center shrink-0 overflow-hidden">
+                                                            {comp.logo ? (
+                                                                <img src={comp.logo} alt={comp.name} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <span className="font-bold text-[10px] text-blue-700">{comp.name.charAt(0).toUpperCase()}</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="text-[12px] font-bold text-slate-800 truncate">{comp.name}</div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveCompany(comp._id)}
+                                                            className="w-5 h-5 rounded-full bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                        >
+                                                            <X size={10} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCompanyPicker(!showCompanyPicker)}
+                                                className="w-full flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-slate-200 rounded-[12px] text-[12px] font-bold text-slate-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
+                                            >
+                                                <Building2 size={13} /> {selectedCompanies.length === 0 ? 'Seleccionar Empresa...' : 'Agregar Empresa'}
+                                            </button>
+                                            {showCompanyPicker && (
+                                                <div className="absolute z-20 w-full mt-1.5 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] p-2">
+                                                    <AutocompleteInput
+                                                        label=""
+                                                        icon={<Building2 size={13} className="text-blue-400" />}
+                                                        placeholder="Buscar empresa..."
+                                                        value={companySearch}
+                                                        onChangeSearch={setCompanySearch}
+                                                        options={companies
+                                                            .filter(c => !selectedCompanies.some(sc => sc._id === c._id))
+                                                            .map(c => ({ _id: c._id, title: c.name, subtitle: c.sector || c.website, data: c }))}
+                                                        onSelect={(opt) => handleSelectCompany(opt.data)}
+                                                        colorTheme="indigo"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Role + Channel */}
@@ -1403,7 +1499,10 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                         {/* Footer — Tareas */}
                         <div className="shrink-0 px-5 py-3 border-t border-slate-200/50 bg-white/80 backdrop-blur-md">
                             <button
-                                onClick={() => setShowTaskForm(!showTaskForm)}
+                                onClick={() => {
+                                    if (!showTaskForm) setTaskDueDate(getDefaultTaskDueDate());
+                                    setShowTaskForm(!showTaskForm);
+                                }}
                                 className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[13px] font-bold shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 hover:-translate-y-0.5 transition-all"
                             >
                                 <Plus size={14} />

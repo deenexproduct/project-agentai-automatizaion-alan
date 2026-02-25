@@ -1,16 +1,30 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getCompanies, CompanyData } from '../../services/crm.service';
 import { Search, MapPin, Globe, Users, Briefcase, Plus, Filter } from 'lucide-react';
 import CompanyFormDrawer from './CompanyFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
 
-export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id: string) => void }) {
+export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelectCompany?: (id: string) => void, urlCompanyId?: string }) {
     const [companies, setCompanies] = useState<CompanyData[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingCompany, setEditingCompany] = useState<CompanyData | null>(null);
+    const navigate = useNavigate();
+
+    // Deep-linking effect
+    useEffect(() => {
+        if (urlCompanyId) {
+            setEditingCompany({ _id: urlCompanyId } as any);
+            setIsDrawerOpen(true);
+        } else if (isDrawerOpen && editingCompany?._id) {
+            // Only close if we had an editing company mapped to a URL that is now gone
+            setIsDrawerOpen(false);
+            setEditingCompany(null);
+        }
+    }, [urlCompanyId]);
 
     const loadCompanies = async () => {
         setLoading(true);
@@ -34,13 +48,19 @@ export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id
 
     const handleEdit = (company: CompanyData, e: React.MouseEvent) => {
         e.stopPropagation();
-        setEditingCompany(company);
-        setIsDrawerOpen(true);
+        if (onSelectCompany) {
+            onSelectCompany(company._id);
+            return;
+        }
+        navigate(`/linkedin/companies/${company._id}`);
     };
 
     const handleAdd = () => {
         setEditingCompany(null);
         setIsDrawerOpen(true);
+        if (urlCompanyId) {
+            navigate('/linkedin/companies');
+        }
     };
 
     const handleSaved = (savedCompany: CompanyData & { _deleted?: boolean }) => {
@@ -97,7 +117,7 @@ export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id
                                         if (onSelectCompany) {
                                             onSelectCompany(company._id);
                                         } else {
-                                            handleEdit(company, e);
+                                            navigate(`/linkedin/companies/${company._id}`);
                                         }
                                     }}
                                     className="group bg-white/80 backdrop-blur-xl rounded-[24px] p-5 border border-white/90 shadow-[0_4px_16px_rgba(30,27,75,0.03)] hover:shadow-[0_12px_32px_rgba(139,92,246,0.08)] hover:border-violet-200/50 hover:bg-white/95 transition-all duration-300 text-left flex flex-col items-start gap-4 relative overflow-hidden hover:-translate-y-1"
@@ -180,7 +200,10 @@ export default function CompanyList({ onSelectCompany }: { onSelectCompany?: (id
             <CompanyFormDrawer
                 open={isDrawerOpen}
                 company={editingCompany}
-                onClose={() => setIsDrawerOpen(false)}
+                onClose={() => {
+                    setIsDrawerOpen(false);
+                    if (urlCompanyId) navigate('/linkedin/companies');
+                }}
                 onSaved={handleSaved}
             />
         </div>

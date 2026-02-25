@@ -156,6 +156,8 @@ export type DashboardStats = {
         winRate: number;
         leadToWon: number;
         leadToRejected: number;
+        leadToMeeting: number;
+        leadToScheduling: number;
         dealsWon: number;
         dealsLost: number;
         dealsPaused: number;
@@ -184,6 +186,7 @@ export type CalendarConfigData = {
 
 export type EventData = {
     _id: string;
+    sourceId?: string;
     userId: { _id: string; name: string; email: string };
     assignedTo?: { _id: string; name: string; email: string };
     title: string;
@@ -257,12 +260,14 @@ export const linkLinkedInContact = async (id: string, linkedInContactId: string)
 
 // Deals
 export const getDealsPipeline = async (params: any = {}) => (await api.get<{ stages: { key: string, label: string, color: string, deals: DealData[] }[] }>('/crm/deals', { params })).data;
+export const getDeal = async (id: string) => (await api.get<DealData>(`/crm/deals/${id}`)).data;
 export const createDeal = async (data: Partial<DealData>) => (await api.post<DealData>('/crm/deals', data)).data;
 export const updateDeal = async (id: string, data: Partial<DealData>) => (await api.patch<DealData>(`/crm/deals/${id}`, data)).data;
 export const getDealActivities = async (dealId: string) => (await api.get<{ activities: ActivityData[]; total: number }>(`/crm/deals/${dealId}/activities`)).data;
 
 // Tasks
 export const getTasks = async (params: any) => (await api.get<{ tasks: TaskData[]; total: number; pages: number }>('/crm/tasks', { params })).data;
+export const getTask = async (id: string) => (await api.get<TaskData>(`/crm/tasks/${id}`)).data;
 export const createTask = async (data: Partial<TaskData>) => (await api.post<TaskData>('/crm/tasks', data)).data;
 export const updateTask = async (id: string, data: Partial<TaskData>) => (await api.patch<TaskData>(`/crm/tasks/${id}`, data)).data;
 export const completeTask = async (id: string) => (await api.patch<{ success: boolean, task: TaskData }>(`/crm/tasks/${id}/complete`)).data;

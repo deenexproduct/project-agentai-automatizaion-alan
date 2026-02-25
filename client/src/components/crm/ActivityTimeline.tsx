@@ -37,28 +37,33 @@ export default function ActivityTimeline({ activities, onItemClick }: ActivityTi
                                     {getIconConfig(activity.type).label}
                                 </span>
                                 <div className="flex items-center gap-2">
-                                    {activity.createdBy && (
-                                        <div className="flex flex-row-reverse items-center gap-1.5" title={`Creado por ${activity.createdBy.name || 'Usuario'}`}>
+                                    {(() => {
+                                        const responsible = activity.createdBy || (activity as any).assignedTo;
+                                        if (responsible) {
+                                            return (
+                                                <div className="flex flex-row-reverse items-center gap-1.5" title={`Responsable: ${responsible.name || 'Usuario'}`}>
+                                                    <time className="text-[11px] font-semibold text-slate-400">
+                                                        {formatTimeAgo(activity.createdAt)}
+                                                    </time>
+                                                    <div className="flex items-center gap-1.5 bg-white border border-slate-200/60 px-1.5 py-0.5 rounded-full shadow-sm">
+                                                        <span className="text-[10px] font-bold text-slate-600 truncate max-w-[90px] pl-1 hidden sm:block">{responsible.name?.split(' ')[0] || 'User'}</span>
+                                                        <div className="w-4 h-4 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/50">
+                                                            {responsible.profilePhotoUrl ? (
+                                                                <img src={responsible.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <span className="text-[9px] font-bold text-slate-500">{responsible.name?.charAt(0).toUpperCase() || 'U'}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return (
                                             <time className="text-[11px] font-semibold text-slate-400">
                                                 {formatTimeAgo(activity.createdAt)}
                                             </time>
-                                            <div className="flex items-center gap-1.5 bg-white border border-slate-200/60 px-1.5 py-0.5 rounded-full shadow-sm">
-                                                <span className="text-[10px] font-bold text-slate-600 truncate max-w-[90px] pl-1 hidden sm:block">{activity.createdBy.name?.split(' ')[0] || 'User'}</span>
-                                                <div className="w-4 h-4 rounded-full bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center border border-slate-200/50">
-                                                    {activity.createdBy.profilePhotoUrl ? (
-                                                        <img src={activity.createdBy.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <span className="text-[9px] font-bold text-slate-500">{activity.createdBy.name?.charAt(0).toUpperCase() || 'U'}</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {!activity.createdBy && (
-                                        <time className="text-[11px] font-semibold text-slate-400">
-                                            {formatTimeAgo(activity.createdAt)}
-                                        </time>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
                             </div>
 

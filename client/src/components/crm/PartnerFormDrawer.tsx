@@ -44,11 +44,11 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                 phone: '',
                 commissionPercentage: 0,
                 notes: '',
-                assignedTo: user?._id as any,
+                assignedTo: (user?._id || (user as any)?.id) as any,
             });
         }
         setIsDirty(false);
-    }, [open, partner, user?._id]);
+    }, [open, partner, user?._id, (user as any)?.id]);
 
     useEffect(() => {
         if (!open) return;
