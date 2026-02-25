@@ -1,15 +1,15 @@
 {
-  "batchId": "2026-02-19T18:16:52.234Z",
+  "batchId": "2026-02-25T01:19:43.765Z",
   "accountEmail": "unknown",
   "profiles": [
     {
-      "url": "https://www.linkedin.com/in/jose-maria-sanchez-026a8566/",
+      "url": "https://www.linkedin.com/in/rodrigo-fossa-1a8791154",
       "status": "pending",
       "attempts": 0
     }
   ],
   "currentIndex": 0,
-  "startTime": "2026-02-19T18:16:52.281Z",
+  "startTime": "2026-02-25T01:19:43.862Z",
   "isPaused": false,
   "options": {
     "totalLimit": 1,
@@ -21,6 +21,6 @@
     "failed": 0,
     "pending": 1
   },
-  "lastUpdate": "2026-02-19T18:16:52.281Z",
+  "lastUpdate": "2026-02-25T01:19:43.862Z",
   "version": 1
 }

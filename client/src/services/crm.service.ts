@@ -77,6 +77,7 @@ export type ContactData = {
     phone?: string;
     profilePhotoUrl?: string;
     company?: { _id: string; name: string; logo?: string };
+    companies?: { _id: string; name: string; logo?: string; sector?: string }[];
     partner?: PartnerData;
     assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     linkedInContactId?: { _id: string; profileUrl: string };

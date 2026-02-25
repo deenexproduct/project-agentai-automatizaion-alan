@@ -5,6 +5,7 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import type { Browser, Page } from 'puppeteer';
 import { LinkedInContact, type ILinkedInContact } from '../models/linkedin-contact.model';
+import { CrmContact } from '../models/crm-contact.model';
 import { LinkedInLogger } from '../utils/linkedin-logger';
 
 // NEW: Import enhanced services
@@ -1145,13 +1146,41 @@ export class LinkedInTenant extends EventEmitter {
                         }
                     }
 
-                    await LinkedInContact.findOneAndUpdate(
+                    const savedLinkedInContact = await LinkedInContact.findOneAndUpdate(
                         { profileUrl: normalizedUrl },
                         { $set: setData },
                         { upsert: true, new: true }
                     );
                     const savedFields = Object.keys(setData).filter(k => !['profileUrl', 'prospectingBatchId'].includes(k));
                     logger.log(`  💾 CRM: Saved ${savedFields.length} fields for: ${scraped.fullName || normalizedUrl}`);
+
+                    // ── AUTO-SYNC: Update CrmContact with scraped data ──
+                    // Any CrmContact whose linkedInProfileUrl matches this URL gets the photo + link
+                    try {
+                        const crmUpdate: Record<string, any> = {};
+                        if (scraped.profilePhotoUrl) crmUpdate.profilePhotoUrl = scraped.profilePhotoUrl;
+                        if (scraped.currentPosition) crmUpdate.position = scraped.currentPosition;
+                        if (savedLinkedInContact?._id) crmUpdate.linkedInContactId = savedLinkedInContact._id;
+
+                        if (Object.keys(crmUpdate).length > 0) {
+                            // Match both the exact URL and normalized variants
+                            const urlVariants = [
+                                normalizedUrl,
+                                normalizedUrl + '/',
+                                normalizedUrl.replace('http://', 'https://'),
+                                normalizedUrl.replace('https://', 'http://'),
+                            ];
+                            const result = await CrmContact.updateMany(
+                                { linkedInProfileUrl: { $in: urlVariants } },
+                                { $set: crmUpdate }
+                            );
+                            if (result.modifiedCount > 0) {
+                                logger.log(`  🔗 AUTO-SYNC: Updated ${result.modifiedCount} CRM contact(s) with scraped data (photo, position, link)`);
+                            }
+                        }
+                    } catch (syncErr: any) {
+                        logger.log(`  ⚠️ AUTO-SYNC error: ${syncErr.message?.substring(0, 60)}`);
+                    }
 
                     // ── TRIGGER: Auto-enrichment AFTER scraping ──
                     // Trigger enrichment if we got ANY useful data (even just a name)

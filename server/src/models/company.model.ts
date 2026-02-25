@@ -1,5 +1,10 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+function toTitleCase(str: string) {
+    if (!str) return str;
+    return str.toLowerCase().replace(/(?:^|\s|-)\S/g, function (a) { return a.toUpperCase(); });
+}
+
 // ── Sub-Interfaces ────────────────────────────────────────────
 
 export interface ISocialMedia {
@@ -74,6 +79,7 @@ const CompanySchema = new Schema<ICompany>({
         type: String,
         required: true,
         trim: true,
+        set: toTitleCase,
     },
     logo: { type: String, trim: true },
     themeColor: { type: String, trim: true },

@@ -1,5 +1,10 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+function toTitleCase(str: string) {
+    if (!str) return str;
+    return str.toLowerCase().replace(/(?:^|\s|-)\S/g, function (a) { return a.toUpperCase(); });
+}
+
 // ── Enums ─────────────────────────────────────────────────────
 
 export const CONTACT_ROLES = ['decision_maker', 'influencer', 'champion', 'gatekeeper', 'user', 'other'] as const;
@@ -25,6 +30,7 @@ export interface ICrmContact extends Document {
     role?: string;
     channel?: string;
     company?: mongoose.Types.ObjectId;
+    companies: mongoose.Types.ObjectId[];
     partner?: mongoose.Types.ObjectId;
     linkedInContactId?: mongoose.Types.ObjectId;
     linkedInProfileUrl?: string;
@@ -57,6 +63,7 @@ const CrmContactSchema = new Schema<ICrmContact>({
         type: String,
         required: true,
         trim: true,
+        set: toTitleCase,
     },
     firstName: { type: String, trim: true },
     lastName: { type: String, trim: true },
@@ -77,6 +84,11 @@ const CrmContactSchema = new Schema<ICrmContact>({
         default: null,
         index: true,
     },
+    companies: [{
+        type: Schema.Types.ObjectId,
+        ref: 'Company',
+        index: true,
+    }],
     partner: {
         type: Schema.Types.ObjectId,
         ref: 'Partner',
@@ -134,6 +146,7 @@ CrmContactSchema.index(
  * COMPOUND: userId + company for listing contacts per company.
  */
 CrmContactSchema.index({ userId: 1, company: 1 });
+CrmContactSchema.index({ userId: 1, companies: 1 });
 
 /**
  * COMPOUND: userId + channel for filtering by source.
@@ -145,13 +158,36 @@ CrmContactSchema.index({ userId: 1, channel: 1 });
  */
 CrmContactSchema.index({ userId: 1, createdAt: -1 });
 
+// ── Hooks ─────────────────────────────────────────────────────
+
+CrmContactSchema.pre('save', function (next) {
+    const contact = this as ICrmContact;
+
+    // Sync array -> single reference
+    if (contact.companies && contact.companies.length > 0) {
+        if (!contact.company || contact.company.toString() !== contact.companies[0].toString()) {
+            contact.company = contact.companies[0];
+        }
+    } else if (contact.company) {
+        // Sync single reference -> array
+        contact.companies = [contact.company];
+    } else {
+        contact.companies = [];
+    }
+
+    next();
+});
+
 // ── Static Methods ────────────────────────────────────────────
 
 CrmContactSchema.statics.findByCompany = async function (
     userId: string,
     companyId: string
 ): Promise<ICrmContact[]> {
-    return this.find({ userId, company: companyId })
+    return this.find({
+        userId,
+        $or: [{ company: companyId }, { companies: companyId }]
+    })
         .sort({ isResponsible: -1, fullName: 1 })
         .lean()
         .exec();

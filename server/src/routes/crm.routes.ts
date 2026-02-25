@@ -135,6 +135,30 @@ router.post('/companies', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
         const company = await Company.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
+
+        // ── Auto-create Deal in 'Lead Potencial' ──
+        try {
+            const validKeys = await PipelineConfig.getStageKeys(userId.toString());
+            const firstStage = validKeys[0] || 'lead';
+            const dealValue = (company.localesCount && company.costPerLocation)
+                ? Math.round((company.localesCount * company.costPerLocation) * 100) / 100
+                : 0;
+
+            await Deal.create({
+                title: company.name,
+                status: firstStage,
+                company: company._id,
+                value: dealValue,
+                currency: 'USD',
+                assignedTo: company.assignedTo || userId,
+                userId,
+            });
+            console.log(`✅ Auto-created Deal for company "${company.name}" in stage "${firstStage}"`);
+        } catch (dealErr: any) {
+            console.error(`⚠️ Auto-create Deal failed for company ${company._id}:`, dealErr.message);
+            // Don't fail the company creation if auto-deal fails
+        }
+
         res.status(201).json(company);
     } catch (err: any) {
         console.error('CRM create company error:', err.message);
@@ -247,7 +271,9 @@ router.get('/contacts', async (req: Request, res: Response) => {
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
 
         const query: any = { userId };
-        if (company) query.company = company;
+        if (company) {
+            query.$or = [{ company: company }, { companies: company }];
+        }
         if (role) query.role = role;
         if (channel) query.channel = channel;
         if (assignedTo) query.assignedTo = assignedTo;
@@ -263,6 +289,7 @@ router.get('/contacts', async (req: Request, res: Response) => {
         const [contacts, total] = await Promise.all([
             CrmContact.find(query)
                 .populate('company', 'name logo')
+                .populate('companies', 'name logo sector')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .populate('partner', 'name')
                 .sort({ createdAt: -1 })
@@ -287,13 +314,64 @@ router.post('/contacts', async (req: Request, res: Response) => {
 
         // Auto-prospect if LinkedIn URL is provided
         if (contact.linkedInProfileUrl) {
+            // Immediate sync: check if LinkedInContact already exists
+            try {
+                const normalizedUrl = contact.linkedInProfileUrl
+                    .replace(/\/+$/, '').split('?')[0].split('#')[0].toLowerCase();
+                const existingLinkedIn = await LinkedInContact.findOne({
+                    profileUrl: { $in: [normalizedUrl, normalizedUrl + '/'] }
+                }).lean();
+                if (existingLinkedIn) {
+                    const immediateUpdate: Record<string, any> = {};
+                    if (existingLinkedIn.profilePhotoUrl) immediateUpdate.profilePhotoUrl = existingLinkedIn.profilePhotoUrl;
+                    if (existingLinkedIn.currentPosition) immediateUpdate.position = existingLinkedIn.currentPosition;
+                    immediateUpdate.linkedInContactId = existingLinkedIn._id;
+                    if (Object.keys(immediateUpdate).length > 0) {
+                        await CrmContact.updateOne({ _id: contact._id }, { $set: immediateUpdate });
+                        console.log(`🔗 Immediate sync: New CRM contact ${contact._id} synced with existing LinkedIn data`);
+                    }
+                }
+            } catch (syncErr: any) {
+                console.error(`Immediate LinkedIn sync failed:`, syncErr.message);
+            }
+
+            // Then trigger prospecting for fresh data
             const tenant = linkedinService.getTenant(userId.toString());
             tenant.enqueueUrl(contact.linkedInProfileUrl).catch(err => {
                 console.error(`Auto-prospecting failed for new contact ${contact._id}:`, err);
             });
         }
 
-        res.status(201).json(contact);
+        // ── Auto-link contact to company's Deal(s) ──
+        const companyId = contact.company;
+        if (companyId) {
+            try {
+                const companyDeals = await Deal.find({ company: companyId, userId });
+                for (const deal of companyDeals) {
+                    const alreadyLinked = deal.contacts.some(c => c.toString() === contact._id.toString());
+                    if (!alreadyLinked) {
+                        deal.contacts.push(contact._id);
+                        if (!deal.primaryContact) {
+                            deal.primaryContact = contact._id;
+                        }
+                        await deal.save();
+                        console.log(`🔗 Auto-linked contact "${contact.fullName}" to Deal "${deal.title}"`);
+                    }
+                }
+            } catch (linkErr: any) {
+                console.error(`⚠️ Auto-link contact to deal failed:`, linkErr.message);
+            }
+        }
+
+        const populatedContact = await CrmContact.findById(contact._id)
+            .populate('company', 'name logo sector website')
+            .populate('companies', 'name logo sector website localesCount costPerLocation')
+            .populate('assignedTo', 'name email profilePhotoUrl')
+            .populate('linkedInContactId')
+            .populate('partner', 'name')
+            .lean();
+
+        res.status(201).json(populatedContact);
     } catch (err: any) {
         console.error('CRM create contact error:', err.message);
         res.status(500).json({ error: 'Failed to create contact' });
@@ -306,6 +384,7 @@ router.get('/contacts/:id', async (req: Request, res: Response) => {
         const userId = (req as any).user._id.toString();
         const contact = await CrmContact.findOne({ _id: req.params.id, userId })
             .populate('company', 'name logo sector website')
+            .populate('companies', 'name logo sector website localesCount costPerLocation')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .populate('linkedInContactId')
             .populate('partner', 'name')
@@ -362,6 +441,29 @@ router.patch('/contacts/:id', async (req: Request, res: Response) => {
 
         // Auto-prospect if LinkedIn URL was just added/updated
         if (req.body.linkedInProfileUrl) {
+            // First: Check if there's already a LinkedInContact with this URL
+            // and immediately sync photo/position (avoids waiting for prospecting)
+            try {
+                const normalizedUrl = req.body.linkedInProfileUrl
+                    .replace(/\/+$/, '').split('?')[0].split('#')[0].toLowerCase();
+                const existingLinkedIn = await LinkedInContact.findOne({
+                    profileUrl: { $in: [normalizedUrl, normalizedUrl + '/'] }
+                }).lean();
+                if (existingLinkedIn) {
+                    const immediateUpdate: Record<string, any> = {};
+                    if (existingLinkedIn.profilePhotoUrl) immediateUpdate.profilePhotoUrl = existingLinkedIn.profilePhotoUrl;
+                    if (existingLinkedIn.currentPosition) immediateUpdate.position = existingLinkedIn.currentPosition;
+                    immediateUpdate.linkedInContactId = existingLinkedIn._id;
+                    if (Object.keys(immediateUpdate).length > 0) {
+                        await CrmContact.updateOne({ _id: req.params.id }, { $set: immediateUpdate });
+                        console.log(`🔗 Immediate sync: Updated CRM contact ${req.params.id} with LinkedIn data (photo, position)`);
+                    }
+                }
+            } catch (syncErr: any) {
+                console.error(`Immediate LinkedIn sync failed:`, syncErr.message);
+            }
+
+            // Then: trigger prospecting for fresh data
             const tenant = linkedinService.getTenant(userId);
             tenant.enqueueUrl(req.body.linkedInProfileUrl).catch(err => {
                 console.error(`Auto-prospecting failed for updated contact ${contact._id}:`, err);
@@ -889,7 +991,7 @@ router.post('/activities', async (req: Request, res: Response) => {
         const popActivity = await Activity.findById(activity._id).populate('createdBy', 'name email profilePhotoUrl');
         res.status(201).json(popActivity);
     } catch (err: any) {
-        console.error('CRM create activity error:', err.message);
+        console.error('CRM create activity error:', err.message, err.errors ? JSON.stringify(err.errors) : '');
         res.status(500).json({ error: 'Failed to create activity' });
     }
 });

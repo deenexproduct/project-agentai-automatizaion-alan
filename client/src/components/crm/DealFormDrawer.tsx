@@ -3,6 +3,7 @@ import { X, Save, DollarSign, Calendar, Building2, User, Briefcase, MessageCircl
 import { DealData, createDeal, updateDeal, getCompanies, getContacts, CompanyData, ContactData, getTasks, TaskData, updateCompany, updateTask, getDealActivities, createActivity, ActivityData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { formatToArgentineDateTime, formatToArgentineDate } from '../../utils/date';
 import OwnerAvatar from '../common/OwnerAvatar';
+import { useAuth } from '../../contexts/AuthContext';
 import ContactFormDrawer from './ContactFormDrawer';
 import TaskFormDrawer from './TaskFormDrawer';
 import ActivityTimeline from './ActivityTimeline';
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }: Props) {
+    const { user } = useAuth();
     const [formData, setFormData] = useState<Partial<DealData>>({
         value: 0,
         currency: 'USD',
@@ -39,11 +41,15 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
     const [dealTasks, setDealTasks] = useState<TaskData[]>([]);
     const [selectedContacts, setSelectedContacts] = useState<ContactData[]>([]);
     const [companySearch, setCompanySearch] = useState('');
+    const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
     const [showContactPicker, setShowContactPicker] = useState(false);
+    const companyFieldRef = useRef<HTMLDivElement>(null);
     const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
 
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<'info' | 'activity' | 'history' | 'tasks'>('info');
+    const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
 
     const [isContactDrawerOpen, setIsContactDrawerOpen] = useState(false);
     const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
@@ -63,7 +69,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
 
     // Initial data
     useEffect(() => {
-        if (open && deal) {
+        if (open && deal?._id) {
             setFormData({
                 value: deal.value || 0,
                 status: deal.status || (stages.length > 0 ? stages[0].key : 'lead'),
@@ -97,14 +103,17 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                 getContacts({ company: deal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
             }
 
-        } else if (open && !deal) {
+        } else if (open) {
+            const defaultDate = new Date();
+            defaultDate.setDate(defaultDate.getDate() + 30);
+
             setFormData({
-                value: 0,
-                status: stages.length > 0 ? stages[0].key : 'lead',
-                expectedCloseDate: '',
-                company: undefined,
-                primaryContact: undefined,
-                assignedTo: undefined,
+                value: deal?.value || 0,
+                status: deal?.status || (stages.length > 0 ? stages[0].key : 'lead'),
+                expectedCloseDate: defaultDate.toISOString().split('T')[0],
+                company: deal?.company as any || undefined,
+                primaryContact: deal?.primaryContact as any || undefined,
+                assignedTo: user?._id as any,
             });
             setSelectedContacts([]);
             setCompanySearch('');
@@ -116,7 +125,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             setDealTasks([]);
             setActiveTab('info');
         }
-    }, [open, deal, stages]);
+    }, [open, deal, stages, user?._id]);
 
     // Load activities when Actividad tab opens
     useEffect(() => {
@@ -129,18 +138,30 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
         }
     }, [activeTab, deal?._id]);
 
-    // Autocomplete Companies
+    // Autocomplete Companies — load on open and filter as user types
     useEffect(() => {
         if (!open) return;
         const fetchComps = async () => {
             try {
-                const res = await getCompanies({ search: companySearch, limit: 10 });
+                const res = await getCompanies({ search: companySearch, limit: 20 });
                 setCompanies(res.companies);
             } catch { /* ignore */ }
         };
-        const timeoutId = setTimeout(fetchComps, 300);
+        const timeoutId = setTimeout(fetchComps, companySearch ? 300 : 0);
         return () => clearTimeout(timeoutId);
     }, [companySearch, open]);
+
+    // Close company dropdown when clicking outside
+    useEffect(() => {
+        if (!showCompanyDropdown) return;
+        const handleClickOutside = (e: MouseEvent) => {
+            if (companyFieldRef.current && !companyFieldRef.current.contains(e.target as Node)) {
+                setShowCompanyDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showCompanyDropdown]);
 
     // Load team users
     useEffect(() => {
@@ -150,10 +171,18 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
 
     useEffect(() => {
         if (!open) return;
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleAttemptClose(); };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [open, onClose]);
+    }, [open, isDirty]);
+
+    const handleAttemptClose = () => {
+        if (isDirty) {
+            setShowUnsavedConfirm(true);
+        } else {
+            onClose();
+        }
+    };
 
     const handleBackdropClick = (e: React.MouseEvent) => {
         if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
@@ -162,7 +191,8 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
     };
 
     const handleSelectCompany = async (comp: CompanyData) => {
-        const leadValue = (comp.localesCount && comp.costPerLocation) ? (comp.localesCount * comp.costPerLocation) : formData.value;
+        const rawValue = (comp.localesCount && comp.costPerLocation) ? (comp.localesCount * comp.costPerLocation) : formData.value;
+        const leadValue = Math.round((rawValue || 0) * 100) / 100;
         setFormData({
             ...formData,
             company: { _id: comp._id, name: comp.name } as any,
@@ -170,6 +200,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             value: leadValue
         });
         setCompanySearch(comp.name);
+        setShowCompanyDropdown(false);
         setCompanyLocales(comp.localesCount || 0);
         setInitialLocales(comp.localesCount || 0);
         setInitialValue(leadValue || 0);
@@ -237,6 +268,18 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
 
     const availableContacts = contacts.filter(c => !selectedContacts.some(sc => sc._id === c._id));
 
+    const getDaysUntilClose = () => {
+        if (!formData.expectedCloseDate) return null;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const closeDate = new Date(formData.expectedCloseDate);
+        closeDate.setMinutes(closeDate.getMinutes() + closeDate.getTimezoneOffset());
+        closeDate.setHours(0, 0, 0, 0);
+
+        const diffTime = closeDate.getTime() - today.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    };
+
     return (
         <div
             className="fixed inset-0 z-[100] flex justify-end"
@@ -268,7 +311,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                             </h2>
                         </div>
                         <button
-                            onClick={onClose}
+                            onClick={handleAttemptClose}
                             className="w-8 h-8 rounded-[10px] flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700 bg-white border border-slate-200 shadow-sm"
                         >
                             <X size={18} />
@@ -312,12 +355,12 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                 </div>
 
                 {/* Form Content */}
-                <form onSubmit={handleSubmit} className="p-6 flex-1 flex flex-col gap-6 custom-scrollbar">
+                <form id="deal-form" onSubmit={handleSubmit} onChange={() => setIsDirty(true)} className="p-6 flex-1 flex flex-col gap-6 custom-scrollbar">
 
                     {activeTab === 'info' && (
                         <>
                             {/* Company Autocomplete */}
-                            <div className="space-y-2 relative group">
+                            <div className="space-y-2 relative group" ref={companyFieldRef}>
                                 <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
                                     <Building2 size={14} className="text-blue-600" />
                                     Empresa *
@@ -326,38 +369,48 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                     required
                                     type="text"
                                     value={companySearch}
+                                    onFocus={() => { if (!formData.company) setShowCompanyDropdown(true); }}
                                     onChange={(e) => {
                                         setCompanySearch(e.target.value);
                                         if (formData.company) {
                                             if (window.confirm("Cambiar la empresa reseteará los datos del deal. ¿Deseas continuar?")) {
                                                 setFormData({ ...formData, company: undefined, primaryContact: undefined });
+                                                setShowCompanyDropdown(true);
                                             } else {
-                                                // Revert search visually
                                                 setCompanySearch(formData.company.name);
                                             }
+                                        } else {
+                                            setShowCompanyDropdown(true);
                                         }
                                     }}
                                     placeholder="Buscar o escribir nombre de empresa..."
                                     className={`w-full px-4 py-3 bg-white/60 backdrop-blur-sm border ${!formData.company ? 'border-blue-400 ring-2 ring-blue-500/20' : 'border-slate-200'} rounded-[14px] focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner`}
                                 />
-                                {!formData.company && (
+                                {!formData.company && !showCompanyDropdown && (
                                     <p className="text-[11px] font-bold text-blue-600 mt-1.5 ml-1 animate-pulse flex items-center gap-1">
                                         Rellena este campo primero para desbloquear el resto del formulario.
                                     </p>
                                 )}
-                                {companySearch && !formData.company && companies.length > 0 && (
-                                    <div className="absolute z-10 w-full mt-2 bg-white/90 backdrop-blur-xl border border-slate-200 rounded-[16px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] overflow-hidden max-h-48 overflow-y-auto p-1">
-                                        {companies.map(comp => (
-                                            <button
-                                                key={comp._id}
-                                                type="button"
-                                                onClick={() => handleSelectCompany(comp)}
-                                                className="w-full text-left px-4 py-2.5 text-[13px] text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:font-bold rounded-[10px] transition-colors flex justify-between items-center"
-                                            >
-                                                <span>{comp.name}</span>
-                                                <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{comp.localesCount || 0} loc.</span>
-                                            </button>
-                                        ))}
+                                {showCompanyDropdown && !formData.company && companies.length > 0 && (
+                                    <div className="absolute z-10 w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-[16px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] overflow-hidden p-1">
+                                        <div className="max-h-[220px] overflow-y-auto custom-scrollbar">
+                                            {companies.slice(0, 5).map(comp => (
+                                                <button
+                                                    key={comp._id}
+                                                    type="button"
+                                                    onClick={() => handleSelectCompany(comp)}
+                                                    className="w-full text-left px-4 py-2.5 text-[13px] text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:font-bold rounded-[10px] transition-colors flex justify-between items-center"
+                                                >
+                                                    <span className="truncate">{comp.name}</span>
+                                                    <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 ml-2">{comp.localesCount || 0} loc.</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {companies.length > 5 && (
+                                            <div className="text-center text-[10px] font-medium text-slate-400 py-1.5 border-t border-slate-100 mt-1">
+                                                Escribí para filtrar más resultados
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -508,8 +561,8 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                                 required
                                                 type="number"
                                                 min="0"
-                                                value={formData.value || ''}
-                                                onChange={(e) => setFormData({ ...formData, value: parseInt(e.target.value) || 0 })}
+                                                value={formData.value ? Math.round(formData.value * 100) / 100 : ''}
+                                                onChange={(e) => setFormData({ ...formData, value: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 })}
                                                 placeholder="0"
                                                 className="w-full px-4 py-3 bg-emerald-50/30 backdrop-blur-sm border border-emerald-200/80 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-mono text-[14px] text-slate-800 font-bold placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                                             />
@@ -526,10 +579,30 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                 <div className="grid grid-cols-2 gap-5 mt-2">
                                     {/* Fecha Cierre */}
                                     <div className="space-y-2">
-                                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                                            <Calendar size={14} className="text-blue-500" />
-                                            Cierre Estimado
-                                        </label>
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                                <Calendar size={14} className="text-blue-500" />
+                                                Cierre Estimado
+                                            </label>
+                                            {formData.expectedCloseDate && (
+                                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${(() => {
+                                                    const days = getDaysUntilClose();
+                                                    if (days === null) return '';
+                                                    if (days < 0) return 'bg-red-50 text-red-600';
+                                                    if (days <= 7) return 'bg-amber-50 text-amber-600';
+                                                    return 'bg-emerald-50 text-emerald-600';
+                                                })()
+                                                    }`}>
+                                                    {(() => {
+                                                        const days = getDaysUntilClose();
+                                                        if (days === null) return '';
+                                                        if (days < 0) return `hace ${Math.abs(days)} días`;
+                                                        if (days === 0) return 'hoy';
+                                                        return `en ${days} días`;
+                                                    })()}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="relative w-full">
                                             <input
                                                 type="date"
@@ -892,7 +965,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                     <div className="mt-auto pt-4 border-t border-slate-200/50 flex gap-3 bg-white/90 backdrop-blur-xl sticky bottom-0 -mx-6 px-6 pb-4 shadow-[0_-10px_20px_rgba(255,255,255,0.8)]">
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleAttemptClose}
                             className="flex-1 px-4 py-2 bg-white border border-slate-200/80 text-slate-600 rounded-[10px] text-[13px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
                         >
                             Cerrar
@@ -937,9 +1010,44 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                 }}
             />
 
+            {showUnsavedConfirm && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] animate-[slideUp_0.3s_ease-out] border border-slate-100" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 bg-amber-50 text-amber-500 rounded-[16px] flex items-center justify-center mb-5 border border-amber-100 shadow-inner">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Salir sin guardar?</h3>
+                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                            Tenés cambios sin guardar. ¿Querés guardarlos antes de salir?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setShowUnsavedConfirm(false); setIsDirty(false); onClose(); }}
+                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                            >
+                                No, salir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowUnsavedConfirm(false);
+                                    const form = document.getElementById('deal-form') as HTMLFormElement;
+                                    if (form) form.requestSubmit();
+                                }}
+                                className="flex-1 py-3 px-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold rounded-[14px] hover:shadow-md transition-all shadow-sm text-[14px]"
+                            >
+                                Sí, guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+                @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
                 .custom-date-input::-webkit-calendar-picker-indicator {
                     background: transparent;
                     bottom: 0;

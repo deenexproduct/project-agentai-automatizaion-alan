@@ -1,15 +1,15 @@
 {
-  "batchId": "2026-02-20T23:35:37.830Z",
+  "batchId": "2026-02-24T22:29:07.198Z",
   "accountEmail": "unknown",
   "profiles": [
     {
-      "url": "https://www.linkedin.com/in/tomaspereyrairaola/",
+      "url": "https://www.linkedin.com/in/paula-rodr%c3%adguez-4bb131122",
       "status": "pending",
       "attempts": 0
     }
   ],
   "currentIndex": 0,
-  "startTime": "2026-02-20T23:35:37.889Z",
+  "startTime": "2026-02-24T22:29:07.246Z",
   "isPaused": false,
   "options": {
     "totalLimit": 1,
@@ -21,6 +21,6 @@
     "failed": 0,
     "pending": 1
   },
-  "lastUpdate": "2026-02-20T23:35:37.889Z",
+  "lastUpdate": "2026-02-24T22:29:07.246Z",
   "version": 1
 }

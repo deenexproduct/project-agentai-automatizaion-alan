@@ -1,15 +1,15 @@
 {
-  "batchId": "2026-02-20T23:48:36.508Z",
+  "batchId": "2026-02-24T23:20:28.442Z",
   "accountEmail": "unknown",
   "profiles": [
     {
-      "url": "linkedin.com/in/fernando-canovas-860b8536/?skipRedirect=true",
+      "url": "https://www.linkedin.com/in/pablo-perez-venini-73892251",
       "status": "pending",
       "attempts": 0
     }
   ],
   "currentIndex": 0,
-  "startTime": "2026-02-20T23:48:36.576Z",
+  "startTime": "2026-02-24T23:20:28.510Z",
   "isPaused": false,
   "options": {
     "totalLimit": 1,
@@ -21,6 +21,6 @@
     "failed": 0,
     "pending": 1
   },
-  "lastUpdate": "2026-02-20T23:48:36.576Z",
+  "lastUpdate": "2026-02-24T23:20:28.510Z",
   "version": 1
 }

@@ -18,11 +18,29 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
     const [activityContactPreview, setActivityContactPreview] = useState<ContactData | null>(null);
 
     // Derive unique companies for the filter
-    const uniqueCompanies = Array.from(new Set(contacts.map(c => c.company?.name).filter(Boolean))) as string[];
+    const uniqueCompanies = Array.from(new Set(
+        contacts
+            .flatMap(c => {
+                const names = [];
+                if (c.companies && c.companies.length > 0) {
+                    names.push(...c.companies.map(comp => comp.name));
+                } else if (c.company?.name) {
+                    names.push(c.company.name);
+                }
+                return names;
+            })
+            .filter(Boolean)
+    )).sort() as string[];
 
     const filteredContacts = contacts.filter(contact => {
         if (roleFilter && contact.role !== roleFilter) return false;
-        if (companyFilter && contact.company?.name !== companyFilter) return false;
+
+        if (companyFilter) {
+            const hasCompany = (contact.companies && contact.companies.some(c => c.name === companyFilter)) ||
+                (contact.company?.name === companyFilter);
+            if (!hasCompany) return false;
+        }
+
         return true;
     });
 
@@ -224,8 +242,15 @@ export default function ContactList({ onSelectContact }: { onSelectContact?: (id
 
                                     {/* Bottom Info Row */}
                                     <div className="relative z-10 flex items-center justify-between w-full">
-                                        <div className="flex items-center gap-2">
-                                            {contact.company ? (
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            {contact.companies && contact.companies.length > 0 ? (
+                                                contact.companies.map(comp => (
+                                                    <div key={comp._id} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-[6px] border border-slate-200/50">
+                                                        <Building2 size={12} className="text-slate-400" />
+                                                        <span className="truncate max-w-[110px]">{comp.name}</span>
+                                                    </div>
+                                                ))
+                                            ) : contact.company ? (
                                                 <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-[6px] border border-slate-200/50">
                                                     <Building2 size={12} className="text-slate-400" />
                                                     <span className="truncate max-w-[110px]">{contact.company.name}</span>

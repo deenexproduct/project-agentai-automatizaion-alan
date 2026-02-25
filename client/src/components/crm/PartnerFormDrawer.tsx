@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { X, Save, User, Mail, Phone, Percent, FileText, Handshake } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Save, User, Mail, Phone, Percent, FileText, Handshake, AlertTriangle } from 'lucide-react';
 import { PartnerData, createPartner, updatePartner, getTeamUsers, TeamUser } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
-
+import { useAuth } from '../../contexts/AuthContext';
 interface Props {
     partner?: PartnerData | null;
     open: boolean;
@@ -11,6 +11,7 @@ interface Props {
 }
 
 export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: Props) {
+    const { user } = useAuth();
     const [formData, setFormData] = useState<Partial<PartnerData>>({
         name: '',
         email: '',
@@ -21,6 +22,9 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
 
     const [saving, setSaving] = useState(false);
     const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
+    const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+    const drawerRef = useRef<HTMLDivElement>(null);
 
     // Initial data
     useEffect(() => {
@@ -40,17 +44,32 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                 phone: '',
                 commissionPercentage: 0,
                 notes: '',
-                assignedTo: undefined,
+                assignedTo: user?._id as any,
             });
         }
-    }, [open, partner]);
+        setIsDirty(false);
+    }, [open, partner, user?._id]);
 
     useEffect(() => {
         if (!open) return;
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleAttemptClose(); };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [open, onClose]);
+    }, [open, isDirty]);
+
+    const handleAttemptClose = () => {
+        if (isDirty) {
+            setShowUnsavedConfirm(true);
+        } else {
+            onClose();
+        }
+    };
+
+    const handleBackdropClick = (e: React.MouseEvent) => {
+        if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+            handleAttemptClose();
+        }
+    };
 
     // Load team users
     useEffect(() => {
@@ -92,11 +111,10 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                 backdropFilter: 'blur(8px)',
                 animation: 'fadeIn 0.3s ease-out',
             }}
-            onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
-            }}
+            onClick={handleBackdropClick}
         >
             <div
+                ref={drawerRef}
                 className="h-full overflow-y-auto w-[460px] max-w-[100vw] bg-white/95 backdrop-blur-2xl border-l border-white/60 flex flex-col shadow-[-20px_0_40px_rgba(30,27,75,0.1)] relative"
                 style={{
                     animation: 'slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -118,7 +136,7 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                         </div>
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleAttemptClose}
                             className="w-9 h-9 rounded-[10px] flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700 bg-white border border-slate-200 shadow-sm"
                         >
                             <X size={18} />
@@ -127,7 +145,7 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-6 flex-1 flex flex-col gap-6 custom-scrollbar drawer-form">
+                <form id="partner-form" onSubmit={handleSubmit} onChange={() => setIsDirty(true)} className="p-6 flex-1 flex flex-col gap-6 custom-scrollbar drawer-form">
 
                     {/* Basic Info */}
                     <div className="space-y-5">
@@ -236,7 +254,7 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                     <div className="mt-8 pt-6 border-t border-slate-200/50 flex gap-4 bg-white/50 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-6 shadow-[0_-10px_20px_rgba(255,255,255,0.8)]">
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleAttemptClose}
                             className="flex-1 px-5 py-3.5 bg-white border border-slate-200/80 text-slate-600 rounded-[14px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
                         >
                             Cancelar
@@ -252,9 +270,44 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                 </form>
             </div>
 
+            {showUnsavedConfirm && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-slate-100" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 bg-amber-50 text-amber-500 rounded-[16px] flex items-center justify-center mb-5 border border-amber-100 shadow-inner">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Salir sin guardar?</h3>
+                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                            Tenés cambios sin guardar. ¿Querés guardarlos antes de salir?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setShowUnsavedConfirm(false); setIsDirty(false); onClose(); }}
+                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                            >
+                                No, salir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowUnsavedConfirm(false);
+                                    const form = document.getElementById('partner-form') as HTMLFormElement;
+                                    if (form) form.requestSubmit();
+                                }}
+                                className="flex-1 py-3 px-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold rounded-[14px] hover:shadow-md transition-all shadow-sm text-[14px]"
+                            >
+                                Sí, guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+                @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
                 .drawer-form .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                 .drawer-form .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .drawer-form .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.2); border-radius: 10px; }

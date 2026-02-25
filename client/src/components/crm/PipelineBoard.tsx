@@ -123,7 +123,10 @@ export default function PipelineBoard() {
                     <div className="hidden md:flex gap-2 items-center mx-2">
                         <div className="px-3 py-1.5 bg-emerald-50/80 border border-emerald-100 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] rounded-[12px] text-[12px] font-bold text-emerald-700 flex items-center gap-1.5 transition-all hover:bg-emerald-100/80 whitespace-nowrap">
                             <DollarSign size={14} strokeWidth={2.5} className="text-emerald-500" />
-                            {stages.reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.value || 0), 0), 0).toLocaleString()} <span className="text-emerald-500/70 font-medium">en juego</span>
+                            {stages.filter(s => {
+                                const k = s.key.toLowerCase();
+                                return !k.includes('perdid') && !k.includes('lost') && k !== 'pausado';
+                            }).reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.value || 0), 0), 0).toLocaleString()} <span className="text-emerald-500/70 font-medium">en juego</span>
                         </div>
                         <div className="px-3 py-1.5 bg-blue-50/80 border border-blue-100 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] rounded-[12px] text-[12px] font-bold text-blue-700 flex items-center gap-1.5 transition-all hover:bg-blue-100/80 whitespace-nowrap">
                             <Building2 size={14} strokeWidth={2.5} className="text-blue-500" />
@@ -222,15 +225,6 @@ export default function PipelineBoard() {
                                                                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 group-hover:opacity-100 rounded-bl-full transition-opacity duration-500 -z-0 blur-xl pointer-events-none" />
 
                                                                     <div className="relative z-10">
-                                                                        <div className="flex justify-between items-center mb-4">
-                                                                            <div className="text-[10px] font-bold px-2.5 py-1 rounded-[8px] uppercase tracking-wider bg-slate-50 text-slate-400 border border-slate-200/40" title="Días en esta etapa">
-                                                                                {deal.daysInStatus || 0} Días
-                                                                            </div>
-                                                                            <div className="font-bold text-emerald-600 font-mono text-[14px] tracking-tight bg-emerald-50/40 px-3 py-1 rounded-[8px] border border-emerald-100/40">
-                                                                                ${deal.value?.toLocaleString() || 0}
-                                                                            </div>
-                                                                        </div>
-
                                                                         <div className="flex items-start gap-3 mb-4">
                                                                             <div className="w-8 h-8 rounded-[8px] border border-slate-200/80 bg-white/80 flex items-center justify-center shadow-sm shrink-0 overflow-hidden backdrop-blur-md relative mt-0.5" title={deal.company?.name || deal.primaryContact?.fullName || deal.title}>
                                                                                 {deal.company?.logo || deal.primaryContact?.profilePhotoUrl ? (
@@ -255,25 +249,31 @@ export default function PipelineBoard() {
                                                                             </h4>
                                                                         </div>
 
-                                                                        <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-auto">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <div className="flex items-center gap-1.5 text-[12px] font-bold text-slate-500 bg-white border border-slate-200/40 px-3 py-1.5 rounded-[8px]">
-                                                                                    <Calendar size={13} className="text-slate-400" />
-                                                                                    {new Date(deal.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                                                                                </div>
-                                                                                {deal.company?.localesCount !== undefined && deal.company.localesCount > 0 && (
-                                                                                    <div className="flex items-center gap-1.5 text-[12px] font-bold text-blue-600 bg-blue-50/50 border border-blue-100/50 px-3 py-1.5 rounded-[8px]">
-                                                                                        <Building2 size={13} className="text-blue-500" />
-                                                                                        {deal.company.localesCount} Local{deal.company.localesCount !== 1 && 'es'}
-                                                                                    </div>
-                                                                                )}
+                                                                        <div className="flex items-center flex-wrap gap-1.5 pt-3 border-t border-slate-100 mt-auto">
+                                                                            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-white border border-slate-200/40 px-2 py-1 rounded-[8px]">
+                                                                                <Calendar size={12} className="text-slate-400" />
+                                                                                {new Date(deal.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                                                                             </div>
-                                                                            {deal.pendingTasks !== undefined && deal.pendingTasks > 0 && (
-                                                                                <div className="px-2.5 py-1.5 rounded-[8px] border border-amber-200/40 text-amber-600 flex items-center justify-center text-[12px] font-bold" title={`${deal.pendingTasks} tareas pendientes`}>
-                                                                                    <CheckSquare size={13} className="mr-1.5 text-amber-500" />{deal.pendingTasks}
+                                                                            <div className="text-[11px] font-bold px-2 py-1 rounded-[8px] uppercase tracking-wider bg-slate-50 text-slate-400 border border-slate-200/40" title="Días en esta etapa">
+                                                                                {deal.daysInStatus || 0}d
+                                                                            </div>
+                                                                            {deal.company?.localesCount !== undefined && deal.company.localesCount > 0 && (
+                                                                                <div className="flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50/50 border border-blue-100/50 px-2 py-1 rounded-[8px]">
+                                                                                    <Building2 size={12} className="text-blue-500" />
+                                                                                    {deal.company.localesCount}
                                                                                 </div>
                                                                             )}
-                                                                            <OwnerAvatar name={deal.assignedTo?.name} profilePhotoUrl={deal.assignedTo?.profilePhotoUrl} size="xs" />
+                                                                            <div className="font-bold text-emerald-600 font-mono text-[11px] tracking-tight bg-emerald-50/40 px-2 py-1 rounded-[8px] border border-emerald-100/40">
+                                                                                ${deal.value?.toLocaleString() || 0}
+                                                                            </div>
+                                                                            {deal.pendingTasks !== undefined && deal.pendingTasks > 0 && (
+                                                                                <div className="px-2 py-1 rounded-[8px] border border-amber-200/40 text-amber-600 flex items-center justify-center text-[11px] font-bold" title={`${deal.pendingTasks} tareas pendientes`}>
+                                                                                    <CheckSquare size={12} className="mr-1 text-amber-500" />{deal.pendingTasks}
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="ml-auto">
+                                                                                <OwnerAvatar name={deal.assignedTo?.name} profilePhotoUrl={deal.assignedTo?.profilePhotoUrl} size="xs" />
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 </div>

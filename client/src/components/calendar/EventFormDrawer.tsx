@@ -42,6 +42,8 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
     const [sendInvite, setSendInvite] = useState(true);
     const [saving, setSaving] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
 
     const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -84,6 +86,7 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
             }
             setSendInvite(true);
             setShowDeleteConfirm(false);
+            setIsDirty(false);
         }
     }, [open, event, initialDate, user?._id]);
 
@@ -175,6 +178,14 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
 
     const handleBackdropClick = (e: React.MouseEvent) => {
         if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+            handleAttemptClose();
+        }
+    };
+
+    const handleAttemptClose = () => {
+        if (isDirty) {
+            setShowUnsavedConfirm(true);
+        } else {
             onClose();
         }
     };
@@ -198,12 +209,12 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
                             <p className="text-[13px] font-medium text-slate-500">{event ? 'Modifica los detalles del evento' : 'Programa una reunión o videollamada'}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+                    <button onClick={handleAttemptClose} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
                         <X size={20} />
                     </button>
                 </div>
 
-                <form id="event-form" onSubmit={handleSave} className="flex-1 overflow-y-auto w-full custom-scrollbar">
+                <form id="event-form" onSubmit={handleSave} onChange={() => setIsDirty(true)} className="flex-1 overflow-y-auto w-full custom-scrollbar">
                     <div className="p-6 space-y-6">
                         <div className="bg-white p-5 rounded-[20px] shadow-sm border border-slate-100 space-y-4">
                             <div>
@@ -476,7 +487,7 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
                     <div className="flex gap-3">
                         <button
                             type="button"
-                            onClick={onClose}
+                            onClick={handleAttemptClose}
                             className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 font-bold rounded-[12px] hover:bg-slate-50 transition-colors text-[14px]"
                         >
                             Cancelar
@@ -526,9 +537,44 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
                 )}
             </div>
 
+            {showUnsavedConfirm && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-slate-100" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 bg-amber-50 text-amber-500 rounded-[16px] flex items-center justify-center mb-5 border border-amber-100 shadow-inner">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Salir sin guardar?</h3>
+                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                            Tenés cambios sin guardar. ¿Querés guardarlos antes de salir?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setShowUnsavedConfirm(false); setIsDirty(false); onClose(); }}
+                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                            >
+                                No, salir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowUnsavedConfirm(false);
+                                    const form = document.getElementById('event-form') as HTMLFormElement;
+                                    if (form) form.requestSubmit();
+                                }}
+                                className="flex-1 py-3 px-4 bg-violet-600 text-white font-bold rounded-[14px] hover:bg-violet-700 transition-all shadow-sm text-[14px]"
+                            >
+                                Sí, guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+                @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
             `}</style>
         </div>
     );

@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 // ── Enums ─────────────────────────────────────────────────────
 
-export const ACTIVITY_TYPES = ['call', 'whatsapp', 'linkedin_message', 'email', 'meeting', 'note', 'task_completed'] as const;
+export const ACTIVITY_TYPES = ['call', 'whatsapp', 'linkedin_message', 'email', 'meeting', 'note', 'task_completed', 'referral'] as const;
 export type ActivityType = typeof ACTIVITY_TYPES[number];
 
 // ── Interface ─────────────────────────────────────────────────

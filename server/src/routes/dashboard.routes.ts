@@ -68,13 +68,12 @@ router.get('/metrics', async (req: Request, res: Response) => {
             Company.countDocuments({ userId, createdAt: { $lte: endOfMonth } }),
             Company.countDocuments({ userId, createdAt: { $lte: endOfLastMonth } }),
 
-            // 2a. Monto Mensual (Lost vs Won should ideally be checked if they were closed this month, but for "Ganado This Month")
+            // 2a. Monto Proyectado
             Deal.aggregate([
                 {
                     $match: {
                         userId,
-                        status: { $in: wonStageKeys },
-                        closedAt: { $gte: startOfMonth, $lte: endOfMonth }
+                        status: { $in: [...wonStageKeys, ...nonFinalStages.filter(s => s !== 'pausado')] }
                     }
                 },
                 { $group: { _id: "$currency", totalMensual: { $sum: "$value" } } }

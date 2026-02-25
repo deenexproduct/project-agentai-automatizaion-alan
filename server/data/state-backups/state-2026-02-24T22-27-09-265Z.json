@@ -1,15 +1,15 @@
 {
-  "batchId": "2026-02-20T23:13:46.495Z",
+  "batchId": "2026-02-24T22:24:38.379Z",
   "accountEmail": "unknown",
   "profiles": [
     {
-      "url": "https://www.linkedin.com/in/tomaspereyrairaola/",
+      "url": "https://www.linkedin.com/in/sorayapajon",
       "status": "pending",
       "attempts": 0
     }
   ],
   "currentIndex": 0,
-  "startTime": "2026-02-20T23:13:46.582Z",
+  "startTime": "2026-02-24T22:24:38.451Z",
   "isPaused": false,
   "options": {
     "totalLimit": 1,
@@ -21,6 +21,6 @@
     "failed": 0,
     "pending": 1
   },
-  "lastUpdate": "2026-02-20T23:13:46.583Z",
+  "lastUpdate": "2026-02-24T22:24:38.452Z",
   "version": 1
 }

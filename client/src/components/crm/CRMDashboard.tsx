@@ -86,15 +86,33 @@ export default function CRMDashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 relative z-10 w-full">
-                {/* 1. Monto Mensual */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 relative z-10 w-full">
+                {/* 1. Monto Mensual Proyectado */}
                 <StatCard
-                    title="Monto Mensual Ganado"
-                    value={`$${(stats.revenue?.wonThisMonth || []).reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()}`}
+                    title="Mensual Proyectado"
+                    value={
+                        (stats.revenue?.wonThisMonth || []).length > 0
+                            ? (stats.revenue?.wonThisMonth || []).map(r => `${r.currency || '$'} ${r.amount.toLocaleString()}`).join(' + ')
+                            : '$0'
+                    }
                     icon={Briefcase}
                     color="text-emerald-600"
                     bg="bg-emerald-100"
-                    subtitle="Este mes"
+                    subtitle="Excl. perdidos y pausados"
+                />
+
+                {/* 1b. Monto Mensual Estimado (25% del proyectado) */}
+                <StatCard
+                    title="Mensual Estimado"
+                    value={
+                        (stats.revenue?.wonThisMonth || []).length > 0
+                            ? (stats.revenue?.wonThisMonth || []).map(r => `${r.currency || '$'} ${Math.round(r.amount * 0.25).toLocaleString()}`).join(' + ')
+                            : '$0'
+                    }
+                    icon={Briefcase}
+                    color="text-cyan-600"
+                    bg="bg-cyan-100"
+                    subtitle="25% tasa de éxito proyectada"
                 />
 
                 {/* 2. Locales */}
