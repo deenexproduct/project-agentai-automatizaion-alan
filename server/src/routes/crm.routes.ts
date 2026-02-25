@@ -80,7 +80,7 @@ router.get('/companies', async (req: Request, res: Response) => {
         const pageNum = Math.max(1, parseInt(page as string) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
 
-        const query: any = { userId };
+        const query: any = {};
         if (sector) query.sector = sector;
         if (assignedTo) query.assignedTo = assignedTo;
         if (search) {
@@ -103,7 +103,7 @@ router.get('/companies', async (req: Request, res: Response) => {
         const companyIds = companies.map(c => c._id);
         const [contactCounts, dealCounts] = await Promise.all([
             CrmContact.aggregate([
-                { $match: { $or: [{ company: { $in: companyIds } }, { companies: { $in: companyIds } }], userId: (req as any).user._id } },
+                { $match: { $or: [{ company: { $in: companyIds } }, { companies: { $in: companyIds } }] } },
                 {
                     $project: {
                         matchedCompanies: {
@@ -118,20 +118,15 @@ router.get('/companies', async (req: Request, res: Response) => {
                 { $group: { _id: '$matchedCompanies', count: { $sum: 1 } } },
             ]),
             Deal.aggregate([
-                { $match: { company: { $in: companyIds }, userId: (req as any).user._id } },
+                { $match: { company: { $in: companyIds } } },
                 { $group: { _id: '$company', count: { $sum: 1 } } },
             ]),
         ]);
 
         const contactMap: Record<string, number> = {};
-        for (const c of contactCounts) {
-            console.log(`[DEBUG] mapped ObjectId`, c._id, `to count`, c.count);
-            contactMap[c._id.toString()] = c.count;
-        }
+        for (const c of contactCounts) contactMap[c._id.toString()] = c.count;
         const dealMap: Record<string, number> = {};
         for (const d of dealCounts) dealMap[d._id.toString()] = d.count;
-
-        console.log(`[DEBUG] Final contactMap`, contactMap);
 
         const enriched = companies.map(c => ({
             ...c,
@@ -186,7 +181,7 @@ router.post('/companies', async (req: Request, res: Response) => {
 router.get('/companies/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const company = await Company.findOne({ _id: req.params.id, userId })
+        const company = await Company.findOne({ _id: req.params.id })
             .populate('assignedTo', 'name email profilePhotoUrl')
             .populate('partner', 'name')
             .lean();
@@ -194,14 +189,14 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
         if (!company) return res.status(404).json({ error: 'Company not found' });
 
         const [contacts, deals, tasks, activities] = await Promise.all([
-            CrmContact.find({ $or: [{ company: req.params.id }, { companies: req.params.id }], userId }).sort({ isResponsible: -1, fullName: 1 }).lean(),
-            Deal.find({ company: req.params.id, userId })
+            CrmContact.find({ $or: [{ company: req.params.id }, { companies: req.params.id }] }).sort({ isResponsible: -1, fullName: 1 }).lean(),
+            Deal.find({ company: req.params.id })
                 .populate('primaryContact', 'fullName position profilePhotoUrl')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ createdAt: -1 }).lean(),
-            Task.find({ company: req.params.id, userId, status: { $in: ['pending', 'in_progress'] } })
+            Task.find({ company: req.params.id, status: { $in: ['pending', 'in_progress'] } })
                 .sort({ dueDate: 1 }).lean(),
-            Activity.find({ company: req.params.id, userId })
+            Activity.find({ company: req.params.id })
                 .populate('contact', 'fullName')
                 .sort({ createdAt: -1 }).limit(20).lean(),
         ]);
@@ -235,7 +230,7 @@ router.patch('/companies/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
         const company = await Company.findOneAndUpdate(
-            { _id: req.params.id, userId },
+            { _id: req.params.id },
             { $set: req.body },
             { new: true, runValidators: true }
         ).lean();
@@ -256,14 +251,13 @@ router.delete('/companies/:id', async (req: Request, res: Response) => {
         // Check for active deals
         const activeDeals = await Deal.countDocuments({
             company: req.params.id,
-            userId,
             status: { $nin: ['ganado', 'perdido'] },
         });
         if (activeDeals > 0) {
             return res.status(400).json({ error: `Cannot delete: company has ${activeDeals} active deal(s)` });
         }
 
-        const result = await Company.deleteOne({ _id: req.params.id, userId });
+        const result = await Company.deleteOne({ _id: req.params.id });
         if (result.deletedCount === 0) return res.status(404).json({ error: 'Company not found' });
 
         res.json({ success: true });
@@ -286,7 +280,7 @@ router.get('/contacts', async (req: Request, res: Response) => {
         const pageNum = Math.max(1, parseInt(page as string) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
 
-        const query: any = { userId };
+        const query: any = {};
         if (company) {
             query.$or = [{ company: company }, { companies: company }];
         }
@@ -362,7 +356,7 @@ router.post('/contacts', async (req: Request, res: Response) => {
         const companyId = contact.company;
         if (companyId) {
             try {
-                const companyDeals = await Deal.find({ company: companyId, userId });
+                const companyDeals = await Deal.find({ company: companyId });
                 for (const deal of companyDeals) {
                     const alreadyLinked = deal.contacts.some(c => c.toString() === contact._id.toString());
                     if (!alreadyLinked) {
@@ -398,7 +392,7 @@ router.post('/contacts', async (req: Request, res: Response) => {
 router.get('/contacts/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const contact = await CrmContact.findOne({ _id: req.params.id, userId })
+        const contact = await CrmContact.findOne({ _id: req.params.id })
             .populate('company', 'name logo sector website')
             .populate('companies', 'name logo sector website localesCount costPerLocation')
             .populate('assignedTo', 'name email profilePhotoUrl')
@@ -409,11 +403,11 @@ router.get('/contacts/:id', async (req: Request, res: Response) => {
         if (!contact) return res.status(404).json({ error: 'Contact not found' });
 
         const [tasks, activities, deals] = await Promise.all([
-            Task.find({ contact: req.params.id, userId })
+            Task.find({ contact: req.params.id })
                 .sort({ status: 1, dueDate: 1 }).lean(),
-            Activity.find({ contact: req.params.id, userId })
+            Activity.find({ contact: req.params.id })
                 .sort({ createdAt: -1 }).limit(30).lean(),
-            Deal.find({ primaryContact: req.params.id, userId })
+            Deal.find({ primaryContact: req.params.id })
                 .populate('company', 'name logo themeColor sector localesCount')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ createdAt: -1 }).lean(),
@@ -449,14 +443,14 @@ router.patch('/contacts/:id', async (req: Request, res: Response) => {
         const userId = (req as any).user._id.toString();
 
         // Fetch original to detect if the LinkedIn URL actually changed
-        const originalContact = await CrmContact.findOne({ _id: req.params.id, userId }).lean();
+        const originalContact = await CrmContact.findOne({ _id: req.params.id }).lean();
         if (!originalContact) return res.status(404).json({ error: 'Contact not found' });
 
         const isLinkedInUrlNewOrChanged = req.body.linkedInProfileUrl &&
             req.body.linkedInProfileUrl !== originalContact.linkedInProfileUrl;
 
         const contact = await CrmContact.findOneAndUpdate(
-            { _id: req.params.id, userId },
+            { _id: req.params.id },
             { $set: req.body },
             { new: true, runValidators: true }
         ).lean();
@@ -531,7 +525,7 @@ router.post('/contacts/:id/link-linkedin', async (req: Request, res: Response) =
         if (linkedInContact.currentPosition && !req.body.position) updateData.position = linkedInContact.currentPosition;
 
         const contact = await CrmContact.findOneAndUpdate(
-            { _id: req.params.id, userId },
+            { _id: req.params.id },
             { $set: updateData },
             { new: true }
         )
@@ -555,14 +549,13 @@ router.delete('/contacts/:id', async (req: Request, res: Response) => {
         // Check for active deals
         const activeDeals = await Deal.countDocuments({
             $or: [{ primaryContact: req.params.id }, { contacts: req.params.id }],
-            userId,
             status: { $nin: ['ganado', 'perdido'] },
         });
         if (activeDeals > 0) {
             return res.status(400).json({ error: `No se puede eliminar: el contacto está en ${activeDeals} negocio(s) activo(s)` });
         }
 
-        const result = await CrmContact.deleteOne({ _id: req.params.id, userId });
+        const result = await CrmContact.deleteOne({ _id: req.params.id });
         if (result.deletedCount === 0) return res.status(404).json({ error: 'Contact not found' });
 
         res.json({ success: true });
@@ -582,7 +575,7 @@ router.get('/deals', async (req: Request, res: Response) => {
         const userId = (req as any).user._id.toString();
         const { company, assignedTo } = req.query;
 
-        const query: any = { userId };
+        const query: any = {};
         if (company) query.company = company;
         if (assignedTo) query.assignedTo = assignedTo;
 
@@ -661,7 +654,7 @@ router.get('/deals/:id', async (req: Request, res: Response) => {
         console.log(`[INFO] Fetching Deal ID: ${dealId} para el usuario: ${userId}`);
 
         // 2. Consulta a BD optimizada usando lean() y proyecciones específicas
-        const deal = await Deal.findOne({ _id: dealId, userId })
+        const deal = await Deal.findOne({ _id: dealId })
             .populate('company', 'name logo sector localesCount')
             .populate('primaryContact', 'fullName position profilePhotoUrl email phone')
             .populate('contacts', 'fullName position profilePhotoUrl email phone')
@@ -712,7 +705,7 @@ router.get('/deals/:id/activities', async (req: Request, res: Response) => {
         const dealId = req.params.id;
 
         // Find the deal to get its contacts
-        const deal = await Deal.findOne({ _id: dealId, userId }).lean();
+        const deal = await Deal.findOne({ _id: dealId }).lean();
         if (!deal) return res.status(404).json({ error: 'Deal not found' });
 
         // Build $or query: activities linked to the deal OR to any of its contacts
@@ -728,7 +721,7 @@ router.get('/deals/:id/activities', async (req: Request, res: Response) => {
             }
         }
 
-        const activities = await Activity.find({ userId, $or: orConditions })
+        const activities = await Activity.find({ $or: orConditions })
             .populate('contact', 'fullName profilePhotoUrl')
             .populate('deal', 'title')
             .populate('company', 'name logo')
@@ -766,7 +759,7 @@ router.patch('/deals/:id', async (req: Request, res: Response) => {
             }
         }
 
-        const deal = await Deal.findOne({ _id: req.params.id, userId });
+        const deal = await Deal.findOne({ _id: req.params.id });
         if (!deal) return res.status(404).json({ error: 'Deal not found' });
 
         const previousStatus = deal.status;
@@ -821,7 +814,7 @@ router.get('/tasks', async (req: Request, res: Response) => {
         const pageNum = Math.max(1, parseInt(page as string) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
 
-        const query: any = { userId };
+        const query: any = {};
         if (assignedTo) query.assignedTo = assignedTo;
         if (priority) query.priority = priority;
         if (status) {
@@ -867,7 +860,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'El ID proporcionado no tiene un formato válido.' });
         }
 
-        const task = await Task.findOne({ _id: taskId, userId })
+        const task = await Task.findOne({ _id: taskId })
             .populate('contact', 'fullName profilePhotoUrl email phone')
             .populate('deal', 'title')
             .populate('company', 'name logo sector localesCount')
@@ -910,7 +903,7 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
         const task = await Task.findOneAndUpdate(
-            { _id: req.params.id, userId },
+            { _id: req.params.id },
             { $set: req.body },
             { new: true, runValidators: true }
         )
@@ -932,7 +925,7 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
 router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
-        const task = await Task.findOne({ _id: req.params.id, userId: userId.toString() });
+        const task = await Task.findOne({ _id: req.params.id });
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
         task.status = 'completed';
@@ -969,10 +962,10 @@ router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
 router.delete('/tasks/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const task = await Task.findOne({ _id: req.params.id, userId }).lean();
+        const task = await Task.findOne({ _id: req.params.id }).lean();
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
-        await Task.deleteOne({ _id: req.params.id, userId });
+        await Task.deleteOne({ _id: req.params.id });
         res.json({ success: true });
     } catch (err: any) {
         console.error('CRM delete task error:', err.message);
@@ -996,10 +989,10 @@ router.get('/activities', async (req: Request, res: Response) => {
         // If 'unified' is true, we aggregate across multiple collections for a richer dashboard feed
         if (unified === 'true') {
             const [activities, tasks, deals, companies] = await Promise.all([
-                Activity.find({ userId }).populate('contact', 'fullName').populate('company', 'name').populate('createdBy', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
-                Task.find({ userId }).populate('contact', 'fullName').populate('company', 'name').populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
-                Deal.find({ userId }).populate('company', 'name').populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
-                Company.find({ userId }).populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean()
+                Activity.find({}).populate('contact', 'fullName').populate('company', 'name').populate('createdBy', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Task.find({}).populate('contact', 'fullName').populate('company', 'name').populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Deal.find({}).populate('company', 'name').populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean(),
+                Company.find({}).populate('assignedTo', 'name profilePhotoUrl').sort({ createdAt: -1 }).limit(limitNum).lean()
             ]);
 
             const unifiedFeed: any[] = [];
@@ -1054,7 +1047,7 @@ router.get('/activities', async (req: Request, res: Response) => {
 
 
         // Standard Activity query
-        const query: any = { userId };
+        const query: any = {};
         if (contact) query.contact = contact;
         if (deal) query.deal = deal;
         if (company) query.company = company;
@@ -1125,27 +1118,25 @@ router.get('/dashboard/stats', async (req: Request, res: Response) => {
             tasksOverdue,
             activitiesThisWeek,
         ] = await Promise.all([
-            Company.countDocuments({ userId }),
-            CrmContact.countDocuments({ userId }),
+            Company.countDocuments({}),
+            CrmContact.countDocuments({}),
             Deal.aggregate([
-                { $match: { userId } },
+                { $match: {} },
                 { $group: { _id: '$status', count: { $sum: 1 }, totalValue: { $sum: '$value' } } },
             ]),
             Deal.aggregate([
-                { $match: { userId, status: { $nin: finalStageKeys } } },
+                { $match: { status: { $nin: finalStageKeys } } },
                 { $group: { _id: null, total: { $sum: '$value' } } },
             ]),
             Task.countDocuments({
-                userId,
                 dueDate: { $gte: todayStart, $lte: todayEnd },
                 status: { $in: ['pending', 'in_progress'] },
             }),
             Task.countDocuments({
-                userId,
                 dueDate: { $lt: todayStart },
                 status: { $in: ['pending', 'in_progress'] },
             }),
-            Activity.countDocuments({ userId, createdAt: { $gte: weekAgo } }),
+            Activity.countDocuments({ createdAt: { $gte: weekAgo } }),
         ]);
 
         const dealCounts: Record<string, { count: number; value: number }> = {};

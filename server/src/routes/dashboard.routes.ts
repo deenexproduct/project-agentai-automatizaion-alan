@@ -61,18 +61,17 @@ router.get('/metrics', async (req: Request, res: Response) => {
         ] = await Promise.all([
             // 1a. Locales
             Company.aggregate([
-                { $match: { userId } },
+                { $match: {} },
                 { $group: { _id: null, totalLocales: { $sum: "$localesCount" } } }
             ]),
             // 1b. Empresas Activas
-            Company.countDocuments({ userId, createdAt: { $lte: endOfMonth } }),
-            Company.countDocuments({ userId, createdAt: { $lte: endOfLastMonth } }),
+            Company.countDocuments({ createdAt: { $lte: endOfMonth } }),
+            Company.countDocuments({ createdAt: { $lte: endOfLastMonth } }),
 
             // 2a. Monto Proyectado
             Deal.aggregate([
                 {
                     $match: {
-                        userId,
                         status: { $in: [...wonStageKeys, ...nonFinalStages.filter(s => s !== 'pausado')] }
                     }
                 },
@@ -82,7 +81,6 @@ router.get('/metrics', async (req: Request, res: Response) => {
             Deal.aggregate([
                 {
                     $match: {
-                        userId,
                         status: { $in: nonFinalStages.length > 0 ? nonFinalStages : { $nin: [...wonStageKeys, ...lostStageKeys] } }
                     }
                 },
@@ -91,40 +89,37 @@ router.get('/metrics', async (req: Request, res: Response) => {
 
             // 3. Trazabilidad (Actividades esta semana)
             Activity.aggregate([
-                { $match: { userId, createdAt: { $gte: weekAgo } } },
+                { $match: { createdAt: { $gte: weekAgo } } },
                 { $group: { _id: "$type", count: { $sum: 1 } } }
             ]),
 
             // 4. Contactos
-            CrmContact.countDocuments({ userId }),
-            CrmContact.countDocuments({ userId, createdAt: { $gte: startOfMonth, $lte: endOfMonth } }),
+            CrmContact.countDocuments({}),
+            CrmContact.countDocuments({ createdAt: { $gte: startOfMonth, $lte: endOfMonth } }),
             CrmContact.aggregate([
-                { $match: { userId } },
+                { $match: {} },
                 { $group: { _id: "$role", count: { $sum: 1 } } }
             ]),
 
             // 5. Tareas
             Task.countDocuments({
-                userId,
                 dueDate: { $lt: now },
                 status: { $in: ["pending", "in_progress"] }
             }),
             Task.countDocuments({
-                userId,
                 completedAt: { $gte: weekAgo },
                 status: "completed"
             }),
             Task.countDocuments({
-                userId,
                 $or: [
                     { createdAt: { $gte: weekAgo } },
                     { dueDate: { $gte: weekAgo, $lte: now } }
                 ]
             }),
-            Task.countDocuments({ userId }),
+            Task.countDocuments({}),
 
             // 6. Win Rate and Funnel
-            Deal.find({ userId }).select('status statusHistory').lean()
+            Deal.find({}).select('status statusHistory').lean()
         ]);
 
         const totalLocales = localesResult[0]?.totalLocales || 0;
@@ -191,17 +186,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
         const leadToMeeting = baseExcluyendoPerdidosYCoordinando > 0 ? (reachedFurtherThanCoordinando / baseExcluyendoPerdidosYCoordinando) * 100 : 0;
         const leadToScheduling = baseExcluyendoPerdidos > 0 ? (reachedCoordinandoOrFurther / baseExcluyendoPerdidos) * 100 : 0;
 
-        console.log("--- METRICS DEBUG ---");
-        console.log("totalDealsAllTime", totalDealsAllTime);
-        console.log("lostDeals", lostDeals);
-        console.log("currentlyInCoordinando", currentlyInCoordinando);
-        console.log("reachedCoordinandoOrFurther", reachedCoordinandoOrFurther);
-        console.log("reachedFurtherThanCoordinando", reachedFurtherThanCoordinando);
-        console.log("baseExcluyendoPerdidos", baseExcluyendoPerdidos);
-        console.log("baseExcluyendoPerdidosYCoordinando", baseExcluyendoPerdidosYCoordinando);
-        console.log("leadToMeeting", leadToMeeting);
-        console.log("leadToScheduling", leadToScheduling);
-        console.log("---------------------");
+
 
         const funnel = config.stages.map(stage => {
             return {

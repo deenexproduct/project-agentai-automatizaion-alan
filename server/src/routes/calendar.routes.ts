@@ -110,7 +110,7 @@ router.get('/events', async (req: Request, res: Response) => {
         // Optional filters ?start=YYYY-MM-DD&end=YYYY-MM-DD
         const { start, end } = req.query;
 
-        let query: any = { $or: [{ userId }, { assignedTo: userId }] };
+        let query: any = {};
         if (start && end) {
             query.date = { $gte: new Date(start as string), $lte: new Date(end as string) };
         }
@@ -141,7 +141,7 @@ router.get('/events', async (req: Request, res: Response) => {
             .lean();
 
         // Also fetch tasks for the same period
-        let taskQuery: any = { $or: [{ userId }, { assignedTo: userId }] };
+        let taskQuery: any = {};
         if (start && end) {
             taskQuery.dueDate = { $gte: new Date(start as string), $lte: new Date(end as string) };
         }
@@ -255,7 +255,7 @@ router.put('/events/:id', async (req: Request, res: Response) => {
         // (Complexity omitted for brevity; a full integration would call calendar.events.update)
 
         const event = await Event.findOneAndUpdate(
-            { _id: req.params.id, $or: [{ userId }, { assignedTo: userId }] },
+            { _id: req.params.id },
             { $set: updateData },
             { new: true }
         ).lean();
@@ -294,7 +294,7 @@ router.put('/events/:id', async (req: Request, res: Response) => {
 router.delete('/events/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const event = await Event.findOneAndDelete({ _id: req.params.id, $or: [{ userId }, { assignedTo: userId }] }).lean();
+        const event = await Event.findOneAndDelete({ _id: req.params.id }).lean();
 
         if (!event) return res.status(404).json({ error: 'Event not found' });
 

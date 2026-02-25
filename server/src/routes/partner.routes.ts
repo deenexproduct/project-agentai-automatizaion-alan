@@ -10,7 +10,7 @@ router.get('/', async (req: Request, res: Response) => {
         const userId = (req as any).user._id.toString();
         // Usar agregación para traer cant. de empresas y contactos vinculados a cada Partner
         const partners = await Partner.aggregate([
-            { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+            { $match: {} },
             {
                 $lookup: {
                     from: 'companies',
@@ -77,7 +77,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
         const partner = await Partner.findOneAndUpdate(
-            { _id: req.params.id, userId },
+            { _id: req.params.id },
             { $set: req.body },
             { new: true, runValidators: true }
         ).lean();
@@ -94,7 +94,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const result = await Partner.deleteOne({ _id: req.params.id, userId });
+        const result = await Partner.deleteOne({ _id: req.params.id });
         if (result.deletedCount === 0) return res.status(404).json({ error: 'Partner not found' });
         res.json({ success: true });
     } catch (err: any) {
