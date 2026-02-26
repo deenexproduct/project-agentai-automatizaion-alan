@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, Save, Building2, AlignLeft, Globe, Briefcase, Hash, User, Phone, Mail, Loader2, AlertTriangle, GitBranch, DollarSign, Clock, Calendar, CheckSquare, TrendingUp, History, Camera, ImagePlus, Trash2 } from 'lucide-react';
 import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, SystemConfig, PartnerData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { useAuth } from '../../contexts/AuthContext';
@@ -13,6 +14,7 @@ interface Props {
 
 export default function CompanyFormDrawer({ company, open, onClose, onSaved }: Props) {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [formData, setFormData] = useState<Partial<CompanyData>>({
         name: '',
         website: '',
@@ -686,7 +688,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                             ) : (
                                 <div className="flex flex-col gap-3">
                                     {companyContacts.map(contact => (
-                                        <div key={contact._id} className="bg-white/70 backdrop-blur-md rounded-[16px] p-4 border border-slate-200/60 shadow-sm flex flex-col gap-3">
+                                        <div key={contact._id} onClick={() => navigate(`/linkedin/contacts/${contact._id}`)} className="bg-white/70 backdrop-blur-md rounded-[16px] p-4 border border-slate-200/60 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-violet-300 hover:shadow-md transition-all">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-fuchsia-100 to-pink-100 border border-fuchsia-200/50 flex flex-col items-center justify-center shadow-sm shrink-0 overflow-hidden">

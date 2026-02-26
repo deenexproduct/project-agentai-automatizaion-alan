@@ -158,7 +158,7 @@ export default function CRMDashboard() {
 
                 {/* 2. Locales */}
                 <StatCard
-                    title="Locales Activos"
+                    title="Locales"
                     value={(stats.companies?.totalLocales || 0).toString()}
                     icon={Building2}
                     color="text-indigo-600"
@@ -227,73 +227,123 @@ export default function CRMDashboard() {
                 {/* Left Column: Tasks & Pipeline Summary */}
                 <div className="lg:col-span-2 flex flex-col gap-6">
 
-                    {/* Análisis de Conversión del Pipeline */}
-                    <div className="bg-white/80 backdrop-blur-xl border border-white/90 rounded-[28px] p-6 shadow-[0_8px_32px_rgba(30,27,75,0.05)] transition-all duration-300 hover:bg-white/95 hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)]">
-                        <div className="flex items-center justify-between mb-5">
+                    {/* Embudo de Conversión */}
+                    <div className="bg-white/80 backdrop-blur-xl border border-white/90 rounded-[28px] p-5 md:p-6 shadow-[0_8px_32px_rgba(30,27,75,0.05)] transition-all duration-300 hover:bg-white/95 hover:shadow-[0_12px_40px_rgba(139,92,246,0.08)]">
+                        <div className="flex items-center justify-between mb-6">
                             <h3 className="text-[16px] font-bold text-slate-800 flex items-center gap-2 tracking-tight">
-                                <div className="w-8 h-8 rounded-[10px] bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
+                                <div className="w-8 h-8 rounded-[10px] bg-violet-100 text-violet-600 flex items-center justify-center shadow-inner">
                                     <TargetIcon size={16} />
                                 </div>
                                 Embudo de Conversión
                             </h3>
-                            <span className="text-[12px] font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
-                                {stats.conversion?.totalDeals || 0} deals totales
+                            <span className="text-[12px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+                                {stats.conversion?.totalDeals || 0} deals
                             </span>
                         </div>
 
-                        {/* Funnel Steps - Ordered by pipeline progression */}
-                        {(() => {
-                            const funnelSteps = [
-                                { label: 'Contactado', value: stats.conversion?.leadToContactado || 0, color: '#8b5cf6', desc: 'Leads que avanzaron al primer contacto' },
-                                { label: 'Coordinando', value: stats.conversion?.leadToScheduling || 0, color: '#0ea5e9', desc: 'Leads que llegaron a agendar' },
-                                { label: 'Reunión', value: stats.conversion?.leadToMeeting || 0, color: '#ec4899', desc: 'Leads que tuvieron una reunión' },
-                                { label: 'Negociación', value: stats.conversion?.leadToNegociacion || 0, color: '#f97316', desc: 'Leads que entraron en negociación' },
-                                { label: 'Ganado', value: stats.conversion?.leadToWon || 0, color: '#22c55e', desc: 'Leads que se cerraron exitosamente' },
-                            ];
-                            const maxVal = Math.max(...funnelSteps.map(s => s.value), 1);
-                            return (
-                                <div className="space-y-3 mb-5">
-                                    {funnelSteps.map((step, idx) => (
-                                        <div key={step.label} className="group">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[11px] font-bold text-slate-400 w-4 text-right">{idx + 1}</span>
-                                                    <span className="text-[13px] font-bold text-slate-700">{step.label}</span>
-                                                </div>
-                                                <span className="text-[16px] font-extrabold" style={{ color: step.color }}>
-                                                    {step.value.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 h-[8px] bg-slate-100 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full rounded-full transition-all duration-700 ease-out"
-                                                        style={{
-                                                            width: `${Math.max((step.value / maxVal) * 100, step.value > 0 ? 3 : 0)}%`,
-                                                            backgroundColor: step.color,
-                                                            opacity: 0.85,
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <p className="text-[10px] text-slate-400 mt-0.5 ml-6 opacity-0 group-hover:opacity-100 transition-opacity">{step.desc}</p>
+                        {/* Funnel Flow */}
+                        <div className="space-y-1">
+                            {/* Step 1: All Leads → Coordinando */}
+                            <div className="relative">
+                                <div className="flex items-center gap-3 p-3 rounded-2xl bg-gradient-to-r from-violet-50/80 to-indigo-50/50 border border-violet-100/50">
+                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20 shrink-0">
+                                        <span className="text-white text-[13px] font-black">1</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[13px] font-bold text-slate-700">Lead → Coordinando</span>
+                                            <span className="text-[20px] font-black text-violet-600">{(stats.conversion?.leadToCoordinando || 0).toFixed(1)}%</span>
                                         </div>
-                                    ))}
+                                        <div className="flex items-center gap-2 mt-1.5">
+                                            <div className="flex-1 h-[6px] bg-violet-100/80 rounded-full overflow-hidden">
+                                                <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-1000 ease-out" style={{ width: `${Math.min(stats.conversion?.leadToCoordinando || 0, 100)}%` }} />
+                                            </div>
+                                            <span className="text-[11px] font-semibold text-slate-400 shrink-0">{stats.conversion?.reachedCoordinando || 0} de {stats.conversion?.totalDeals || 0}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            );
-                        })()}
-
-                        {/* Bottom summary: Win Rate + Rechazo */}
-                        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
-                            <div className="flex flex-col items-center p-3 bg-emerald-50/50 rounded-[16px] border border-emerald-100/50">
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70 mb-1">Win Rate</p>
-                                <div className="text-xl font-extrabold text-emerald-600">{(stats.conversion?.winRate || 0).toFixed(1)}%</div>
-                                <p className="text-[10px] text-emerald-600/50 mt-0.5">Ganados / Cerrados</p>
+                                {/* Connector Arrow */}
+                                <div className="flex justify-center -my-0.5 relative z-10">
+                                    <div className="w-0.5 h-3 bg-gradient-to-b from-violet-300 to-sky-300 rounded-full" />
+                                </div>
                             </div>
-                            <div className="flex flex-col items-center p-3 bg-red-50/50 rounded-[16px] border border-red-100/50">
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-red-500/70 mb-1">Rechazo</p>
-                                <div className="text-xl font-extrabold text-red-500">{(stats.conversion?.leadToRejected || 0).toFixed(1)}%</div>
-                                <p className="text-[10px] text-red-500/50 mt-0.5">Perdidos + Pausados</p>
+
+                            {/* Step 2: Coordinando → Reuniones */}
+                            <div className="relative">
+                                <div className="flex items-center gap-3 p-3 rounded-2xl bg-gradient-to-r from-sky-50/80 to-cyan-50/50 border border-sky-100/50 ml-2 md:ml-4">
+                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-sky-500/20 shrink-0">
+                                        <span className="text-white text-[13px] font-black">2</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[13px] font-bold text-slate-700">Coordinando → Reunión</span>
+                                            <span className="text-[20px] font-black text-sky-600">{(stats.conversion?.coordinandoToReunion || 0).toFixed(1)}%</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1.5">
+                                            <div className="flex-1 h-[6px] bg-sky-100/80 rounded-full overflow-hidden">
+                                                <div className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-500 transition-all duration-1000 ease-out" style={{ width: `${Math.min(stats.conversion?.coordinandoToReunion || 0, 100)}%` }} />
+                                            </div>
+                                            <span className="text-[11px] font-semibold text-slate-400 shrink-0">{stats.conversion?.reachedReuniones || 0} de {stats.conversion?.reachedCoordinando || 0}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* Connector Arrow */}
+                                <div className="flex justify-center -my-0.5 relative z-10 ml-2 md:ml-4">
+                                    <div className="w-0.5 h-3 bg-gradient-to-b from-sky-300 to-pink-300 rounded-full" />
+                                </div>
+                            </div>
+
+                            {/* Step 3: Reuniones → Negociación */}
+                            <div className="relative">
+                                <div className="flex items-center gap-3 p-3 rounded-2xl bg-gradient-to-r from-pink-50/80 to-orange-50/50 border border-pink-100/50 ml-4 md:ml-8">
+                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center shadow-lg shadow-pink-500/20 shrink-0">
+                                        <span className="text-white text-[13px] font-black">3</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[13px] font-bold text-slate-700">Reunión → Negociación</span>
+                                            <span className="text-[20px] font-black text-pink-600">{(stats.conversion?.reunionToNegociacion || 0).toFixed(1)}%</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1.5">
+                                            <div className="flex-1 h-[6px] bg-pink-100/80 rounded-full overflow-hidden">
+                                                <div className="h-full rounded-full bg-gradient-to-r from-pink-500 to-orange-500 transition-all duration-1000 ease-out" style={{ width: `${Math.min(stats.conversion?.reunionToNegociacion || 0, 100)}%` }} />
+                                            </div>
+                                            <span className="text-[11px] font-semibold text-slate-400 shrink-0">{stats.conversion?.reachedNegociacion || 0} de {stats.conversion?.reachedReuniones || 0}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Bottom: Win Rate + Rechazo */}
+                        <div className="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-slate-100/80">
+                            <div className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50/60 border border-emerald-100/50">
+                                <div className="relative w-12 h-12 shrink-0">
+                                    <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+                                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#d1fae5" strokeWidth="3" />
+                                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#10b981" strokeWidth="3" strokeDasharray={`${(stats.conversion?.winRate || 0) * 0.974} 97.4`} strokeLinecap="round" />
+                                    </svg>
+                                    <Trophy size={14} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-600" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">Tasa de Éxito</p>
+                                    <p className="text-[18px] font-black text-emerald-600 leading-tight">{(stats.conversion?.winRate || 0).toFixed(1)}%</p>
+                                    <p className="text-[10px] text-slate-400">{stats.conversion?.dealsWon || 0} ganados de {(stats.conversion?.dealsWon || 0) + (stats.conversion?.dealsLost || 0)} cerrados</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 p-3 rounded-2xl bg-red-50/60 border border-red-100/50">
+                                <div className="relative w-12 h-12 shrink-0">
+                                    <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+                                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#fee2e2" strokeWidth="3" />
+                                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#ef4444" strokeWidth="3" strokeDasharray={`${(stats.conversion?.rejectionRate || 0) * 0.974} 97.4`} strokeLinecap="round" />
+                                    </svg>
+                                    <XCircle size={14} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-red-500" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-red-500/70">Rechazo</p>
+                                    <p className="text-[18px] font-black text-red-500 leading-tight">{(stats.conversion?.rejectionRate || 0).toFixed(1)}%</p>
+                                    <p className="text-[10px] text-slate-400">{(stats.conversion?.dealsLost || 0) + (stats.conversion?.dealsPaused || 0)} de {stats.conversion?.totalDeals || 0} deals</p>
+                                </div>
                             </div>
                         </div>
                     </div>
