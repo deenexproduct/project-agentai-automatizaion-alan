@@ -234,35 +234,68 @@ export default function CRMDashboard() {
                                 <div className="w-8 h-8 rounded-[10px] bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-inner">
                                     <TargetIcon size={16} />
                                 </div>
-                                Análisis de Conversión del Pipeline
+                                Embudo de Conversión
                             </h3>
+                            <span className="text-[12px] font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+                                {stats.conversion?.totalDeals || 0} deals totales
+                            </span>
                         </div>
 
-                        {/* Tasas Generales */}
-                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6 p-3 md:p-4 bg-slate-50/50 rounded-[20px] border border-slate-100">
-                            <div className="flex flex-col text-center">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Lead a Reuniones</p>
-                                <div className="text-2xl font-extrabold text-blue-600">{(stats.conversion?.leadToMeeting || 0).toFixed(1)}%</div>
+                        {/* Funnel Steps - Ordered by pipeline progression */}
+                        {(() => {
+                            const funnelSteps = [
+                                { label: 'Contactado', value: stats.conversion?.leadToContactado || 0, color: '#8b5cf6', desc: 'Leads que avanzaron al primer contacto' },
+                                { label: 'Coordinando', value: stats.conversion?.leadToScheduling || 0, color: '#0ea5e9', desc: 'Leads que llegaron a agendar' },
+                                { label: 'Reunión', value: stats.conversion?.leadToMeeting || 0, color: '#ec4899', desc: 'Leads que tuvieron una reunión' },
+                                { label: 'Negociación', value: stats.conversion?.leadToNegociacion || 0, color: '#f97316', desc: 'Leads que entraron en negociación' },
+                                { label: 'Ganado', value: stats.conversion?.leadToWon || 0, color: '#22c55e', desc: 'Leads que se cerraron exitosamente' },
+                            ];
+                            const maxVal = Math.max(...funnelSteps.map(s => s.value), 1);
+                            return (
+                                <div className="space-y-3 mb-5">
+                                    {funnelSteps.map((step, idx) => (
+                                        <div key={step.label} className="group">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[11px] font-bold text-slate-400 w-4 text-right">{idx + 1}</span>
+                                                    <span className="text-[13px] font-bold text-slate-700">{step.label}</span>
+                                                </div>
+                                                <span className="text-[16px] font-extrabold" style={{ color: step.color }}>
+                                                    {step.value.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 h-[8px] bg-slate-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full transition-all duration-700 ease-out"
+                                                        style={{
+                                                            width: `${Math.max((step.value / maxVal) * 100, step.value > 0 ? 3 : 0)}%`,
+                                                            backgroundColor: step.color,
+                                                            opacity: 0.85,
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 mt-0.5 ml-6 opacity-0 group-hover:opacity-100 transition-opacity">{step.desc}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })()}
+
+                        {/* Bottom summary: Win Rate + Rechazo */}
+                        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
+                            <div className="flex flex-col items-center p-3 bg-emerald-50/50 rounded-[16px] border border-emerald-100/50">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70 mb-1">Win Rate</p>
+                                <div className="text-xl font-extrabold text-emerald-600">{(stats.conversion?.winRate || 0).toFixed(1)}%</div>
+                                <p className="text-[10px] text-emerald-600/50 mt-0.5">Ganados / Cerrados</p>
                             </div>
-                            <div className="flex flex-col text-center border-l lg:border-r border-slate-200">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1" title="Tasa de Conversión de Mensajes">Lead a Coordinando</p>
-                                <div className="text-2xl font-extrabold text-indigo-500">{(stats.conversion?.leadToScheduling || 0).toFixed(1)}%</div>
-                            </div>
-                            <div className="flex flex-col text-center lg:border-r border-slate-200">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Win Rate</p>
-                                <div className="text-2xl font-extrabold text-slate-800">{(stats.conversion?.winRate || 0).toFixed(1)}%</div>
-                            </div>
-                            <div className="flex flex-col text-center border-l lg:border-l-0 lg:border-r border-slate-200">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Lead a Ganado</p>
-                                <div className="text-2xl font-extrabold text-emerald-600">{(stats.conversion?.leadToWon || 0).toFixed(1)}%</div>
-                            </div>
-                            <div className="flex flex-col text-center col-span-2 lg:col-span-1">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Rechazo</p>
-                                <div className="text-2xl font-extrabold text-red-500">{(stats.conversion?.leadToRejected || 0).toFixed(1)}%</div>
+                            <div className="flex flex-col items-center p-3 bg-red-50/50 rounded-[16px] border border-red-100/50">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-red-500/70 mb-1">Rechazo</p>
+                                <div className="text-xl font-extrabold text-red-500">{(stats.conversion?.leadToRejected || 0).toFixed(1)}%</div>
+                                <p className="text-[10px] text-red-500/50 mt-0.5">Perdidos + Pausados</p>
                             </div>
                         </div>
-
-                        {/* Funnel Visual Eliminado por solicitud del usuario */}
                     </div>
 
                     {/* Pending Tasks */}

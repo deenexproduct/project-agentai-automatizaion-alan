@@ -1,0 +1,87 @@
+[
+  {
+    "_id": "699fa4b8f0394ce97f959800",
+    "title": "Daniel Helados",
+    "value": 4250,
+    "currency": "USD",
+    "status": "coordinando",
+    "company": "699fa4b8f0394ce97f9597fd",
+    "primaryContact": "699fa533f0394ce97f959822",
+    "contacts": [
+      "699fa533f0394ce97f959822",
+      "699fa577f0394ce97f959837"
+    ],
+    "assignedTo": "699d9386d93cc1dc427f6f03",
+    "userId": "699d9386d93cc1dc427f6f03",
+    "statusHistory": [
+      {
+        "from": "lead",
+        "to": "coordinando",
+        "changedAt": "2026-02-26T01:44:50.130Z",
+        "changedBy": "699d9386d93cc1dc427f6f03"
+      }
+    ],
+    "notes": [],
+    "createdAt": "2026-02-26T01:41:12.237Z",
+    "updatedAt": "2026-02-26T01:44:50.198Z",
+    "__v": 3
+  },
+  {
+    "_id": "699fa403f0394ce97f9596f2",
+    "title": "Le Ble",
+    "value": 1950,
+    "currency": "USD",
+    "status": "coordinando",
+    "company": "699fa403f0394ce97f9596ef",
+    "primaryContact": "699fa43bf0394ce97f95970b",
+    "contacts": [
+      "699fa43bf0394ce97f95970b"
+    ],
+    "assignedTo": "699d9386d93cc1dc427f6f03",
+    "userId": "699d9386d93cc1dc427f6f03",
+    "statusHistory": [
+      {
+        "from": "lead",
+        "to": "coordinando",
+        "changedAt": "2026-02-26T01:39:22.480Z",
+        "changedBy": "699d9386d93cc1dc427f6f03"
+      }
+    ],
+    "notes": [],
+    "createdAt": "2026-02-26T01:38:11.205Z",
+    "updatedAt": "2026-02-26T01:39:22.938Z",
+    "__v": 2
+  },
+  {
+    "_id": "699f0d85a57177a0ee868f37",
+    "title": "Pannus",
+    "value": 280,
+    "currency": "USD",
+    "status": "coordinando",
+    "company": "699f0d85a57177a0ee868f34",
+    "primaryContact": "699f0dcea57177a0ee868f50",
+    "contacts": [
+      "699f0dcea57177a0ee868f50"
+    ],
+    "assignedTo": "699d9386d93cc1dc427f6f03",
+    "userId": "699d9386d93cc1dc427f6f03",
+    "statusHistory": [
+      {
+        "from": "lead",
+        "to": "contactado",
+        "changedAt": "2026-02-25T14:57:39.493Z",
+        "changedBy": "699d9386d93cc1dc427f6f03"
+      },
+      {
+        "from": "contactado",
+        "to": "coordinando",
+        "changedAt": "2026-02-26T01:32:45.315Z",
+        "changedBy": "699d9386d93cc1dc427f6f03"
+      }
+    ],
+    "notes": [],
+    "createdAt": "2026-02-25T14:56:05.577Z",
+    "updatedAt": "2026-02-26T01:32:45.373Z",
+    "__v": 3
+  }
+]

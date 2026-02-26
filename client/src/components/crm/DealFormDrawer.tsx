@@ -64,83 +64,76 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
     const [actOutcome, setActOutcome] = useState('');
     const [actContactId, setActContactId] = useState('');
     const [savingActivity, setSavingActivity] = useState(false);
+    const [currentDealData, setCurrentDealData] = useState<DealData | null>(deal || null);
 
     const drawerRef = useRef<HTMLDivElement>(null);
+
+    // Sync initial deal prop
+    useEffect(() => {
+        if (open) {
+            setCurrentDealData(deal || null);
+        }
+    }, [deal, open]);
 
     // Initial data
     useEffect(() => {
         if (open && deal?._id) {
-            // Check if we need to fetch the full deal (e.g. from timeline or pipeline partial object)
-            // A partial deal won't have `contacts` array from the pipeline board.
-            if (!deal.contacts || !deal.company || !deal.title) {
-                getDeal(deal._id).then(fullDeal => {
-                    setFormData({
-                        title: fullDeal.title || '',
-                        value: fullDeal.value || 0,
-                        status: fullDeal.status || (stages.length > 0 ? stages[0].key : 'lead'),
-                        expectedCloseDate: fullDeal.expectedCloseDate ? fullDeal.expectedCloseDate.substring(0, 10) : '',
-                        company: fullDeal.company as any,
-                        primaryContact: fullDeal.primaryContact as any,
-                        assignedTo: (fullDeal as any).assignedTo,
-                    });
-                    setCompanySearch(fullDeal.company?.name || '');
-                    setCompanyLocales(fullDeal.company?.localesCount || 0);
-                    setInitialLocales(fullDeal.company?.localesCount || 0);
-                    setInitialValue(fullDeal.value || 0);
+            // 1. Immediately sync whatever data we have so the UI doesn't flash empty
+            setFormData({
+                title: deal.title || '',
+                value: deal.value || 0,
+                status: deal.status || (stages.length > 0 ? stages[0].key : 'lead'),
+                expectedCloseDate: deal.expectedCloseDate ? String(deal.expectedCloseDate).substring(0, 10) : '',
+                company: deal.company as any,
+                primaryContact: deal.primaryContact as any,
+                assignedTo: (deal as any).assignedTo,
+            });
+            setCompanySearch(deal.company?.name || '');
+            setCompanyLocales(deal.company?.localesCount || 0);
+            setInitialLocales(deal.company?.localesCount || 0);
+            setInitialValue(deal.value || 0);
 
-                    if (fullDeal.contacts && fullDeal.contacts.length > 0) {
-                        setSelectedContacts(fullDeal.contacts as any);
-                    } else if (fullDeal.primaryContact) {
-                        setSelectedContacts([fullDeal.primaryContact as any]);
-                    } else {
-                        setSelectedContacts([]);
-                    }
-
-                    setNotes((fullDeal as any).notes?.length ? (fullDeal as any).notes[0].text : '');
-
-                    // Load tasks
-                    getTasks({ deal: deal._id, limit: 50 }).then(res => setDealTasks(res.tasks)).catch(() => { });
-
-                    // Load contacts for this company
-                    if (fullDeal.company?._id) {
-                        getContacts({ company: fullDeal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
-                    }
-                }).catch(console.error);
+            if (deal.contacts && deal.contacts.length > 0) {
+                setSelectedContacts(deal.contacts as any);
+            } else if (deal.primaryContact) {
+                setSelectedContacts([deal.primaryContact as any]);
             } else {
-                setFormData({
-                    title: deal.title || '',
-                    value: deal.value || 0,
-                    status: deal.status || (stages.length > 0 ? stages[0].key : 'lead'),
-                    expectedCloseDate: deal.expectedCloseDate ? deal.expectedCloseDate.substring(0, 10) : '',
-                    company: deal.company as any,
-                    primaryContact: deal.primaryContact as any,
-                    assignedTo: (deal as any).assignedTo,
-                });
-                setCompanySearch(deal.company?.name || '');
-                setCompanyLocales(deal.company?.localesCount || 0);
-                setInitialLocales(deal.company?.localesCount || 0);
-                setInitialValue(deal.value || 0);
+                setSelectedContacts([]);
+            }
 
-                // Initialize selected contacts from deal.contacts or fallback to primaryContact
-                if (deal.contacts && deal.contacts.length > 0) {
-                    setSelectedContacts(deal.contacts as any);
-                } else if (deal.primaryContact) {
-                    setSelectedContacts([deal.primaryContact as any]);
+            setNotes((deal as any).notes?.length ? (deal as any).notes[0].text : '');
+
+            // Load tasks
+            getTasks({ deal: deal._id, limit: 50 }).then(res => setDealTasks(res.tasks)).catch(() => { });
+
+            // Load contacts for this company
+            if (deal.company?._id) {
+                getContacts({ company: deal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
+            }
+
+            // 2. ALWAYS fetch the absolute latest full deal to guarantee traceability fields like `statusHistory.changedBy` are 100% populated
+            getDeal(deal._id).then(fullDeal => {
+                setCurrentDealData(fullDeal);
+
+                // True-up the form data to ensure absolute correctness
+                setFormData({
+                    title: fullDeal.title || '',
+                    value: fullDeal.value || 0,
+                    status: fullDeal.status || (stages.length > 0 ? stages[0].key : 'lead'),
+                    expectedCloseDate: fullDeal.expectedCloseDate ? String(fullDeal.expectedCloseDate).substring(0, 10) : '',
+                    company: fullDeal.company as any,
+                    primaryContact: fullDeal.primaryContact as any,
+                    assignedTo: (fullDeal as any).assignedTo,
+                });
+
+                if (fullDeal.contacts && fullDeal.contacts.length > 0) {
+                    setSelectedContacts(fullDeal.contacts as any);
+                } else if (fullDeal.primaryContact) {
+                    setSelectedContacts([fullDeal.primaryContact as any]);
                 } else {
                     setSelectedContacts([]);
                 }
-
-                // Note: Assuming API maps notes property. We load the first note text if any.
-                setNotes((deal as any).notes?.length ? (deal as any).notes[0].text : '');
-
-                // Load tasks
-                getTasks({ deal: deal._id, limit: 50 }).then(res => setDealTasks(res.tasks)).catch(() => { });
-
-                // Load contacts for this company
-                if (deal.company?._id) {
-                    getContacts({ company: deal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
-                }
-            }
+            }).catch(console.error);
 
         } else if (open && !deal?._id) {
             const defaultDate = new Date();
@@ -734,27 +727,53 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                     <div className="absolute left-[11px] top-4 bottom-4 w-px bg-slate-200/80 z-0"></div>
 
                                     <div className="relative z-10 flex gap-4 my-2">
-                                        <div className="w-6 h-6 rounded-full bg-violet-100 border-2 border-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                                            <div className="w-2 h-2 rounded-full bg-violet-500"></div>
+                                        <div className={`w-6 h-6 rounded-full border-2 border-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${((currentDealData as any)?.statusHistory || []).length === 0 ? 'bg-violet-100' : 'bg-slate-100'}`}>
+                                            <div className={`w-2 h-2 rounded-full ${((currentDealData as any)?.statusHistory || []).length === 0 ? 'bg-violet-500' : 'bg-slate-400'}`}></div>
                                         </div>
                                         <div className="flex-1 bg-white/60 backdrop-blur-sm border border-slate-200/50 rounded-[12px] p-3 shadow-sm">
-                                            <div className="text-[13px] font-bold text-slate-800">Oportunidad Creada</div>
-                                            <div className="text-[11px] font-medium text-slate-500 mt-1 uppercase tracking-wide">{formatToArgentineDateTime(deal?.createdAt || new Date())}</div>
+                                            <div className="flex justify-between items-start gap-2">
+                                                <div>
+                                                    <div className="text-[13px] font-bold text-slate-800">Oportunidad Creada</div>
+                                                    <div className="text-[11px] font-medium text-slate-500 mt-1 uppercase tracking-wide">{formatToArgentineDateTime(currentDealData?.createdAt || new Date())}</div>
+                                                </div>
+                                                {typeof (currentDealData as any)?.userId === 'object' && (currentDealData as any)?.userId !== null && (
+                                                    <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-[8px] border border-slate-200/50 shrink-0">
+                                                        <OwnerAvatar name={(currentDealData as any).userId.name} profilePhotoUrl={(currentDealData as any).userId.profilePhotoUrl} size="xs" />
+                                                        <span className="text-[11px] font-semibold text-slate-600 truncate max-w-[80px]" title={(currentDealData as any).userId.name}>{(currentDealData as any).userId.name}</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {((deal as any)?.statusHistory || []).map((historyObj: any, idx: number) => {
+                                    {((currentDealData as any)?.statusHistory || []).map((historyObj: any, idx: number, arr: any[]) => {
                                         const toLabel = stages.find(s => s.key === historyObj.to)?.label || historyObj.to;
+                                        const isLatest = idx === arr.length - 1;
+
+                                        // Fallback to deal creator if changedBy is missing or unpopulated
+                                        const displayUser = (typeof historyObj.changedBy === 'object' && historyObj.changedBy) ||
+                                            (typeof (currentDealData as any)?.userId === 'object' ? (currentDealData as any)?.userId : null);
+
                                         return (
                                             <div key={idx} className="relative z-10 flex gap-4 my-2">
-                                                <div className="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                                                    <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                                                <div className={`w-6 h-6 rounded-full border-2 border-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 ${isLatest ? 'bg-violet-100' : 'bg-slate-100'}`}>
+                                                    <div className={`w-2 h-2 rounded-full ${isLatest ? 'bg-violet-500' : 'bg-slate-400'}`}></div>
                                                 </div>
                                                 <div className="flex-1 bg-white/60 backdrop-blur-sm border border-slate-200/50 rounded-[12px] p-3 shadow-sm">
-                                                    <div className="text-[13px] font-bold text-slate-800 flex items-center flex-wrap gap-1.5">
-                                                        Cambio de etapa a <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 border border-slate-200/50">{toLabel}</span>
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        <div>
+                                                            <div className="text-[13px] font-bold text-slate-800 flex items-center flex-wrap gap-1.5">
+                                                                Cambio de etapa a <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 border border-slate-200/50">{toLabel}</span>
+                                                            </div>
+                                                            <div className="text-[11px] font-medium text-slate-500 mt-1 uppercase tracking-wide">{formatToArgentineDateTime(historyObj.changedAt)}</div>
+                                                        </div>
+                                                        {displayUser && displayUser.name && (
+                                                            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-[8px] border border-slate-200/50 shrink-0">
+                                                                <OwnerAvatar name={displayUser.name} profilePhotoUrl={displayUser.profilePhotoUrl} size="xs" />
+                                                                <span className="text-[11px] font-semibold text-slate-600 truncate max-w-[80px]" title={displayUser.name}>{displayUser.name}</span>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <div className="text-[11px] font-medium text-slate-500 mt-1 uppercase tracking-wide">{formatToArgentineDateTime(historyObj.changedAt)}</div>
                                                 </div>
                                             </div>
                                         );

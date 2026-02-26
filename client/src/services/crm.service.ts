@@ -153,11 +153,13 @@ export type DashboardStats = {
     };
     conversion: {
         totalDeals: number;
-        winRate: number;
-        leadToWon: number;
-        leadToRejected: number;
-        leadToMeeting: number;
+        leadToContactado: number;
         leadToScheduling: number;
+        leadToMeeting: number;
+        leadToNegociacion: number;
+        leadToWon: number;
+        winRate: number;
+        leadToRejected: number;
         dealsWon: number;
         dealsLost: number;
         dealsPaused: number;

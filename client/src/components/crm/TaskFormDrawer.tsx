@@ -83,7 +83,12 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                 setDealSearch(task.deal?.title || '');
             }
         } else if (open && !task) {
-            const defaultDueDate = getDefaultTaskDueDate(initialDate);
+            let defaultDueDate = '';
+            if (initialDate && (initialDate.getHours() !== 0 || initialDate.getMinutes() !== 0)) {
+                defaultDueDate = formatToLocalDateTimeInput(initialDate);
+            } else {
+                defaultDueDate = getDefaultTaskDueDate(initialDate);
+            }
 
             setFormData({
                 title: '',
@@ -337,7 +342,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                             <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-sm">
                                 <Flag size={16} className="text-white" />
                             </div>
-                            {task ? `Editar ${formData.title || 'Tarea'} ` : 'Nueva Tarea'}
+                            {task ? 'Editar Tarea' : 'Nueva Tarea'}
                         </h2>
                         <p className="text-[13px] font-medium text-slate-500 mt-1 ml-10">
                             {task ? 'Modifica los datos de la tarea.' : 'Programa una nueva tarea.'}

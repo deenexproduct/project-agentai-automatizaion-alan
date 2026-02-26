@@ -263,29 +263,29 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                                                                             </h4>
                                                                         </div>
 
-                                                                        <div className="flex items-center flex-wrap gap-1.5 pt-3 border-t border-slate-100 mt-auto">
-                                                                            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-white border border-slate-200/40 px-2 py-1 rounded-[8px]">
-                                                                                <Calendar size={12} className="text-slate-400" />
+                                                                        <div className="flex items-center flex-nowrap gap-1 pt-3 border-t border-slate-100 mt-auto overflow-hidden w-full">
+                                                                            <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-slate-500 bg-white border border-slate-200/40 px-1.5 py-1 rounded-[8px] shrink-0">
+                                                                                <Calendar size={12} className="text-slate-400 hidden sm:block" />
                                                                                 {new Date(deal.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                                                                             </div>
-                                                                            <div className="text-[11px] font-bold px-2 py-1 rounded-[8px] uppercase tracking-wider bg-slate-50 text-slate-400 border border-slate-200/40" title="Días en esta etapa">
+                                                                            <div className="text-[10px] sm:text-[11px] font-bold px-1.5 py-1 rounded-[8px] uppercase tracking-wider bg-slate-50 text-slate-400 border border-slate-200/40 shrink-0" title="Días en esta etapa">
                                                                                 {deal.daysInStatus || 0}d
                                                                             </div>
                                                                             {deal.company?.localesCount !== undefined && deal.company.localesCount > 0 && (
-                                                                                <div className="flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-50/50 border border-blue-100/50 px-2 py-1 rounded-[8px]">
-                                                                                    <Building2 size={12} className="text-blue-500" />
+                                                                                <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-blue-600 bg-blue-50/50 border border-blue-100/50 px-1.5 py-1 rounded-[8px] shrink-0">
+                                                                                    <Building2 size={12} className="text-blue-500 hidden sm:block" />
                                                                                     {deal.company.localesCount}
                                                                                 </div>
                                                                             )}
-                                                                            <div className="font-bold text-emerald-600 font-mono text-[11px] tracking-tight bg-emerald-50/40 px-2 py-1 rounded-[8px] border border-emerald-100/40">
+                                                                            <div className="font-bold text-emerald-600 font-mono text-[10px] sm:text-[11px] tracking-tight bg-emerald-50/40 px-1.5 py-1 rounded-[8px] border border-emerald-100/40 shrink-0 truncate min-w-0">
                                                                                 ${deal.value?.toLocaleString() || 0}
                                                                             </div>
                                                                             {deal.pendingTasks !== undefined && deal.pendingTasks > 0 && (
-                                                                                <div className="px-2 py-1 rounded-[8px] border border-amber-200/40 text-amber-600 flex items-center justify-center text-[11px] font-bold" title={`${deal.pendingTasks} tareas pendientes`}>
-                                                                                    <CheckSquare size={12} className="mr-1 text-amber-500" />{deal.pendingTasks}
+                                                                                <div className="px-1.5 py-1 rounded-[8px] border border-amber-200/40 text-amber-600 flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0" title={`${deal.pendingTasks} tareas pendientes`}>
+                                                                                    <CheckSquare size={12} className="mr-0.5 text-amber-500 hidden sm:block" />{deal.pendingTasks}
                                                                                 </div>
                                                                             )}
-                                                                            <div className="ml-auto">
+                                                                            <div className="ml-auto pl-1 shrink-0">
                                                                                 <OwnerAvatar name={deal.assignedTo?.name} profilePhotoUrl={deal.assignedTo?.profilePhotoUrl} size="xs" />
                                                                             </div>
                                                                         </div>

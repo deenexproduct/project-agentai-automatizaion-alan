@@ -1,15 +1,15 @@
 {
-  "batchId": "2026-02-25T11:57:47.981Z",
+  "batchId": "2026-02-26T01:39:46.040Z",
   "accountEmail": "unknown",
   "profiles": [
     {
-      "url": "https://www.linkedin.com/in/francisco-langieri-bullrich-b115a8a",
+      "url": "https://www.linkedin.com/in/paul-petrelli-4aa8911a",
       "status": "pending",
       "attempts": 0
     }
   ],
   "currentIndex": 0,
-  "startTime": "2026-02-25T11:57:48.076Z",
+  "startTime": "2026-02-26T01:39:46.215Z",
   "isPaused": false,
   "options": {
     "totalLimit": 1,
@@ -21,6 +21,6 @@
     "failed": 0,
     "pending": 1
   },
-  "lastUpdate": "2026-02-25T11:57:48.076Z",
+  "lastUpdate": "2026-02-26T01:39:46.217Z",
   "version": 1
 }

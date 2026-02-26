@@ -8,11 +8,14 @@ import CalendarConfigModal from '../../components/calendar/CalendarConfigModal';
 import EventFormDrawer from '../../components/calendar/EventFormDrawer';
 import TaskFormDrawer from '../../components/crm/TaskFormDrawer';
 import DailyEventsDrawer from '../../components/calendar/DailyEventsDrawer';
+import WeeklyCalendarView from '../../components/calendar/WeeklyCalendarView';
 import { getEvents, EventData, TaskData } from '../../services/crm.service';
 
 export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
+    const [viewMode, setViewMode] = useState<'month' | 'week'>('week');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [events, setEvents] = useState<EventData[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
 
     const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -122,19 +125,44 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
     const weekDaysFull = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
     return (
-        <div className="flex-1 flex flex-col p-4 md:p-8 overflow-y-auto min-h-[calc(100vh-80px)] custom-scrollbar pb-24 md:pb-8">
+        <div className="flex-1 flex flex-col pt-4 md:pt-6 pb-24 md:pb-8 relative custom-scrollbar">
 
             {/* Header */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-8 shrink-0 relative z-30 gap-3">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-6 shrink-0 relative z-30 gap-3 px-4 md:px-0">
                 <div className="flex items-center gap-3 md:gap-4">
-                    <h1 className="text-xl md:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
-                        Calendario
-                    </h1>
-                    <div className="h-6 w-px bg-slate-300 mx-1 hidden md:block"></div>
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-base md:text-xl font-bold text-slate-600 capitalize">
-                            {format(currentDate, 'MMMM yyyy', { locale: es })}
-                        </h2>
+                    <h2 className="text-base md:text-xl font-bold text-slate-600 capitalize shrink-0">
+                        {format(currentDate, 'MMMM yyyy', { locale: es })}
+                    </h2>
+                </div>
+
+                <div className="flex-1 mx-4 hidden md:block">
+                    <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-3 md:pl-4 flex items-center pointer-events-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400 group-focus-within:text-violet-500 transition-colors"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Buscar en el calendario..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full h-11 md:h-12 pl-10 md:pl-12 pr-4 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-[14px] md:rounded-[18px] text-[14px] md:text-[15px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm group-hover:border-slate-300"
+                        />
+                    </div>
+                </div>
+
+                {/* Mobile Search */}
+                <div className="w-full md:hidden mb-2">
+                    <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Buscar..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full h-10 pl-10 pr-4 bg-white border border-slate-200 rounded-[12px] text-[14px] focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                        />
                     </div>
                 </div>
 
@@ -148,6 +176,21 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
                         </button>
                         <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-[10px] transition-colors">
                             <ChevronRight size={20} />
+                        </button>
+                    </div>
+
+                    <div className="flex bg-slate-100 p-1 rounded-[14px] mx-1 md:mx-2 border border-slate-200 shadow-sm gap-1">
+                        <button
+                            onClick={() => setViewMode('week')}
+                            className={`px-3 py-1 text-[13px] font-bold rounded-[10px] transition-all ${viewMode === 'week' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                        >
+                            Semana
+                        </button>
+                        <button
+                            onClick={() => setViewMode('month')}
+                            className={`px-3 py-1 text-[13px] font-bold rounded-[10px] transition-all ${viewMode === 'month' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                        >
+                            Mes
                         </button>
                     </div>
 
@@ -197,75 +240,103 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
                 </div>
             </div>
 
-            {/* Calendar Grid */}
-            <div className="flex-1 bg-white/80 backdrop-blur-xl border border-white/90 rounded-[16px] md:rounded-[24px] shadow-[0_8px_32px_rgba(30,27,75,0.05)] overflow-hidden flex flex-col relative z-10 transition-all duration-300 hover:bg-white/95">
-                {/* Weekday Headers */}
-                <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/50 shrink-0">
-                    {weekDays.map((day, i) => (
-                        <div key={day} className="py-2 md:py-3 text-center text-[10px] md:text-[12px] font-bold text-slate-500 uppercase tracking-wider">
-                            <span className="md:hidden">{day}</span>
-                            <span className="hidden md:inline">{weekDaysFull[i]}</span>
-                        </div>
-                    ))}
-                </div>
+            {/* Calendar Grid / Weekly View */}
+            {viewMode === 'month' ? (
+                <div className="flex-1 bg-white/80 backdrop-blur-xl border border-white/90 shadow-[0_8px_32px_rgba(30,27,75,0.05)] overflow-hidden flex flex-col relative z-10 transition-all duration-300 hover:bg-white/95">
+                    {/* Weekday Headers */}
+                    <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                        {weekDays.map((day, i) => (
+                            <div key={day} className="py-2 md:py-3 text-center text-[10px] md:text-[12px] font-bold text-slate-500 uppercase tracking-wider">
+                                <span className="md:hidden">{day}</span>
+                                <span className="hidden md:inline">{weekDaysFull[i]}</span>
+                            </div>
+                        ))}
+                    </div>
 
-                {/* Days Grid */}
-                <div className="flex-1 grid grid-cols-7 overflow-hidden">
-                    {loading ? (
-                        <div className="col-span-7 row-span-5 flex items-center justify-center bg-white/50 backdrop-blur-sm">
-                            <div className="animate-spin w-10 h-10 border-4 border-transparent border-t-violet-600 rounded-full" />
-                        </div>
-                    ) : (
-                        days.map((day, idx) => {
-                            const isCurrentMonth = isSameMonth(day, currentDate);
-                            const dayEvents = events.filter(e => isSameDay(parseSafeDate(e.date), day));
+                    {/* Days Grid */}
+                    <div className="flex-1 grid grid-cols-7 overflow-hidden">
+                        {loading ? (
+                            <div className="col-span-7 row-span-5 flex items-center justify-center bg-white/50 backdrop-blur-sm">
+                                <div className="animate-spin w-10 h-10 border-4 border-transparent border-t-violet-600 rounded-full" />
+                            </div>
+                        ) : (
+                            days.map((day, idx) => {
+                                const isCurrentMonth = isSameMonth(day, currentDate);
 
-                            return (
-                                <div
-                                    key={day.toISOString()}
-                                    className={` border-r border-b border-slate-100 p-1 md:p-2 flex flex-col gap-0.5 md:gap-1 transition-colors ${!isCurrentMonth ? 'bg-slate-50/50' : 'bg-white hover:bg-violet-50/20'} ${dayEvents.length > 0 ? 'min-h-[60px] md:min-h-[200px]' : 'min-h-[44px] md:min-h-[100px]'}`}
-                                    onClick={() => {
-                                        setSelectedDate(day);
-                                        setIsDailyDrawerOpen(true);
-                                    }}
-                                >
-                                    <div className="flex justify-end p-1">
-                                        <div className={`w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-bold ${isToday(day) ? 'bg-violet-600 text-white shadow-md' : isCurrentMonth ? 'text-slate-700' : 'text-slate-400'}`}>
-                                            {format(day, 'd')}
+                                // Filter events matching the search query
+                                let dayEvents = events.filter(e => isSameDay(parseSafeDate(e.date), day));
+                                if (searchQuery.trim() !== '') {
+                                    const q = searchQuery.toLowerCase();
+                                    dayEvents = dayEvents.filter(e =>
+                                        e.title.toLowerCase().includes(q) ||
+                                        e.description?.toLowerCase().includes(q) ||
+                                        e.linkedTo?.contacts?.some(c => c.fullName.toLowerCase().includes(q)) ||
+                                        (e.linkedTo?.contact && e.linkedTo.contact.fullName.toLowerCase().includes(q)) ||
+                                        e.linkedTo?.company?.name?.toLowerCase().includes(q) ||
+                                        e.linkedTo?.deal?.title?.toLowerCase().includes(q)
+                                    );
+                                }
+
+                                return (
+                                    <div
+                                        key={day.toISOString()}
+                                        className={` border-r border-b border-slate-100 p-1 md:p-2 flex flex-col gap-0.5 md:gap-1 transition-colors ${!isCurrentMonth ? 'bg-slate-50/50' : 'bg-white hover:bg-violet-50/20'} ${dayEvents.length > 0 ? 'min-h-[60px] md:min-h-[200px]' : 'min-h-[44px] md:min-h-[100px]'}`}
+                                        onClick={() => {
+                                            setSelectedDate(day);
+                                            setIsDailyDrawerOpen(true);
+                                        }}
+                                    >
+                                        <div className="flex justify-end p-1">
+                                            <div className={`w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-bold ${isToday(day) ? 'bg-violet-600 text-white shadow-md' : isCurrentMonth ? 'text-slate-700' : 'text-slate-400'}`}>
+                                                {format(day, 'd')}
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 px-1 pb-1">
+                                            {dayEvents.map(event => (
+                                                <div
+                                                    key={event._id}
+                                                    onClick={(e) => { e.stopPropagation(); openEditEvent(event); }}
+                                                    className={`px-2 py-1.5 rounded-[8px] text-[11px] font-bold shrink-0 cursor-pointer transition-all hover:scale-[1.02] border border-l-4 
+                                                        ${event.type === 'meet' ? 'bg-violet-50 border-violet-100 border-l-violet-500 text-violet-700' :
+                                                            event.type === 'task' ? 'bg-emerald-50 border-emerald-100 border-l-emerald-500 text-emerald-700' :
+                                                                'bg-amber-50 border-amber-100 border-l-amber-500 text-amber-700'}`}
+                                                >
+                                                    <div className="flex items-center justify-between gap-1">
+                                                        <span className="truncate">{event.title}</span>
+                                                        {event.type === 'meet' ? <Video size={10} className="shrink-0 opacity-70" /> :
+                                                            event.type === 'task' ? <CheckSquare size={10} className="shrink-0 opacity-70" /> :
+                                                                <MapPin size={10} className="shrink-0 opacity-70" />}
+                                                    </div>
+                                                    <div className="text-[10px] font-medium opacity-80 mt-1 truncate flex items-center gap-1 text-slate-500">
+                                                        {event.startTime} - {event.endTime}
+                                                    </div>
+                                                    <div className="text-[9px] font-semibold opacity-70 mt-0.5 truncate flex justify-between items-center">
+                                                        <span>{event.linkedTo?.contacts?.length ? (event.linkedTo.contacts.length === 1 ? event.linkedTo.contacts[0].fullName : `${event.linkedTo.contacts[0].fullName} +${event.linkedTo.contacts.length - 1}`) : (event.linkedTo?.contact ? event.linkedTo.contact.fullName : (event.linkedTo?.deal ? event.linkedTo.deal.title : ''))}</span>
+                                                        <span className="italic shrink-0 ml-1">por {(event.assignedTo || event.userId)?.name?.split(' ')[0] || 'Doc'}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 px-1 pb-1">
-                                        {dayEvents.map(event => (
-                                            <div
-                                                key={event._id}
-                                                onClick={(e) => { e.stopPropagation(); openEditEvent(event); }}
-                                                className={`px-2 py-1.5 rounded-[8px] text-[11px] font-bold shrink-0 cursor-pointer transition-all hover:scale-[1.02] border border-l-4 
-                                                    ${event.type === 'meet' ? 'bg-violet-50 border-violet-100 border-l-violet-500 text-violet-700' :
-                                                        event.type === 'task' ? 'bg-emerald-50 border-emerald-100 border-l-emerald-500 text-emerald-700' :
-                                                            'bg-amber-50 border-amber-100 border-l-amber-500 text-amber-700'}`}
-                                            >
-                                                <div className="flex items-center justify-between gap-1">
-                                                    <span className="truncate">{event.title}</span>
-                                                    {event.type === 'meet' ? <Video size={10} className="shrink-0 opacity-70" /> :
-                                                        event.type === 'task' ? <CheckSquare size={10} className="shrink-0 opacity-70" /> :
-                                                            <MapPin size={10} className="shrink-0 opacity-70" />}
-                                                </div>
-                                                <div className="text-[10px] font-medium opacity-80 mt-1 truncate flex items-center gap-1 text-slate-500">
-                                                    {event.startTime} - {event.endTime}
-                                                </div>
-                                                <div className="text-[9px] font-semibold opacity-70 mt-0.5 truncate flex justify-between items-center">
-                                                    <span>{event.linkedTo?.contacts?.length ? (event.linkedTo.contacts.length === 1 ? event.linkedTo.contacts[0].fullName : `${event.linkedTo.contacts[0].fullName} +${event.linkedTo.contacts.length - 1}`) : (event.linkedTo?.contact ? event.linkedTo.contact.fullName : (event.linkedTo?.deal ? event.linkedTo.deal.title : ''))}</span>
-                                                    <span className="italic shrink-0 ml-1">por {(event.assignedTo || event.userId)?.name?.split(' ')[0] || 'Doc'}</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            );
-                        })
-                    )}
+                                );
+                            })
+                        )}
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <WeeklyCalendarView
+                    currentDate={currentDate}
+                    events={events}
+                    searchQuery={searchQuery}
+                    onEventSelect={openEditEvent}
+                    onNewEvent={(date) => {
+                        setSelectedDate(date);
+                        openNewEvent();
+                    }}
+                    previewDate={selectedDate}
+                    isPreviewing={isEventDrawerOpen && !selectedEvent}
+                />
+            )}
 
             {/* Drawers and Modals */}
             <CalendarConfigModal

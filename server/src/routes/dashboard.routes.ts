@@ -133,17 +133,28 @@ router.get('/metrics', async (req: Request, res: Response) => {
         let pausedDeals = 0;
         const stageCounts: Record<string, number> = {};
 
-        // Variables for new metrics
-        let reachedCoordinandoOrFurther = 0;
-        let reachedFurtherThanCoordinando = 0;
-        let currentlyInCoordinando = 0;
+        // Counters for funnel progression tracking
+        let reachedContactado = 0;      // Deals que llegaron a "Contactado" o más allá
+        let reachedCoordinando = 0;     // Deals que llegaron a "Coordinando" o más allá
+        let reachedReuniones = 0;       // Deals que llegaron a "Reuniones" o más allá
+        let reachedNegociacion = 0;     // Deals que llegaron a "Negociación" o más allá
+
+        // Find stage orders from config for threshold comparisons
+        const getStageOrder = (key: string): number => {
+            const stage = config.stages.find(s => s.key === key);
+            return stage ? stage.order : 999;
+        };
+        const contactadoOrder = getStageOrder('contactado');
+        const coordinandoOrder = getStageOrder('coordinando');
+        const reunionesOrder = getStageOrder('reuniones');
+        const negociacionOrder = getStageOrder('negociacion');
 
         deals.forEach((deal: any) => {
             if (wonStageKeys.includes(deal.status)) wonDeals++;
             if (lostStageKeys.includes(deal.status)) lostDeals++;
-            if (deal.status === 'pausado') pausedDeals++; // Using default paused key
-            if (deal.status === 'coordinando') currentlyInCoordinando++;
+            if (deal.status === 'pausado') pausedDeals++;
 
+            // Build set of all stages this deal has ever touched
             const touchedStages = new Set<string>();
             touchedStages.add(deal.status);
             if (deal.statusHistory && deal.statusHistory.length > 0) {
@@ -153,38 +164,58 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 });
             }
 
+            // Count deals per stage for funnel visualization
             touchedStages.forEach(stage => {
                 stageCounts[stage] = (stageCounts[stage] || 0) + 1;
             });
 
-            // Check if it reached "coordinando" or something after
-            // We use the 'order' from config to determine "further"
+            // Determine the furthest stage this deal ever reached
             const maxOrderTouched = Array.from(touchedStages).reduce((max, stageKey) => {
                 const stageDef = config.stages.find(s => s.key === stageKey);
                 return Math.max(max, stageDef ? stageDef.order : 0);
             }, 0);
 
-            const coordinandoStageDef = config.stages.find(s => s.key === 'coordinando');
-            const coordinandoOrder = coordinandoStageDef ? coordinandoStageDef.order : 3;
-
-            if (maxOrderTouched >= coordinandoOrder) {
-                reachedCoordinandoOrFurther++;
-                if (maxOrderTouched > coordinandoOrder) {
-                    reachedFurtherThanCoordinando++;
-                }
-            }
+            // Count deals that progressed to each stage threshold
+            if (maxOrderTouched >= contactadoOrder) reachedContactado++;
+            if (maxOrderTouched >= coordinandoOrder) reachedCoordinando++;
+            if (maxOrderTouched >= reunionesOrder) reachedReuniones++;
+            if (maxOrderTouched >= negociacionOrder) reachedNegociacion++;
         });
 
-        const winRate = (wonDeals + lostDeals) > 0 ? (wonDeals / (wonDeals + lostDeals)) * 100 : 0;
-        const leadToWon = totalDealsAllTime > 0 ? (wonDeals / totalDealsAllTime) * 100 : 0;
-        const leadToRejected = totalDealsAllTime > 0 ? ((lostDeals + pausedDeals) / totalDealsAllTime) * 100 : 0;
+        // ── Conversion Formulas ──────────────────────────────────────
+        //
+        // Todas las tasas "Lead → X" usan totalDealsAllTime como base.
+        // Esto mide: "de TODOS los deals que entraron al pipeline, qué % llegó a X"
+        //
+        // Win Rate es especial: mide eficiencia de cierre (ganados / cerrados)
 
-        // Nuevas Metricas
-        const baseExcluyendoPerdidos = totalDealsAllTime - lostDeals;
-        const baseExcluyendoPerdidosYCoordinando = baseExcluyendoPerdidos - currentlyInCoordinando;
+        // Lead → Contactado: % de leads que progresaron más allá de "Lead"
+        const leadToContactado = totalDealsAllTime > 0
+            ? (reachedContactado / totalDealsAllTime) * 100 : 0;
 
-        const leadToMeeting = baseExcluyendoPerdidosYCoordinando > 0 ? (reachedFurtherThanCoordinando / baseExcluyendoPerdidosYCoordinando) * 100 : 0;
-        const leadToScheduling = baseExcluyendoPerdidos > 0 ? (reachedCoordinandoOrFurther / baseExcluyendoPerdidos) * 100 : 0;
+        // Lead → Coordinando: % de leads que llegaron a agendar una coordinación
+        const leadToScheduling = totalDealsAllTime > 0
+            ? (reachedCoordinando / totalDealsAllTime) * 100 : 0;
+
+        // Lead → Reunión: % de leads que llegaron a tener una reunión
+        const leadToMeeting = totalDealsAllTime > 0
+            ? (reachedReuniones / totalDealsAllTime) * 100 : 0;
+
+        // Lead → Negociación: % de leads que llegaron a negociar
+        const leadToNegociacion = totalDealsAllTime > 0
+            ? (reachedNegociacion / totalDealsAllTime) * 100 : 0;
+
+        // Lead → Ganado: % de leads que se cerraron como ganados
+        const leadToWon = totalDealsAllTime > 0
+            ? (wonDeals / totalDealsAllTime) * 100 : 0;
+
+        // Win Rate: de los deals que se CERRARON (ganado + perdido), qué % se ganó
+        const winRate = (wonDeals + lostDeals) > 0
+            ? (wonDeals / (wonDeals + lostDeals)) * 100 : 0;
+
+        // Tasa de Rechazo: % de deals perdidos + pausados sobre el total
+        const leadToRejected = totalDealsAllTime > 0
+            ? ((lostDeals + pausedDeals) / totalDealsAllTime) * 100 : 0;
 
 
 
@@ -224,11 +255,13 @@ router.get('/metrics', async (req: Request, res: Response) => {
             },
             conversion: {
                 totalDeals: totalDealsAllTime,
-                winRate,
-                leadToWon,
-                leadToRejected,
-                leadToMeeting,
+                leadToContactado,
                 leadToScheduling,
+                leadToMeeting,
+                leadToNegociacion,
+                leadToWon,
+                winRate,
+                leadToRejected,
                 dealsWon: wonDeals,
                 dealsLost: lostDeals,
                 dealsPaused: pausedDeals,

@@ -112,6 +112,7 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
 
     // Google Calendar State
     const [googleConnected, setGoogleConnected] = useState(false);
+    const [isGoogleOwner, setIsGoogleOwner] = useState(false);
     const [calendars, setCalendars] = useState<{ id: string, summary: string, primary?: boolean }[]>([]);
     const [selectedCalendarId, setSelectedCalendarId] = useState<string>('primary');
     const [loadingCalendars, setLoadingCalendars] = useState(false);
@@ -134,7 +135,10 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
         try {
             const res = await api.get('/calendar/config');
             if (res.data) {
-                if (res.data.googleRefreshToken) setGoogleConnected(true);
+                if (res.data.googleRefreshToken) {
+                    setGoogleConnected(true);
+                    setIsGoogleOwner(res.data.isGoogleOwner);
+                }
                 if (res.data.smtp) {
                     setSmtpHost(res.data.smtp.host || '');
                     setSmtpPort(res.data.smtp.port ? res.data.smtp.port.toString() : '587');
@@ -223,6 +227,7 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                         googleRefreshToken: event.data.refreshToken
                     });
                     setGoogleConnected(true);
+                    setIsGoogleOwner(true); // Since I just connected it, I am the owner
                     addToast('success', 'Google Calendar conectado exitosamente.');
                     fetchCalendars();
                 } catch (error) {
@@ -349,7 +354,8 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                                                         </div>
                                                     ) : (
                                                         <select
-                                                            className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-[12px] text-[14px] text-slate-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm outline-none"
+                                                            disabled={!isGoogleOwner}
+                                                            className={`w-full h-11 px-4 border border-slate-200 rounded-[12px] text-[14px] text-slate-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm outline-none ${!isGoogleOwner ? 'bg-slate-100 cursor-not-allowed opacity-80' : 'bg-slate-50'}`}
                                                             value={selectedCalendarId}
                                                             onChange={async (e) => {
                                                                 const newId = e.target.value;
@@ -375,28 +381,39 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                                                             )}
                                                         </select>
                                                     )}
-                                                    <p className="text-[12px] text-slate-500 mt-2">Los eventos se crearán en este calendario exclusivo.</p>
+                                                    <p className="text-[12px] text-slate-500 mt-2">
+                                                        {isGoogleOwner ? "Los eventos se crearán en este calendario exclusivo." : "Este calendario es administrado de manera global por un administrador."}
+                                                    </p>
                                                 </div>
 
-                                                <button
-                                                    onClick={async () => {
-                                                        try {
-                                                            setSaving(true);
-                                                            await api.put('/calendar/config', { googleRefreshToken: null, googleCalendarId: null });
-                                                            setGoogleConnected(false);
-                                                            setCalendars([]);
-                                                            setSelectedCalendarId('primary');
-                                                            addToast('success', 'Google Calendar desconectado.');
-                                                        } catch (err) {
-                                                            addToast('error', 'Error al desconectar.');
-                                                        } finally {
-                                                            setSaving(false);
-                                                        }
-                                                    }}
-                                                    className="px-6 py-2.5 bg-red-50 text-red-600 font-bold rounded-[12px] hover:bg-red-100 transition-colors w-full"
-                                                >
-                                                    Desconectar
-                                                </button>
+                                                {isGoogleOwner ? (
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                setSaving(true);
+                                                                await api.put('/calendar/config', { googleRefreshToken: null, googleCalendarId: null });
+                                                                setGoogleConnected(false);
+                                                                setIsGoogleOwner(false);
+                                                                setCalendars([]);
+                                                                setSelectedCalendarId('primary');
+                                                                addToast('success', 'Google Calendar desconectado.');
+                                                            } catch (err) {
+                                                                addToast('error', 'Error al desconectar.');
+                                                            } finally {
+                                                                setSaving(false);
+                                                            }
+                                                        }}
+                                                        className="px-6 py-2.5 bg-red-50 text-red-600 font-bold rounded-[12px] hover:bg-red-100 transition-colors w-full"
+                                                    >
+                                                        Desconectar
+                                                    </button>
+                                                ) : (
+                                                    <div className="bg-slate-50 border border-slate-200 rounded-[12px] p-4 text-center">
+                                                        <p className="text-[13px] font-medium text-slate-600">
+                                                            📅 La integración de Google Calendar para la plataforma está configurada por otro usuario administrador. Solo ese usuario puede desconectar o modificar el calendario principal.
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             <div>
@@ -590,6 +607,6 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                 .custom-scrollbar-dark::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
                 .custom-scrollbar-dark::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 `}</style>
-        </div>
+        </div >
     );
 }

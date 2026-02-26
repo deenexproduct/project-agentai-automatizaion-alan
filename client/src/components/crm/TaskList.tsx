@@ -186,29 +186,29 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
                         </span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] font-medium text-slate-500 mt-auto pt-3 border-t border-slate-100">
+                    <div className="flex flex-nowrap items-center gap-x-3 text-[12px] font-medium text-slate-500 mt-auto pt-3 border-t border-slate-100 overflow-hidden w-full">
                         {task.dueDate && (
-                            <span className={`flex items-center gap-1.5 ${isOverdue && !isCompleted ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                            <span className={`flex items-center gap-1.5 shrink-0 ${isOverdue && !isCompleted ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
                                 <Clock size={13} className={isOverdue && !isCompleted ? 'text-red-500' : 'text-slate-400'} />
                                 {formatToArgentineDateTime(task.dueDate)}
                             </span>
                         )}
                         {task.company && (
-                            <div className="flex items-center gap-1.5 text-slate-500" title={`Empresa: ${task.company.name}`}>
-                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block" />
-                                <Building2 size={13} className="text-slate-400" />
-                                <span className="truncate max-w-[120px]">{task.company.name}</span>
+                            <div className="flex items-center gap-1.5 text-slate-500 min-w-0 shrink" title={`Empresa: ${task.company.name}`}>
+                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block shrink-0" />
+                                <Building2 size={13} className="text-slate-400 shrink-0" />
+                                <span className="truncate">{task.company.name}</span>
                             </div>
                         )}
                         {task.contact && (
-                            <div className="flex items-center gap-1.5 text-slate-500" title={`Contacto: ${task.contact.fullName}`}>
-                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block" />
-                                <Users size={13} className="text-slate-400" />
-                                <span className="truncate max-w-[120px]">{task.contact.fullName}</span>
+                            <div className="flex items-center gap-1.5 text-slate-500 min-w-0 shrink" title={`Contacto: ${task.contact.fullName}`}>
+                                <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block shrink-0" />
+                                <Users size={13} className="text-slate-400 shrink-0" />
+                                <span className="truncate">{task.contact.fullName}</span>
                             </div>
                         )}
 
-                        <div className="ml-auto pl-2 flex items-center">
+                        <div className="ml-auto pl-2 flex items-center shrink-0">
                             <OwnerAvatar name={task.assignedTo?.name} profilePhotoUrl={task.assignedTo?.profilePhotoUrl} size="xs" />
                         </div>
                     </div>
@@ -284,7 +284,7 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
 
                             {/* Column: Overdue */}
                             <div className="flex flex-col gap-4">
-                                <h3 className="flex items-center gap-2 font-black text-[16px] text-slate-800 bg-white/40 backdrop-blur-md px-4 py-3 rounded-[16px] border border-white/60 shadow-sm">
+                                <h3 className="flex items-center gap-2 font-black text-[16px] text-slate-800 bg-white/80 backdrop-blur-md px-4 py-3 rounded-[16px] border border-white/60 shadow-sm sticky top-0 z-10">
                                     <AlertCircle size={18} className="text-red-500" />
                                     Vencidas
                                     <span className="ml-auto bg-red-100/80 text-red-600 px-2 py-0.5 rounded-[8px] text-[12px]">{overdueTasks.length}</span>
@@ -299,7 +299,7 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
 
                             {/* Column: Today */}
                             <div className="flex flex-col gap-4">
-                                <h3 className="flex items-center gap-2 font-black text-[16px] text-slate-800 bg-white/40 backdrop-blur-md px-4 py-3 rounded-[16px] border border-white/60 shadow-sm border-t-2 border-t-emerald-400">
+                                <h3 className="flex items-center gap-2 font-black text-[16px] text-slate-800 bg-white/80 backdrop-blur-md px-4 py-3 rounded-[16px] border border-white/60 shadow-sm border-t-2 border-t-emerald-400 sticky top-0 z-10">
                                     <CalendarIcon size={18} className="text-emerald-500" />
                                     Para Hoy
                                     <span className="ml-auto bg-emerald-100/80 text-emerald-600 px-2 py-0.5 rounded-[8px] text-[12px]">{todayTasks.length}</span>
@@ -314,7 +314,7 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
 
                             {/* Column: Upcoming */}
                             <div className="flex flex-col gap-4">
-                                <h3 className="flex items-center gap-2 font-black text-[16px] text-slate-800 bg-white/40 backdrop-blur-md px-4 py-3 rounded-[16px] border border-white/60 shadow-sm">
+                                <h3 className="flex items-center gap-2 font-black text-[16px] text-slate-800 bg-white/80 backdrop-blur-md px-4 py-3 rounded-[16px] border border-white/60 shadow-sm sticky top-0 z-10">
                                     <LayoutList size={18} className="text-blue-500" />
                                     Próximas
                                     <span className="ml-auto bg-blue-100/80 text-blue-600 px-2 py-0.5 rounded-[8px] text-[12px]">{upcomingTasks.length}</span>

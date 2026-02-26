@@ -67,8 +67,22 @@ router.use(authMiddleware);
 router.get('/config', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const config = await CalendarConfig.findOne({ userId }).lean();
-        res.json(config || {});
+        // Get user's personal config (for SMTP, templates, etc)
+        const userConfig = await CalendarConfig.findOne({ userId }).lean();
+
+        // Find if ANY user has connected Google Calendar
+        const googleConfig = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
+
+        // Merge them for the frontend
+        const responseData = {
+            ...userConfig,
+            isGoogleOwner: googleConfig ? googleConfig.userId.toString() === userId : false,
+            googleRefreshToken: googleConfig?.googleRefreshToken,
+            googleEmail: googleConfig?.googleEmail,
+            googleCalendarId: googleConfig?.googleCalendarId,
+        };
+
+        res.json(responseData);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -77,6 +91,15 @@ router.get('/config', async (req: Request, res: Response) => {
 router.put('/config', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
+
+        // If trying to disconnect google calendar, verify ownership
+        if (req.body.googleRefreshToken === null) {
+            const googleConfig = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
+            if (googleConfig && googleConfig.userId.toString() !== userId) {
+                return res.status(403).json({ error: 'Solo el usuario que conectó el calendario puede desconectarlo.' });
+            }
+        }
+
         const config = await CalendarConfig.findOneAndUpdate(
             { userId },
             { $set: { ...req.body, userId } },
@@ -90,8 +113,8 @@ router.put('/config', async (req: Request, res: Response) => {
 
 router.get('/calendars', async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).user._id.toString();
-        const config = await CalendarConfig.findOne({ userId }).lean();
+        // Use the globally connected calendar config
+        const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
         if (!config || !config.googleRefreshToken) {
             return res.status(400).json({ error: 'Google Calendar no conectado' });
         }
@@ -117,7 +140,7 @@ router.get('/events', async (req: Request, res: Response) => {
 
         // Pull Sync from Google Calendar
         try {
-            const config = await CalendarConfig.findOne({ userId }).lean();
+            const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
             if (config?.googleRefreshToken && start && end) {
                 // Determine sync window (extend by a bit just in case)
                 const syncStart = new Date(start as string);
@@ -213,7 +236,8 @@ router.post('/events', async (req: Request, res: Response) => {
             userId: creatorId, assignedTo, title, description, date, startTime, endTime, type, location, attendees, linkedTo
         });
 
-        const config = await CalendarConfig.findOne({ userId: assignedTo }).lean();
+        // Use global google config
+        const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
 
         // 1. Google Calendar Integration
         if (config?.googleRefreshToken) {
@@ -262,9 +286,8 @@ router.put('/events/:id', async (req: Request, res: Response) => {
 
         if (!event) return res.status(404).json({ error: 'Event not found' });
 
-        // Update Google Calendar if linked
-        const assigneeId = event.assignedTo || event.userId;
-        const config = await CalendarConfig.findOne({ userId: assigneeId }).lean();
+        // Update Google Calendar using global config if linked
+        const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
         if (config?.googleRefreshToken && event.googleEventId) {
             try {
                 await import('../services/google-calendar.service').then(m =>
@@ -277,8 +300,8 @@ router.put('/events/:id', async (req: Request, res: Response) => {
 
         // Send updated invitations if requested
         if (sendInvite) {
-            const assignee = event.assignedTo || event.userId;
-            const config = await CalendarConfig.findOne({ userId: assignee }).lean();
+            // Find global config since that's what we used to create the event
+            const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
             if (config) {
                 // @ts-ignore
                 emailService.sendEventInvitations(config as any, event as any).catch(e => console.error('Email error:', e));
@@ -298,8 +321,7 @@ router.delete('/events/:id', async (req: Request, res: Response) => {
 
         if (!event) return res.status(404).json({ error: 'Event not found' });
 
-        const assignee = event.assignedTo || event.userId;
-        const config = await CalendarConfig.findOne({ userId: assignee }).lean();
+        const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
         if (config?.googleRefreshToken && event.googleEventId) {
             try {
                 // @ts-ignore

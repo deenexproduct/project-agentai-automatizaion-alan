@@ -584,6 +584,8 @@ router.get('/deals', async (req: Request, res: Response) => {
             .populate('primaryContact', 'fullName position profilePhotoUrl')
             .populate('contacts', 'fullName position profilePhotoUrl email phone')
             .populate('assignedTo', 'name email profilePhotoUrl')
+            .populate('userId', 'name profilePhotoUrl email')
+            .populate('statusHistory.changedBy', 'name profilePhotoUrl email')
             .sort({ createdAt: -1 })
             .lean();
 
@@ -659,6 +661,8 @@ router.get('/deals/:id', async (req: Request, res: Response) => {
             .populate('primaryContact', 'fullName position profilePhotoUrl email phone')
             .populate('contacts', 'fullName position profilePhotoUrl email phone')
             .populate('assignedTo', 'name email profilePhotoUrl')
+            .populate('userId', 'name profilePhotoUrl email')
+            .populate('statusHistory.changedBy', 'name profilePhotoUrl email')
             .lean();
 
         // 3. Manejo de caso borde: Recurso inexistente o sin permisos
@@ -792,6 +796,8 @@ router.patch('/deals/:id', async (req: Request, res: Response) => {
             .populate('company', 'name logo sector')
             .populate('primaryContact', 'fullName position profilePhotoUrl')
             .populate('assignedTo', 'name email profilePhotoUrl')
+            .populate('userId', 'name profilePhotoUrl email')
+            .populate('statusHistory.changedBy', 'name profilePhotoUrl email')
             .lean();
 
         res.json(populated);
@@ -882,7 +888,14 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
 router.post('/tasks', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
-        const task = await Task.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
+
+        // Sanitize incoming body: eliminate nulls for ObjectIds so Mongoose uses defaults or undefined
+        const safeBody = { ...req.body };
+        if (safeBody.company === null || safeBody.company === '') delete safeBody.company;
+        if (safeBody.contact === null || safeBody.contact === '') delete safeBody.contact;
+        if (safeBody.deal === null || safeBody.deal === '') delete safeBody.deal;
+
+        const task = await Task.create({ ...safeBody, assignedTo: safeBody.assignedTo || userId, userId });
 
         const populated = await Task.findById(task._id)
             .populate('contact', 'fullName')
@@ -893,8 +906,8 @@ router.post('/tasks', async (req: Request, res: Response) => {
 
         res.status(201).json(populated);
     } catch (err: any) {
-        console.error('CRM create task error:', err.message);
-        res.status(500).json({ error: 'Failed to create task' });
+        console.error('CRM create task error:', err.message, err.errors || err);
+        res.status(500).json({ error: 'Failed to create task', details: err.message });
     }
 });
 
@@ -902,9 +915,16 @@ router.post('/tasks', async (req: Request, res: Response) => {
 router.patch('/tasks/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
+
+        // Sanitize incoming body: eliminate nulls or empty strings for ObjectIds to prevent CastErrors
+        const safeBody = { ...req.body };
+        if (safeBody.company === null || safeBody.company === '') delete safeBody.company;
+        if (safeBody.contact === null || safeBody.contact === '') delete safeBody.contact;
+        if (safeBody.deal === null || safeBody.deal === '') delete safeBody.deal;
+
         const task = await Task.findOneAndUpdate(
             { _id: req.params.id },
-            { $set: req.body },
+            { $set: safeBody },
             { new: true, runValidators: true }
         )
             .populate('contact', 'fullName')
@@ -916,8 +936,8 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
         if (!task) return res.status(404).json({ error: 'Task not found' });
         res.json(task);
     } catch (err: any) {
-        console.error('CRM update task error:', err.message);
-        res.status(500).json({ error: 'Failed to update task' });
+        console.error('CRM update task error:', err.message, err.errors || err);
+        res.status(500).json({ error: 'Failed to update task', details: err.message });
     }
 });
 

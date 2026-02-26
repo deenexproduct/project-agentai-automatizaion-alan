@@ -256,32 +256,35 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
                                     <div className="w-full border-t border-slate-100 relative z-10" />
 
                                     {/* Bottom Info Row */}
-                                    <div className="relative z-10 flex items-center justify-between w-full">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            {contact.companies && contact.companies.length > 0 ? (
-                                                contact.companies.map(comp => (
-                                                    <div key={comp._id} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-[6px] border border-slate-200/50">
-                                                        <Building2 size={12} className="text-slate-400" />
-                                                        <span className="truncate max-w-[110px]">{comp.name}</span>
+                                    <div className="relative z-10 flex items-center justify-between w-full mt-auto pt-1 gap-2">
+                                        <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                                            {/* Container for Companies with horizontal scroll hidden visually */}
+                                            <div className="flex items-center gap-1.5 overflow-x-auto hidden-scrollbar shrink min-w-0" style={{ maskImage: 'linear-gradient(to right, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, black 85%, transparent 100%)' }}>
+                                                {contact.companies && contact.companies.length > 0 ? (
+                                                    contact.companies.map(comp => (
+                                                        <div key={comp._id} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-[6px] border border-slate-200/50 shrink-0">
+                                                            <Building2 size={12} className="text-slate-400 shrink-0" />
+                                                            <span className="truncate max-w-[110px]">{comp.name}</span>
+                                                        </div>
+                                                    ))
+                                                ) : contact.company ? (
+                                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-[6px] border border-slate-200/50 shrink-0">
+                                                        <Building2 size={12} className="text-slate-400 shrink-0" />
+                                                        <span className="truncate max-w-[110px]">{contact.company.name}</span>
                                                     </div>
-                                                ))
-                                            ) : contact.company ? (
-                                                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-[6px] border border-slate-200/50">
-                                                    <Building2 size={12} className="text-slate-400" />
-                                                    <span className="truncate max-w-[110px]">{contact.company.name}</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 italic bg-white px-2 py-1 rounded-[6px] border border-transparent">
-                                                    <Building2 size={12} className="text-slate-300" />
-                                                    Sin empresa
-                                                </div>
-                                            )}
-                                            <span className={`px-2 py-1 rounded-[6px] text-[9.5px] font-bold uppercase tracking-wider ${contact.role === 'decision_maker' ? 'bg-violet-50 text-violet-600 border border-violet-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
+                                                ) : (
+                                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400 italic bg-white px-2 py-1 rounded-[6px] border border-transparent shrink-0">
+                                                        <Building2 size={12} className="text-slate-300 shrink-0" />
+                                                        <span className="truncate">Sin empresa</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <span className={`shrink-0 px-2 py-1 rounded-[6px] text-[9.5px] font-bold uppercase tracking-wider ${contact.role === 'decision_maker' ? 'bg-violet-50 text-violet-600 border border-violet-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
                                                 {formatRole(contact.role)}
                                             </span>
                                         </div>
 
-                                        <div className="shrink-0 flex items-center gap-1.5">
+                                        <div className="shrink-0 flex items-center gap-1.5 ml-auto">
                                             <OwnerAvatar name={contact.assignedTo?.name} profilePhotoUrl={contact.assignedTo?.profilePhotoUrl} size="xs" />
                                             {contact.linkedInContactId || contact.linkedInProfileUrl ? (
                                                 <a

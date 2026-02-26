@@ -70,9 +70,20 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
             } else {
                 setTitle('');
                 setDescription('');
-                setDate(formatToLocalDateInput(initialDate || new Date()));
-                setStartTime('09:00');
-                setEndTime('10:00');
+                const theDate = initialDate || new Date();
+                setDate(formatToLocalDateInput(theDate));
+                if (initialDate && (initialDate.getHours() !== 0 || initialDate.getMinutes() !== 0)) {
+                    const startH = theDate.getHours().toString().padStart(2, '0');
+                    const startM = theDate.getMinutes().toString().padStart(2, '0');
+                    const endDayDate = new Date(theDate.getTime() + 30 * 60000);
+                    const endH = endDayDate.getHours().toString().padStart(2, '0');
+                    const endM = endDayDate.getMinutes().toString().padStart(2, '0');
+                    setStartTime(`${startH}:${startM}`);
+                    setEndTime(`${endH}:${endM}`);
+                } else {
+                    setStartTime('09:00');
+                    setEndTime('10:00');
+                }
                 setType('meet');
                 setLocation('');
                 setAttendeesInput('');

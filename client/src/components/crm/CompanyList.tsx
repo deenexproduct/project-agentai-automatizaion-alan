@@ -161,13 +161,17 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
 
                                     {/* Bottom Row: Status & Actions */}
                                     <div className="relative z-10 w-full flex items-center gap-2 mt-auto">
-                                        <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-white/50 px-2.5 py-1.5 rounded-[8px] border border-slate-100 shadow-sm">
+                                        <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-white/50 px-2.5 py-1.5 rounded-[8px] border border-slate-100 shadow-sm" title="Contactos">
                                             <Users size={14} className="text-blue-500" />
-                                            {company.contactsCount || 0} Contacto{(company.contactsCount !== 1) && 's'}
+                                            {company.contactsCount || 0}
                                         </span>
-                                        <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-white/50 px-2.5 py-1.5 rounded-[8px] border border-slate-100 shadow-sm">
+                                        <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-white/50 px-2.5 py-1.5 rounded-[8px] border border-slate-100 shadow-sm" title="Deals">
                                             <Briefcase size={14} className="text-emerald-500" />
-                                            {company.dealsCount || 0} Deal{(company.dealsCount !== 1) && 's'}
+                                            {company.dealsCount || 0}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-white/50 px-2.5 py-1.5 rounded-[8px] border border-slate-100 shadow-sm" title="Locales">
+                                            <MapPin size={14} className="text-red-500" />
+                                            {company.localesCount || 0}
                                         </span>
 
                                         <div className="ml-auto flex items-center gap-1.5">
