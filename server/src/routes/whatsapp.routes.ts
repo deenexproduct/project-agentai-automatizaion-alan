@@ -150,6 +150,7 @@ router.post('/schedule', upload.single('file'), async (req: Request, res: Respon
         await message.save();
 
         console.log(`📅 Message scheduled: ${chatName} at ${scheduledAt} (${messageType})`);
+        console.log(`📅 Parsed scheduledAt: ${message.scheduledAt.toISOString()} | Server now: ${new Date().toISOString()}`);
         res.json(message);
     } catch (error: any) {
         console.error('Schedule error:', error.message);
@@ -252,6 +253,20 @@ router.post('/retry/:id', async (req: Request, res: Response) => {
         } else {
             res.status(400).json({ success: false, error: result.error });
         }
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ── Scheduler Diagnostics ─────────────────────────────────
+
+router.get('/scheduler-status', async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?._id?.toString();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        const tenant = whatsappService.getTenant(userId);
+        const diagnostics = await tenant.getSchedulerDiagnostics();
+        res.json(diagnostics);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

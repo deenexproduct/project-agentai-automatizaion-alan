@@ -32,6 +32,8 @@ export class WhatsAppTenant {
 
     constructor(userId: string) {
         this.userId = userId;
+        // Start the scheduler immediately — it checks isConnected() internally
+        this.startScheduler();
     }
 
     public async getContactProfilePic(contactId: string): Promise<string | null> {
@@ -109,7 +111,7 @@ export class WhatsAppTenant {
             this.connectedSince = new Date();
             this.startKeepAlive();
             this.startPreventiveRestart();
-            this.startScheduler();
+            // Scheduler already running from constructor, no need to start again
             this.refreshChats();
         });
 
@@ -134,7 +136,8 @@ export class WhatsAppTenant {
             this.qrCode = null;
             this.connectedSince = null;
             this.stopKeepAlive();
-            this.stopScheduler();
+            // Keep scheduler running — it checks isConnected() internally
+            // and will send messages once WA reconnects
 
             if (reason === 'NAVIGATION' || reason === 'LOGOUT' || reason.toLowerCase().includes('logout')) {
                 this.deleteSessionData();
@@ -149,7 +152,7 @@ export class WhatsAppTenant {
             if (state === 'CONFLICT' || state === 'UNLAUNCHED' || state === 'UNPAIRED') {
                 console.warn(`⚠️ [User ${this.userId}] Problematic state detected: ${state} — triggering reconnect`);
                 this.stopKeepAlive();
-                this.stopScheduler();
+                // Keep scheduler running — it will resume sending once reconnected
                 if (state === 'UNPAIRED') this.deleteSessionData();
                 this.attemptReconnect(state);
             }
@@ -488,10 +491,10 @@ export class WhatsAppTenant {
 
     startScheduler(): void {
         if (this.schedulerJob) return;
-        console.log(`⏰ [User ${this.userId}] WhatsApp scheduler started`);
+        console.log(`⏰ [User ${this.userId}] WhatsApp scheduler started (runs independently of WA connection)`);
+        console.log(`⏰ [User ${this.userId}] Server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}, UTC offset: ${new Date().getTimezoneOffset()}min`);
 
         this.schedulerJob = cron.schedule('* * * * *', async () => {
-            if (!this.isConnected()) return;
             try {
                 const now = new Date();
                 const pendingMessages = await ScheduledMessage.find({
@@ -502,9 +505,16 @@ export class WhatsAppTenant {
 
                 if (pendingMessages.length === 0) return;
 
+                // Check if WA is connected before trying to send
+                if (!this.isConnected()) {
+                    console.warn(`⏰ [User ${this.userId}] ${pendingMessages.length} message(s) ready to send but WhatsApp is NOT connected (status: ${this.status}). Will retry next minute.`);
+                    return;
+                }
+
                 console.log(`📤 [User ${this.userId}] Processing ${pendingMessages.length} pending message(s)...`);
                 for (let i = 0; i < pendingMessages.length; i++) {
                     const msg = pendingMessages[i];
+                    console.log(`📤 [User ${this.userId}] Sending scheduled msg ${msg._id} to ${msg.chatName} (scheduled: ${msg.scheduledAt.toISOString()}, now: ${now.toISOString()})`);
                     await this.sendScheduledMessage(msg);
                     if (msg.status === 'sent' && msg.isRecurring) {
                         await this.generateNextRecurringInstance(msg);
@@ -658,6 +668,40 @@ export class WhatsAppTenant {
             keepAliveActive: this.keepAliveInterval !== null,
             schedulerActive: this.schedulerJob !== null,
             lastPreventiveRestart: this.lastPreventiveRestart?.toISOString() || null,
+        };
+    }
+
+    async getSchedulerDiagnostics() {
+        const now = new Date();
+        const pendingCount = await ScheduledMessage.countDocuments({
+            userId: this.userId,
+            status: 'pending',
+        });
+        const readyToSend = await ScheduledMessage.countDocuments({
+            userId: this.userId,
+            status: 'pending',
+            scheduledAt: { $lte: now },
+        });
+        const nextMessage = await ScheduledMessage.findOne({
+            userId: this.userId,
+            status: 'pending',
+        }).sort({ scheduledAt: 1 }).select('scheduledAt chatName messageType');
+
+        return {
+            serverTime: now.toISOString(),
+            serverTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            utcOffset: now.getTimezoneOffset(),
+            schedulerActive: this.schedulerJob !== null,
+            whatsappConnected: this.isConnected(),
+            whatsappStatus: this.status,
+            pendingMessages: pendingCount,
+            readyToSendNow: readyToSend,
+            nextScheduledMessage: nextMessage ? {
+                scheduledAt: nextMessage.scheduledAt.toISOString(),
+                chatName: nextMessage.chatName,
+                messageType: nextMessage.messageType,
+                minutesUntilSend: Math.round((nextMessage.scheduledAt.getTime() - now.getTime()) / 60000),
+            } : null,
         };
     }
 

@@ -429,16 +429,41 @@ class ResumidorService {
         }
     }
 
+    private _cachedWhisperPath: string | null = null;
+
+    private async findWhisperPath(): Promise<string | null> {
+        if (this._cachedWhisperPath) return this._cachedWhisperPath;
+        try {
+            const { stdout } = await execAsync('which whisper');
+            const resolved = stdout.trim();
+            if (resolved) {
+                this._cachedWhisperPath = resolved;
+                console.log(`🎤 [RESUMIDOR] Whisper CLI found at: ${resolved}`);
+                return resolved;
+            }
+        } catch { /* Whisper not installed */ }
+        console.warn('🎤 [RESUMIDOR] ⚠️ Whisper CLI not found in PATH');
+        return null;
+    }
+
     private async transcribeWithWhisperLocal(audioPath: string): Promise<string> {
         try {
+            const whisperPath = await this.findWhisperPath();
+            if (!whisperPath) {
+                throw new Error('Whisper CLI not available. Install whisper or configure GROQ_API_KEY.');
+            }
+
             const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
             try {
                 await execAsync(`ffmpeg -y -i "${audioPath}" -ar 16000 -ac 1 "${wavPath}" 2>/dev/null`);
             } catch { }
 
             const fileToTranscribe = fs.existsSync(wavPath) ? wavPath : audioPath;
+            const t0 = Date.now();
+            console.log(`🎤 [RESUMIDOR] Using Whisper CLI at ${whisperPath}...`);
+
             const { stdout } = await execAsync(
-                `/opt/homebrew/bin/whisper "${fileToTranscribe}" --language Spanish --model tiny --output_format txt --output_dir /tmp`,
+                `"${whisperPath}" "${fileToTranscribe}" --language Spanish --model tiny --output_format txt --output_dir /tmp`,
                 { timeout: 600000 }
             );
 
@@ -449,11 +474,12 @@ class ResumidorService {
                 const text = fs.readFileSync(outputPath, 'utf-8').trim();
                 try { fs.unlinkSync(outputPath); } catch { }
                 try { fs.unlinkSync(wavPath); } catch { }
+                console.log(`🎤 [RESUMIDOR] Whisper CLI OK (${Date.now() - t0}ms)`);
                 return text || 'No se detectó texto';
             }
             return 'No se pudo obtener la transcripción';
         } catch (error: any) {
-            console.error('Whisper local error:', error.message);
+            console.error('🎤 [RESUMIDOR] ❌ Whisper local error:', error.message);
             return `Error de transcripción: ${error.message}`;
         }
     }

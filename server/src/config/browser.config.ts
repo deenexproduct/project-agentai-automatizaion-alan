@@ -81,45 +81,45 @@ export const BROWSER_ARGS = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
-    
+
     // Automation hiding
     '--disable-blink-features=AutomationControlled',
     '--disable-features=IsolateOrigins,site-per-process',
-    
+
     // UI
     '--disable-infobars',
     '--window-position=0,0',
     '--ignore-certificate-errors',
     '--ignore-certificate-errors-spki-list',
-    
+
     // Performance
     '--disable-background-timer-throttling',
     '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding',
     '--disable-ipc-flooding-protection',
-    
+
     // GPU & Media
     '--disable-features=TranslateUI',
     '--disable-component-extensions-with-background-pages',
     '--disable-extensions',
-    
+
     // Memory
     '--max-old-space-size=4096',
     '--disable-web-security',
     '--allow-running-insecure-content',
-    
+
     // Audio (prevent audio context fingerprinting)
     '--autoplay-policy=user-gesture-required',
     '--disable-features=AudioServiceOutOfProcess',
 ];
 
-export function getBrowserLaunchOptions(headless: boolean = false, viewport?: ViewportConfig): PuppeteerLaunchOptions {
+export function getBrowserLaunchOptions(headless: boolean = (process.env.NODE_ENV === 'production' ? true : false), viewport?: ViewportConfig): PuppeteerLaunchOptions {
     const args = [...BROWSER_ARGS];
-    
+
     if (viewport) {
         args.push(`--window-size=${viewport.width},${viewport.height}`);
     }
-    
+
     return {
         headless,
         protocolTimeout: 180000, // 180s
@@ -346,14 +346,14 @@ export const STEALTH_SCRIPTS = {
             get: () => false,
         });
     },
-    
+
     // Evasión de Canvas fingerprinting
     canvasEvasion: () => {
         const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
         const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-        
+
         // Agregar ruido sutil a los datos de canvas
-        HTMLCanvasElement.prototype.toDataURL = function(type?: string, quality?: any): string {
+        HTMLCanvasElement.prototype.toDataURL = function (type?: string, quality?: any): string {
             const context = this.getContext('2d');
             if (context) {
                 const imageData = context.getImageData(0, 0, this.width, this.height);
@@ -368,8 +368,8 @@ export const STEALTH_SCRIPTS = {
             }
             return originalToDataURL.apply(this, [type, quality] as any);
         };
-        
-        CanvasRenderingContext2D.prototype.getImageData = function(sx: number, sy: number, sw: number, sh: number) {
+
+        CanvasRenderingContext2D.prototype.getImageData = function (sx: number, sy: number, sw: number, sh: number) {
             const imageData = originalGetImageData.apply(this, [sx, sy, sw, sh] as any);
             const data = imageData.data;
             for (let i = 0; i < data.length; i += 4) {
@@ -380,7 +380,7 @@ export const STEALTH_SCRIPTS = {
             return imageData;
         };
     },
-    
+
     // Evasión de WebGL fingerprinting
     webglEvasion: () => {
         const getParameter = WebGLRenderingContext.prototype.getParameter;
@@ -388,15 +388,15 @@ export const STEALTH_SCRIPTS = {
             37445: 'Intel Inc.',
             37446: 'Intel Iris OpenGL Engine',
         };
-        
-        WebGLRenderingContext.prototype.getParameter = function(parameter: number): any {
+
+        WebGLRenderingContext.prototype.getParameter = function (parameter: number): any {
             if (parameterMap[parameter]) {
                 return parameterMap[parameter];
             }
             return getParameter.call(this, parameter);
         };
     },
-    
+
     // Plugins y mimeTypes simulados
     pluginsEvasion: () => {
         // Crear plugins simulados
@@ -420,7 +420,7 @@ export const STEALTH_SCRIPTS = {
                 namedItem: () => null,
             },
         ];
-        
+
         const mockMimeTypes = [
             {
                 type: 'application/pdf',
@@ -435,25 +435,25 @@ export const STEALTH_SCRIPTS = {
                 enabledPlugin: mockPlugins[0],
             },
         ];
-        
+
         Object.defineProperty(navigator, 'plugins', {
             get: () => mockPlugins as unknown as PluginArray,
             enumerable: true,
             configurable: true,
         });
-        
+
         Object.defineProperty(navigator, 'mimeTypes', {
             get: () => mockMimeTypes as unknown as MimeTypeArray,
             enumerable: true,
             configurable: true,
         });
     },
-    
+
     // Ocultar el uso de Puppeteer
     hideAutomation: () => {
         // Eliminar propiedades que revelan automation
         delete (window as any).__phantomas;
-        
+
         // Ocultar Chrome Runtime
         if ((window as any).chrome) {
             Object.defineProperty(window, 'chrome', {
@@ -506,27 +506,27 @@ export const STEALTH_SCRIPTS = {
                 }),
             });
         }
-        
+
         // Simular notification permissions
         const originalQuery = window.Notification?.requestPermission;
         if (originalQuery) {
-            window.Notification.requestPermission = async function() {
+            window.Notification.requestPermission = async function () {
                 return 'default';
             };
         }
     },
-    
+
     // Language y timezone consistentes
     consistencyEvasion: () => {
         Object.defineProperty(navigator, 'languages', {
             get: () => ['en-US', 'en'],
         });
-        
+
         // Asegurar que el hardwareConcurrency sea realista
         Object.defineProperty(navigator, 'hardwareConcurrency', {
             get: () => 4 + Math.floor(Math.random() * 4),
         });
-        
+
         // Memory realista
         Object.defineProperty(navigator, 'deviceMemory', {
             get: () => 8,
@@ -558,7 +558,7 @@ export function calculateBackoffDelay(attempt: number, config: RetryConfig): num
 // Type guard para verificar si es un error retryable
 export function isRetryableError(error: Error, config: RetryConfig): boolean {
     const errorMessage = error.message.toLowerCase();
-    return config.retryableErrors.some(pattern => 
+    return config.retryableErrors.some(pattern =>
         errorMessage.includes(pattern.toLowerCase())
     );
 }
@@ -566,12 +566,12 @@ export function isRetryableError(error: Error, config: RetryConfig): boolean {
 // Detectar tipo de bloqueo basado en el contenido de la página
 export function detectBlockType(text: string): BlockDetectionPattern | null {
     const lowerText = text.toLowerCase();
-    
+
     for (const pattern of BLOCK_DETECTION_PATTERNS) {
         if (pattern.patterns.some(p => lowerText.includes(p))) {
             return pattern;
         }
     }
-    
+
     return null;
 }

@@ -106,7 +106,7 @@ export class LinkedInBrowserService extends EventEmitter {
     /**
      * Inicializa una nueva sesión de navegador con medidas anti-detección
      */
-    async initialize(headless: boolean = false): Promise<BrowserSession> {
+    async initialize(headless: boolean = (process.env.NODE_ENV === 'production' ? true : false)): Promise<BrowserSession> {
         if (this.session) {
             this.log('⚠️ Browser session already exists, reusing...');
             return this.session;
@@ -688,7 +688,7 @@ export class LinkedInBrowserService extends EventEmitter {
     /**
      * Rota la sesión (cierra y crea nueva)
      */
-    async rotateSession(headless: boolean = false): Promise<BrowserSession> {
+    async rotateSession(headless: boolean = (process.env.NODE_ENV === 'production' ? true : false)): Promise<BrowserSession> {
         this.log('🔄 Rotating browser session...');
         await this.close();
         await this.humanDelay(2000, 5000); // Espera entre sesiones

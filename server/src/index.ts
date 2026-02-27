@@ -100,44 +100,115 @@ app.get('/api/history', authMiddleware, async (req: any, res) => {
   }
 });
 
-// Transcribe audio using Whisper
+// ── Transcription: Groq API (cloud) or Whisper CLI (local) ──────────
+// Priority: Groq API if GROQ_API_KEY is set → Local Whisper (dynamic path)
+import Groq from 'groq-sdk';
+
+let _groqInstance: Groq | null = null;
+function getGroqForTranscription(): Groq {
+  if (!_groqInstance) {
+    _groqInstance = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  }
+  return _groqInstance;
+}
+
+let _cachedWhisperPath: string | null = null;
+async function findWhisperPath(): Promise<string | null> {
+  if (_cachedWhisperPath) return _cachedWhisperPath;
+  try {
+    const { stdout } = await execAsync('which whisper');
+    const resolved = stdout.trim();
+    if (resolved) {
+      _cachedWhisperPath = resolved;
+      console.log(`🎤 [TRANSCRIBE] Whisper CLI found at: ${resolved}`);
+      return resolved;
+    }
+  } catch { /* Whisper not installed */ }
+  console.warn('🎤 [TRANSCRIBE] ⚠️ Whisper CLI not found in PATH');
+  return null;
+}
+
+async function convertToWav(audioPath: string): Promise<string> {
+  const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
+  try {
+    await execAsync(`ffmpeg -y -i "${audioPath}" -ar 16000 -ac 1 "${wavPath}" 2>/dev/null`);
+    console.log(`🎤 [TRANSCRIBE] FFmpeg conversion OK → ${path.basename(wavPath)}`);
+  } catch {
+    console.log('🎤 [TRANSCRIBE] FFmpeg conversion skipped, using original file');
+  }
+  return fs.existsSync(wavPath) ? wavPath : audioPath;
+}
+
+async function transcribeWithGroqAPI(audioPath: string): Promise<string> {
+  const t0 = Date.now();
+  console.log(`🎤 [TRANSCRIBE] Using Groq API (whisper-large-v3-turbo)...`);
+  const fileToSend = await convertToWav(audioPath);
+  const groq = getGroqForTranscription();
+  const audioFile = fs.createReadStream(fileToSend);
+
+  const transcription = await groq.audio.transcriptions.create({
+    file: audioFile,
+    model: 'whisper-large-v3-turbo',
+    language: 'es',
+    response_format: 'text',
+  });
+
+  // Cleanup wav if created
+  if (fileToSend !== audioPath) {
+    try { fs.unlinkSync(fileToSend); } catch { }
+  }
+
+  const text = typeof transcription === 'string' ? transcription : (transcription as any).text || '';
+  console.log(`🎤 [TRANSCRIBE] Groq API OK (${Date.now() - t0}ms) → "${text.substring(0, 60)}..."`);
+  return text.trim() || 'No se detectó texto';
+}
+
+async function transcribeWithWhisperLocal(audioPath: string): Promise<string> {
+  const t0 = Date.now();
+  const whisperPath = await findWhisperPath();
+  if (!whisperPath) {
+    throw new Error('Whisper CLI not available and no GROQ_API_KEY configured');
+  }
+
+  console.log(`🎤 [TRANSCRIBE] Using Whisper CLI at ${whisperPath}...`);
+  const fileToTranscribe = await convertToWav(audioPath);
+
+  await execAsync(
+    `"${whisperPath}" "${fileToTranscribe}" --language Spanish --model tiny --output_format txt --output_dir /tmp`,
+    { timeout: 600000 }
+  );
+
+  const baseName = path.basename(fileToTranscribe).replace(/\.\w+$/, '.txt');
+  const outputPath = `/tmp/${baseName}`;
+
+  if (fs.existsSync(outputPath)) {
+    const text = fs.readFileSync(outputPath, 'utf-8').trim();
+    try { fs.unlinkSync(outputPath); } catch { }
+    if (fileToTranscribe !== audioPath) {
+      try { fs.unlinkSync(fileToTranscribe); } catch { }
+    }
+    console.log(`🎤 [TRANSCRIBE] Whisper CLI OK (${Date.now() - t0}ms) → "${text.substring(0, 60)}..."`);
+    return text || 'No se detectó texto';
+  }
+  return 'No se pudo obtener la transcripción';
+}
+
 async function transcribeWithWhisper(audioPath: string): Promise<string> {
   try {
-    // Convert webm to wav first using ffmpeg
-    const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
-
-    try {
-      await execAsync(`ffmpeg -y -i "${audioPath}" -ar 16000 -ac 1 "${wavPath}" 2>/dev/null`);
-    } catch (e) {
-      console.log('FFmpeg conversion failed/skipped, continuing with original file...');
-      // Try direct transcription if ffmpeg fails
+    // Strategy: Groq cloud first → Whisper CLI fallback
+    if (process.env.GROQ_API_KEY) {
+      try {
+        return await transcribeWithGroqAPI(audioPath);
+      } catch (groqErr: any) {
+        console.error(`🎤 [TRANSCRIBE] ❌ Groq API failed: ${groqErr.message}`);
+        console.log('🎤 [TRANSCRIBE] Falling back to local Whisper CLI...');
+        return await transcribeWithWhisperLocal(audioPath);
+      }
     }
-
-    const fileToTranscribe = fs.existsSync(wavPath) ? wavPath : audioPath;
-
-    // Run Whisper
-    console.log(`Starting transcription for: ${fileToTranscribe}`);
-    const { stdout, stderr } = await execAsync(
-      `/opt/homebrew/bin/whisper "${fileToTranscribe}" --language Spanish --model tiny --output_format txt --output_dir /tmp`,
-      { timeout: 600000 } // 10 minutes timeout
-    );
-
-    // Read the output file
-    const txtPath = fileToTranscribe.replace(/\.\w+$/, '.txt').replace(/.*\//, '/tmp/');
-    const baseName = path.basename(fileToTranscribe).replace(/\.\w+$/, '.txt');
-    const outputPath = `/tmp/${baseName}`;
-
-    if (fs.existsSync(outputPath)) {
-      const text = fs.readFileSync(outputPath, 'utf-8').trim();
-      // Cleanup
-      try { fs.unlinkSync(outputPath); } catch { }
-      try { fs.unlinkSync(wavPath); } catch { }
-      return text || 'No se detectó texto';
-    }
-
-    return 'No se pudo obtener la transcripción';
+    // No Groq key → try local Whisper
+    return await transcribeWithWhisperLocal(audioPath);
   } catch (error: any) {
-    console.error('Whisper error:', error.message);
+    console.error(`🎤 [TRANSCRIBE] ❌ All transcription methods failed: ${error.message}`);
     return `Error de transcripción: ${error.message}`;
   }
 }
@@ -291,8 +362,9 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
+    console.log(`🕐 Server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone} | UTC offset: ${new Date().getTimezoneOffset()}min | Now: ${new Date().toISOString()}`);
     console.log(`🎙️ Using Whisper for transcription`);
-    console.log(`📱 WhatsApp scheduler enabled`);
+    console.log(`📱 WhatsApp scheduler enabled (runs independently of WA connection)`);
     console.log(`📡 API endpoints available:`);
     console.log(`   GET  /api/health`);
     console.log(`   GET  /api/history`);

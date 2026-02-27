@@ -188,7 +188,9 @@ export class LinkedInTenant extends EventEmitter {
             return;
         }
 
-        console.log('🚀 Launching LinkedIn browser...');
+        // Auto-detect: use headless in production (Railway has no X server), headful locally for debugging
+        const isProduction = process.env.NODE_ENV === 'production';
+        console.log(`🚀 Launching LinkedIn browser... (headless: ${isProduction ? 'new' : 'false'}, env: ${process.env.NODE_ENV || 'development'})`);
 
         // Ensure session directory exists
         const sessionDir = path.join(__dirname, '../../linkedin-session', this.userId);
@@ -197,7 +199,7 @@ export class LinkedInTenant extends EventEmitter {
         }
 
         this.browser = await puppeteer.launch({
-            headless: false,
+            headless: isProduction ? true : false,
             protocolTimeout: 180000, // 180s — LinkedIn pages are very heavy
             defaultViewport: { width: 1366, height: 768 },
             args: [
@@ -210,6 +212,12 @@ export class LinkedInTenant extends EventEmitter {
                 '--disable-renderer-backgrounding',
                 '--disable-ipc-flooding-protection',
                 '--window-size=1366,768',
+                // Production-only args for headless stability
+                ...(isProduction ? [
+                    '--disable-gpu',
+                    '--disable-dev-shm-usage',
+                    '--single-process',
+                ] : []),
             ],
         });
 
@@ -2531,19 +2539,45 @@ export class LinkedInTenant extends EventEmitter {
                     let bestSize = 0;
                     for (let i = 0; i < imgs.length; i++) {
                         const src = imgs[i].src || '';
-                        if (src.indexOf('profile-displayphoto') !== -1 || src.indexOf('profile-framedphoto') !== -1) {
+                        // Match known LinkedIn profile photo URL patterns
+                        const isProfilePhoto =
+                            src.indexOf('profile-displayphoto') !== -1 ||
+                            src.indexOf('profile-framedphoto') !== -1 ||
+                            (src.indexOf('media.licdn.com') !== -1 && src.indexOf('/profile') !== -1);
+                        if (isProfilePhoto) {
                             const rect = imgs[i].getBoundingClientRect();
                             const size = rect.width * rect.height;
                             // Only consider images that are:
-                            // 1. At least 100x100px (skip 32px nav avatars)
+                            // 1. At least 80x80px (skip 32px nav avatars, but allow slightly smaller profile pics)
                             // 2. In the profile card area (top 600px of page)
-                            if (rect.width >= 100 && rect.height >= 100 && rect.top < 600 && size > bestSize) {
+                            if (rect.width >= 80 && rect.height >= 80 && rect.top < 600 && size > bestSize) {
                                 bestPhoto = src;
                                 bestSize = size;
                             }
                         }
                     }
-                    if (bestPhoto) result.profilePhotoUrl = bestPhoto;
+
+                    // Fallback: try the profile photo container directly
+                    if (!bestPhoto) {
+                        const photoContainer = document.querySelector(
+                            '.pv-top-card-profile-picture__image, ' +
+                            '.pv-top-card-profile-picture img, ' +
+                            '.pv-top-card__photo img, ' +
+                            'img.pv-top-card-profile-picture__image--show'
+                        ) as HTMLImageElement | null;
+                        if (photoContainer && photoContainer.src &&
+                            !photoContainer.src.includes('ghost-person') &&
+                            !photoContainer.src.includes('static-ghost')) {
+                            bestPhoto = photoContainer.src;
+                        }
+                    }
+
+                    if (bestPhoto) {
+                        result.profilePhotoUrl = bestPhoto;
+                    } else {
+                        result._debug.photoStatus = 'not_found';
+                        result._debug.totalImgs = imgs.length;
+                    }
                 } catch (e) { /* skip */ }
 
                 // ── Current Company + Position ──

@@ -469,11 +469,12 @@ router.patch('/contacts/:id', async (req: Request, res: Response) => {
                 }).lean();
                 if (existingLinkedIn) {
                     const immediateUpdate: Record<string, any> = {};
-                    // Only sync if they were empty in the original contact
-                    if (existingLinkedIn.profilePhotoUrl && !originalContact.profilePhotoUrl) {
+                    // Sync photo if contact doesn't have one yet
+                    if (existingLinkedIn.profilePhotoUrl && !contact.profilePhotoUrl) {
                         immediateUpdate.profilePhotoUrl = existingLinkedIn.profilePhotoUrl;
                     }
-                    if (existingLinkedIn.currentPosition && !originalContact.position) {
+                    // Sync position if contact doesn't have one yet
+                    if (existingLinkedIn.currentPosition && !contact.position) {
                         immediateUpdate.position = existingLinkedIn.currentPosition;
                     }
                     immediateUpdate.linkedInContactId = existingLinkedIn._id;
@@ -486,14 +487,23 @@ router.patch('/contacts/:id', async (req: Request, res: Response) => {
                 console.error(`Immediate LinkedIn sync failed:`, syncErr.message);
             }
 
-            // Then: trigger prospecting for fresh data
+            // Then: trigger prospecting for fresh data (fire-and-forget)
             const tenant = linkedinService.getTenant(userId);
             tenant.enqueueUrl(req.body.linkedInProfileUrl).catch(err => {
                 console.error(`Auto-prospecting failed for updated contact ${contact._id}:`, err);
             });
         }
 
-        res.json(contact);
+        // Re-fetch with populate to return the most up-to-date data (including synced LinkedIn photo)
+        const updatedContact = await CrmContact.findById(req.params.id)
+            .populate('company', 'name logo sector website')
+            .populate('companies', 'name logo sector website localesCount costPerLocation')
+            .populate('assignedTo', 'name email profilePhotoUrl')
+            .populate('linkedInContactId')
+            .populate('partner', 'name')
+            .lean();
+
+        res.json(updatedContact);
     } catch (err: any) {
         console.error('CRM update contact error:', err.message);
         res.status(500).json({ error: 'Failed to update contact' });
