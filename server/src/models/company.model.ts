@@ -40,6 +40,7 @@ export interface ICompany extends Document {
     category?: string;
     partner?: string | any;
     competitors?: mongoose.Types.ObjectId[];
+    posSystems?: mongoose.Types.ObjectId[];
     painPoints?: string[];
     deliveries?: string[];
     socialMedia?: ISocialMedia;
@@ -97,6 +98,7 @@ const CompanySchema = new Schema<ICompany>({
     category: { type: String },
     partner: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner' },
     competitors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Competitor' }],
+    posSystems: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PosSystem' }],
 
     painPoints: [{ type: String }],
     deliveries: [{ type: String }],

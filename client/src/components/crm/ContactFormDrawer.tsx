@@ -5,6 +5,7 @@ import api from '../../lib/axios';
 import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
 import CountrySelect from '../common/CountrySelect';
+import PositionSelect from '../common/PositionSelect';
 
 interface Props {
     contact?: ContactData | null;
@@ -17,6 +18,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
     const [formData, setFormData] = useState<Partial<ContactData>>({
         fullName: '',
         position: '',
+        positions: [],
         role: '',
         channel: 'linkedin',
         email: '',
@@ -71,6 +73,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                     setFormData({
                         fullName: fullContact.fullName || '',
                         position: fullContact.position || '',
+                        positions: fullContact.positions || (fullContact.position ? [fullContact.position] : []),
                         role: fullContact.role || '',
                         channel: fullContact.channel || 'linkedin',
                         email: fullContact.email || '',
@@ -96,6 +99,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                 setFormData({
                     fullName: contact.fullName || '',
                     position: contact.position || '',
+                    positions: contact.positions || (contact.position ? [contact.position] : []),
                     role: contact.role || '',
                     channel: contact.channel || 'linkedin',
                     email: contact.email || '',
@@ -122,6 +126,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
             setFormData({
                 fullName: '',
                 position: '',
+                positions: [],
                 role: '',
                 channel: '',
                 email: '',
@@ -463,22 +468,24 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                         />
                     </div>
 
-                    <div className="space-y-2">
-                        <CreatableAutocompleteInput
-                            label="Cargo"
-                            icon={<Briefcase size={14} className="text-amber-500" />}
-                            placeholder="Ej. Gerente de Ventas"
-                            value={formData.position || ''}
-                            onChangeSearch={(val) => setFormData(prev => ({ ...prev, position: val }))}
-                            options={config?.contactPositions?.map(p => ({ id: p, title: p })) || []}
-                            onSelect={(opt) => setFormData(prev => ({ ...prev, position: opt.title }))}
-                            onCreate={async (newTitle) => {
-                                await addContactPosition(newTitle);
-                                setConfig(prev => prev ? { ...prev, contactPositions: [...prev.contactPositions, newTitle] } : null);
-                            }}
-                            colorTheme="amber"
-                        />
-                    </div>
+                    <PositionSelect
+                        value={formData.positions || []}
+                        positions={config?.contactPositions || []}
+                        onChange={(positions) => setFormData(prev => ({ ...prev, positions }))}
+                        onAddNew={async (suggestedName) => {
+                            const name = suggestedName || window.prompt('Ingrese el nombre del nuevo cargo:');
+                            if (name && name.trim()) {
+                                const formatted = name.trim();
+                                try {
+                                    await addContactPosition(formatted);
+                                    setConfig(prev => prev ? { ...prev, contactPositions: [...prev.contactPositions, formatted] } : null);
+                                    setFormData(prev => ({ ...prev, positions: [...(prev.positions || []), formatted] }));
+                                } catch (err) {
+                                    console.error('Error adding position:', err);
+                                }
+                            }
+                        }}
+                    />
 
                     {/* Companies Multi-Select */}
                     <div className="mt-2 pt-6 border-t border-slate-200/50">

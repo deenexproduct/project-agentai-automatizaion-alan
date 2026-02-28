@@ -21,6 +21,7 @@ import dashboardRoutes from './routes/dashboard.routes';
 import systemConfigRoutes from './routes/system-config.routes';
 import partnerRoutes from './routes/partner.routes';
 import competitorRoutes from './routes/competitor.routes';
+import posSystemRoutes from './routes/pos-system.routes';
 import calendarRoutes from './routes/calendar.routes';
 import { authMiddleware } from './middleware/auth.middleware';
 import { whatsappService } from './services/whatsapp.service';
@@ -351,8 +352,9 @@ console.log('📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard'
 app.use('/api/system-config', authMiddleware, systemConfigRoutes);
 app.use('/api/partners', authMiddleware, partnerRoutes);
 app.use('/api/competitors', authMiddleware, competitorRoutes);
+app.use('/api/pos-systems', authMiddleware, posSystemRoutes);
 app.use('/api/calendar', calendarRoutes);
-console.log('⚙️ System Config, Partners & Competitors routes mounted');
+console.log('⚙️ System Config, Partners, Competitors & POS Systems routes mounted');
 
 // Start server
 async function startServer() {

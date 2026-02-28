@@ -62,6 +62,31 @@ export type CompetitorData = {
     linkedLocalesCount?: number;
 };
 
+export interface IPosSystemNote {
+    text: string;
+    createdAt?: string;
+}
+
+export type PosSystemData = {
+    _id: string;
+    name: string;
+    logo?: string;
+    url?: string;
+    ceo?: string;
+    localesCount?: number;
+    foundedYear?: number;
+    foundersCount?: number;
+    employeesCount?: number;
+    countries?: string[];
+    strength?: 'fuerte' | 'moderada' | 'debil';
+    notes?: string;
+    advantages?: IPosSystemNote[];
+    disadvantages?: IPosSystemNote[];
+    createdAt?: string;
+    companiesCount?: number;
+    linkedLocalesCount?: number;
+};
+
 export type CompanyData = {
     _id: string;
     name: string;
@@ -77,6 +102,7 @@ export type CompanyData = {
     category?: string;
     partner?: PartnerData;
     competitors?: CompetitorData[];
+    posSystems?: PosSystemData[];
     painPoints: string[];
     deliveries: string[];
     socialMedia?: {
@@ -100,6 +126,7 @@ export type ContactData = {
     _id: string;
     fullName: string;
     position?: string;
+    positions?: string[];
     role: string;
     channel: string;
     email?: string;
@@ -281,6 +308,13 @@ export const getCompetitorCompanies = async (id: string) => (await api.get<{ com
 export const createCompetitor = async (data: Partial<CompetitorData>) => (await api.post<CompetitorData>('/competitors', data)).data;
 export const updateCompetitor = async (id: string, data: Partial<CompetitorData>) => (await api.patch<CompetitorData>(`/competitors/${id}`, data)).data;
 export const deleteCompetitor = async (id: string) => (await api.delete(`/competitors/${id}`)).data;
+
+// POS Systems
+export const getPosSystems = async () => (await api.get<{ posSystems: PosSystemData[] }>('/pos-systems')).data;
+export const getPosSystemCompanies = async (id: string) => (await api.get<{ companies: CompanyData[] }>(`/pos-systems/${id}/companies`)).data;
+export const createPosSystem = async (data: Partial<PosSystemData>) => (await api.post<PosSystemData>('/pos-systems', data)).data;
+export const updatePosSystem = async (id: string, data: Partial<PosSystemData>) => (await api.patch<PosSystemData>(`/pos-systems/${id}`, data)).data;
+export const deletePosSystem = async (id: string) => (await api.delete(`/pos-systems/${id}`)).data;
 
 // Dashboard
 export const getDashboardStats = async () => (await api.get<DashboardStats>('/dashboard/metrics')).data;

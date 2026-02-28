@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Building2, MapPin, Globe, Users, DollarSign, Calendar, Upload, Loader2, Phone, Mail, FileText, CheckCircle2, ChevronRight, Hash, Building, Briefcase, ChevronDown, User, Network, MessageSquare, Linkedin, Trash2, ShieldCheck, Swords, Search, AlignLeft, AlertTriangle, GitBranch, Clock, ImagePlus, TrendingUp, History, Camera, CheckSquare, Save } from 'lucide-react';
-import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, getCompetitors, SystemConfig, PartnerData, CompetitorData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { X, Building2, MapPin, Globe, Users, DollarSign, Calendar, Upload, Loader2, Phone, Mail, FileText, CheckCircle2, ChevronRight, Hash, Building, Briefcase, ChevronDown, User, Network, MessageSquare, Linkedin, Trash2, ShieldCheck, Swords, Search, AlignLeft, AlertTriangle, GitBranch, Clock, ImagePlus, TrendingUp, History, Camera, CheckSquare, Save, Monitor } from 'lucide-react';
+import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, getCompetitors, getPosSystems, SystemConfig, PartnerData, CompetitorData, PosSystemData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { useAuth } from '../../contexts/AuthContext';
 import OwnerAvatar from '../common/OwnerAvatar';
 import CountrySelect from '../common/CountrySelect';
@@ -34,11 +34,14 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
     const [allCompetitors, setAllCompetitors] = useState<CompetitorData[]>([]);
+    const [allPosSystems, setAllPosSystems] = useState<PosSystemData[]>([]);
     const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
     const [companyContacts, setCompanyContacts] = useState<ContactData[]>([]);
     const [loadingContacts, setLoadingContacts] = useState(false);
     const [competitorSearch, setCompetitorSearch] = useState('');
     const [isCompetitorDropdownOpen, setIsCompetitorDropdownOpen] = useState(false);
+    const [posSystemSearch, setPosSystemSearch] = useState('');
+    const [isPosSystemDropdownOpen, setIsPosSystemDropdownOpen] = useState(false);
 
     // Filter competitors based on search
     const filteredCompetitors = useMemo(() => {
@@ -46,6 +49,13 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
         const q = competitorSearch.toLowerCase();
         return allCompetitors.filter(c => c.name.toLowerCase().includes(q));
     }, [allCompetitors, competitorSearch]);
+
+    // Filter POS systems based on search
+    const filteredPosSystems = useMemo(() => {
+        if (!posSystemSearch.trim()) return allPosSystems;
+        const q = posSystemSearch.toLowerCase();
+        return allPosSystems.filter(p => p.name.toLowerCase().includes(q));
+    }, [allPosSystems, posSystemSearch]);
     const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'trazabilidad'>('info');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
@@ -62,15 +72,17 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     useEffect(() => {
         const loadInitialData = async () => {
             try {
-                const [cfg, parts, comps, users] = await Promise.all([
+                const [cfg, parts, comps, posSys, users] = await Promise.all([
                     getSystemConfig(),
                     getPartners(),
                     getCompetitors(),
+                    getPosSystems(),
                     getTeamUsers()
                 ]);
                 setConfig(cfg);
                 setPartners(parts.partners);
                 setAllCompetitors(comps.competitors);
+                setAllPosSystems(posSys.posSystems);
                 setTeamUsers(users);
             } catch (error) {
                 console.error("Failed to load options", error);
@@ -100,6 +112,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                         category: fullCompany.category || '',
                         partner: fullCompany.partner || undefined,
                         competitors: (fullCompany as any).competitors || [],
+                        posSystems: (fullCompany as any).posSystems || [],
                         assignedTo: (fullCompany as any).assignedTo,
                         country: (fullCompany as any).country || 'AR',
                     });
@@ -138,6 +151,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                     category: company.category || '',
                     partner: company.partner || undefined,
                     competitors: (company as any).competitors || [],
+                    posSystems: (company as any).posSystems || [],
                     assignedTo: (company as any).assignedTo,
                     country: (company as any).country || 'AR',
                 });
@@ -177,6 +191,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                 category: '',
                 partner: undefined,
                 competitors: [],
+                posSystems: [],
                 assignedTo: (user?._id || (user as any)?.id) as any,
                 country: 'AR',
             });
@@ -355,6 +370,11 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
             // Cleanup competitors — ensure array of IDs
             if (payload.competitors && Array.isArray(payload.competitors)) {
                 payload.competitors = payload.competitors.map((c: any) => typeof c === 'object' && c._id ? c._id : c);
+            }
+
+            // Cleanup posSystems — ensure array of IDs
+            if (payload.posSystems && Array.isArray(payload.posSystems)) {
+                payload.posSystems = payload.posSystems.map((p: any) => typeof p === 'object' && p._id ? p._id : p);
             }
 
             let result;
@@ -847,6 +867,117 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                             {isCompetitorDropdownOpen && filteredCompetitors.length === 0 && (
                                                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-[12px] shadow-xl z-50 py-3 px-4 text-center">
                                                     <p className="text-[13px] text-slate-500 font-medium">No se encontraron competidores.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* POS Systems Section */}
+                            <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">
+                                <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                    <Monitor size={14} className="text-violet-500" />
+                                    Sistemas POS
+                                </label>
+                                <p className="text-[11px] text-slate-400 mb-2">Seleccioná los sistemas POS de esta empresa.</p>
+                                {allPosSystems.length === 0 ? (
+                                    <p className="text-[12px] text-slate-400 italic">No hay sistemas POS registrados. Creá uno desde el menú Sistemas POS.</p>
+                                ) : (
+                                    <div className="flex flex-col gap-3">
+                                        {/* Selected POS Systems Area */}
+                                        {((formData as any).posSystems || []).length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {((formData as any).posSystems || []).map((p: any) => {
+                                                    const posId = typeof p === 'object' ? p._id : p;
+                                                    const pos = allPosSystems.find(x => x._id === posId);
+                                                    if (!pos) return null;
+                                                    return (
+                                                        <div key={pos._id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-violet-50 border border-violet-200 text-violet-700 rounded-[10px] text-[12px] font-bold shadow-sm group">
+                                                            {pos.logo ? (
+                                                                <img src={pos.logo} alt={pos.name} className="w-4 h-4 rounded-[4px] object-contain" />
+                                                            ) : (
+                                                                <Monitor size={12} className="text-violet-500" />
+                                                            )}
+                                                            {pos.name}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const current = ((formData as any).posSystems || []).map((p: any) => typeof p === 'object' ? p._id : p);
+                                                                    setFormData(prev => ({ ...prev, posSystems: current.filter((id: string) => id !== pos._id) as any }));
+                                                                    setIsDirty(true);
+                                                                }}
+                                                                className="ml-1 text-violet-400 hover:text-violet-600 hover:bg-violet-100 p-0.5 rounded-full transition-colors"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Search Input Area */}
+                                        <div className="relative">
+                                            <div className="relative flex items-center">
+                                                <Search size={16} className="absolute left-3 text-slate-500 z-10 pointer-events-none" />
+                                                <input
+                                                    type="text"
+                                                    value={posSystemSearch}
+                                                    onChange={(e) => {
+                                                        setPosSystemSearch(e.target.value);
+                                                        setIsPosSystemDropdownOpen(true);
+                                                    }}
+                                                    onFocus={() => setIsPosSystemDropdownOpen(true)}
+                                                    onBlur={() => {
+                                                        setTimeout(() => setIsPosSystemDropdownOpen(false), 200);
+                                                    }}
+                                                    placeholder="Buscar sistemas POS..."
+                                                    className="w-full pl-9 pr-4 py-2.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[12px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                                />
+                                            </div>
+
+                                            {/* Dropdown Menu */}
+                                            {isPosSystemDropdownOpen && filteredPosSystems.length > 0 && (
+                                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-[12px] shadow-xl max-h-[200px] overflow-y-auto custom-scrollbar z-50 py-1">
+                                                    {filteredPosSystems.map(pos => {
+                                                        const current = ((formData as any).posSystems || []).map((p: any) => typeof p === 'object' ? p._id : p);
+                                                        const isSelected = current.includes(pos._id);
+                                                        if (isSelected) return null;
+
+                                                        return (
+                                                            <button
+                                                                key={pos._id}
+                                                                type="button"
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    const currentIds = ((formData as any).posSystems || []).map((p: any) => typeof p === 'object' ? p._id : p);
+                                                                    if (!currentIds.includes(pos._id)) {
+                                                                        setFormData(prev => ({ ...prev, posSystems: [...currentIds, pos._id] as any }));
+                                                                        setIsDirty(true);
+                                                                    }
+                                                                    setPosSystemSearch('');
+                                                                    setIsPosSystemDropdownOpen(false);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-[13px] font-bold text-slate-700 transition-colors text-left"
+                                                            >
+                                                                {pos.logo ? (
+                                                                    <img src={pos.logo} alt={pos.name} className="w-5 h-5 rounded-[4px] object-contain shrink-0" />
+                                                                ) : (
+                                                                    <Monitor size={14} className="text-slate-400 shrink-0" />
+                                                                )}
+                                                                <span className="truncate">{pos.name}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                    {filteredPosSystems.length > 0 && filteredPosSystems.every(pos => ((formData as any).posSystems || []).map((p: any) => typeof p === 'object' ? p._id : p).includes(pos._id)) && (
+                                                        <div className="px-3 py-2 text-[12px] text-slate-400 italic text-center">Todos seleccionados</div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {isPosSystemDropdownOpen && filteredPosSystems.length === 0 && (
+                                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-[12px] shadow-xl z-50 py-3 px-4 text-center">
+                                                    <p className="text-[13px] text-slate-500 font-medium">No se encontraron sistemas POS.</p>
                                                 </div>
                                             )}
                                         </div>

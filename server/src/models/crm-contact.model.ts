@@ -27,6 +27,7 @@ export interface ICrmContact extends Document {
     email?: string;
     phone?: string;
     position?: string;
+    positions: string[];
     role?: string;
     channel?: string;
     company?: mongoose.Types.ObjectId;
@@ -71,6 +72,7 @@ const CrmContactSchema = new Schema<ICrmContact>({
     email: { type: String, trim: true, lowercase: true },
     phone: { type: String, trim: true },
     position: { type: String, trim: true },
+    positions: [{ type: String, trim: true }],
     role: {
         type: String,
         default: 'other',
@@ -175,6 +177,14 @@ CrmContactSchema.pre('save', function (next) {
         contact.companies = [contact.company];
     } else {
         contact.companies = [];
+    }
+
+    // Sync positions array -> position string for backward compat
+    if (contact.positions && contact.positions.length > 0) {
+        contact.position = contact.positions.join(', ');
+    } else if (contact.position && (!contact.positions || contact.positions.length === 0)) {
+        // Migrate old single position to array
+        contact.positions = [contact.position];
     }
 
     next();

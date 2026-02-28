@@ -39,6 +39,8 @@ SystemConfigSchema.statics.getOrCreate = async function (userId: string) {
                 'Gatekeeper'
             ],
             contactPositions: [
+                'Fundador',
+                'Presidente',
                 'Director General / CEO',
                 'Director de Operaciones / COO',
                 'Director de Marketing / CMO',
