@@ -2,7 +2,7 @@ import { useState } from 'react';
 import MobileBottomNav from '../layout/MobileBottomNav';
 import MobileMorePage from '../layout/MobileMorePage';
 import { useNavigate, useParams } from 'react-router-dom';
-import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, LayoutDashboard, Database, CheckSquare, Columns3, Calendar as CalendarIcon } from 'lucide-react';
+import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, Swords, LayoutDashboard, Database, CheckSquare, Columns3, Calendar as CalendarIcon } from 'lucide-react';
 import ProspectingPage from './ProspectingPage';
 import CRMDashboard from '../crm/CRMDashboard';
 import PipelineBoard from '../crm/PipelineBoard';
@@ -11,6 +11,7 @@ import ContactList from '../crm/ContactList';
 import ContactDrawerV2 from './ContactDrawerV2';
 import TaskList from '../crm/TaskList';
 import PartnerList from '../crm/PartnerList';
+import CompetitorList from '../crm/CompetitorList';
 import CRMPage from './CRMPage';
 import ConfigPage from './ConfigPage';
 import PublicacionesPage from './PublicacionesPage';
@@ -21,7 +22,7 @@ import TeamPermissions from '../team/TeamPermissions';
 import ProfileSettings from '../settings/ProfileSettings';
 import CalendarPage from '../../pages/calendar/index';
 
-type SidebarTab = 'dashboard' | 'pipeline' | 'companies' | 'contacts' | 'tasks' | 'partners' | 'calendar' | 'prospecting-crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team' | 'profile';
+type SidebarTab = 'dashboard' | 'pipeline' | 'companies' | 'contacts' | 'tasks' | 'partners' | 'competitors' | 'calendar' | 'prospecting-crm' | 'publicaciones' | 'prospecting' | 'comments' | 'requests' | 'config' | 'whatsapp' | 'voice' | 'extension' | 'team' | 'profile';
 
 interface SidebarItem {
     id: SidebarTab;
@@ -39,6 +40,7 @@ const crmGroup: SidebarItem[] = [
     { id: 'companies', Icon: Building2, label: 'Empresas' },
     { id: 'contacts', Icon: User, label: 'Contactos' },
     { id: 'partners', Icon: Handshake, label: 'Partners Oficiales' },
+    { id: 'competitors', Icon: Swords, label: 'Competidores' },
 ];
 
 const linkedinGroup: SidebarItem[] = [
@@ -167,16 +169,17 @@ export default function LinkedInApp() {
                                     activeTab === 'companies' ? 'Directorio de Empresas' :
                                         activeTab === 'contacts' ? 'Agenda de Contactos' :
                                             activeTab === 'partners' ? 'Partners Oficiales' :
-                                                activeTab === 'tasks' ? 'Centro de Tareas' :
-                                                    activeTab === 'calendar' ? 'Calendario y Citas' :
-                                                        activeTab === 'prospecting-crm' ? 'Prospecting CRM' :
-                                                            activeTab === 'publicaciones' ? 'Publicaciones AI' :
-                                                                activeTab === 'prospecting' ? 'Prospecting Bots' :
-                                                                    activeTab === 'voice' ? 'Transcriptor de Audio' :
-                                                                        activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
-                                                                            activeTab === 'extension' ? 'Extensión Deenex' :
-                                                                                activeTab === 'team' ? 'Equipo y Permisos' :
-                                                                                    activeTab === 'profile' ? 'Mi Perfil' : 'Configuración'}
+                                                activeTab === 'competitors' ? 'Competidores' :
+                                                    activeTab === 'tasks' ? 'Centro de Tareas' :
+                                                        activeTab === 'calendar' ? 'Calendario y Citas' :
+                                                            activeTab === 'prospecting-crm' ? 'Prospecting CRM' :
+                                                                activeTab === 'publicaciones' ? 'Publicaciones AI' :
+                                                                    activeTab === 'prospecting' ? 'Prospecting Bots' :
+                                                                        activeTab === 'voice' ? 'Transcriptor de Audio' :
+                                                                            activeTab === 'whatsapp' ? 'WhatsApp Scheduler' :
+                                                                                activeTab === 'extension' ? 'Extensión Deenex' :
+                                                                                    activeTab === 'team' ? 'Equipo y Permisos' :
+                                                                                        activeTab === 'profile' ? 'Mi Perfil' : 'Configuración'}
                         </h1>
 
                     </div>
@@ -186,12 +189,13 @@ export default function LinkedInApp() {
                 </header>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-20 md:pb-6" style={activeTab === 'voice' || activeTab === 'extension' || activeTab === 'dashboard' || activeTab === 'pipeline' || activeTab === 'companies' || activeTab === 'contacts' || activeTab === 'partners' || activeTab === 'tasks' || activeTab === 'prospecting-crm' ? { paddingLeft: 12, paddingRight: 12, paddingTop: 0, paddingBottom: undefined } : {}}>
+                <div className="flex-1 overflow-y-auto p-3 md:p-6 pb-20 md:pb-6" style={activeTab === 'voice' || activeTab === 'extension' || activeTab === 'dashboard' || activeTab === 'pipeline' || activeTab === 'companies' || activeTab === 'contacts' || activeTab === 'partners' || activeTab === 'competitors' || activeTab === 'tasks' || activeTab === 'prospecting-crm' ? { paddingLeft: 12, paddingRight: 12, paddingTop: 0, paddingBottom: undefined } : {}}>
                     {activeTab === 'dashboard' && <CRMDashboard />}
                     {activeTab === 'pipeline' && <PipelineBoard urlDealId={id} />}
                     {activeTab === 'companies' && <CompanyList urlCompanyId={id} />}
                     {activeTab === 'contacts' && <ContactList urlContactId={id} />}
                     {activeTab === 'partners' && <PartnerList />}
+                    {activeTab === 'competitors' && <CompetitorList />}
                     {activeTab === 'tasks' && <TaskList urlTaskId={id} />}
                     {activeTab === 'calendar' && <CalendarPage urlEventId={id} />}
                     {activeTab === 'prospecting-crm' && <CRMPage />}

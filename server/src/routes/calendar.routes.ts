@@ -138,21 +138,20 @@ router.get('/events', async (req: Request, res: Response) => {
             query.date = { $gte: new Date(start as string), $lte: new Date(end as string) };
         }
 
-        // Pull Sync from Google Calendar
+        // Pull Sync from Google Calendar asynchronously (non-blocking)
         try {
             const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
             if (config?.googleRefreshToken && start && end) {
-                // Determine sync window (extend by a bit just in case)
                 const syncStart = new Date(start as string);
                 const syncEnd = new Date(end as string);
 
-                // Fetch and upsert any external changes first
-                await import('../services/google-calendar.service').then(m =>
-                    m.syncGoogleEvents(config as any, syncStart, syncEnd)
-                );
+                // Fire and forget - do not await this so the UI loads instantly
+                import('../services/google-calendar.service')
+                    .then(m => m.syncGoogleEvents(config as any, syncStart, syncEnd))
+                    .catch(syncErr => console.error('Background sync with Google Calendar failed:', syncErr));
             }
         } catch (syncErr) {
-            console.error('Failed background sync with Google Calendar:', syncErr);
+            console.error('Failed initiating background sync with Google Calendar:', syncErr);
         }
 
         const events = await Event.find(query)
@@ -224,6 +223,32 @@ router.get('/events', async (req: Request, res: Response) => {
         res.json({ events: combinedEvents });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/events/sync', async (req: Request, res: Response) => {
+    try {
+        const { start, end } = req.body;
+        if (!start || !end) {
+            return res.status(400).json({ error: 'Start and end dates are required for manual sync' });
+        }
+
+        const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
+        if (!config || !config.googleRefreshToken) {
+            return res.status(400).json({ error: 'Google Calendar no está conectado' });
+        }
+
+        const syncStart = new Date(start);
+        const syncEnd = new Date(end);
+
+        await import('../services/google-calendar.service').then(m =>
+            m.syncGoogleEvents(config as any, syncStart, syncEnd)
+        );
+
+        res.json({ success: true, message: 'Google Calendar sincronizado correctamente' });
+    } catch (error: any) {
+        console.error('Manual sync error:', error);
+        res.status(500).json({ error: error.message || 'Failed to sync with Google Calendar' });
     }
 });
 

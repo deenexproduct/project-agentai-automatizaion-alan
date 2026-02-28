@@ -95,6 +95,7 @@ router.get('/companies', async (req: Request, res: Response) => {
                 .limit(limitNum)
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .populate('partner', 'name')
+                .populate('competitors', 'name logo')
                 .lean(),
             Company.countDocuments(query),
         ]);
@@ -184,6 +185,7 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
         const company = await Company.findOne({ _id: req.params.id })
             .populate('assignedTo', 'name email profilePhotoUrl')
             .populate('partner', 'name')
+            .populate('competitors', 'name logo')
             .lean();
 
         if (!company) return res.status(404).json({ error: 'Company not found' });
@@ -298,8 +300,8 @@ router.get('/contacts', async (req: Request, res: Response) => {
 
         const [contacts, total] = await Promise.all([
             CrmContact.find(query)
-                .populate('company', 'name logo')
-                .populate('companies', 'name logo sector')
+                .populate('company', 'name logo localesCount')
+                .populate('companies', 'name logo sector localesCount')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .populate('partner', 'name')
                 .sort({ createdAt: -1 })
@@ -408,7 +410,7 @@ router.get('/contacts/:id', async (req: Request, res: Response) => {
             Activity.find({ contact: req.params.id })
                 .sort({ createdAt: -1 }).limit(30).lean(),
             Deal.find({ primaryContact: req.params.id })
-                .populate('company', 'name logo themeColor sector localesCount')
+                .populate('company', 'name logo themeColor sector localesCount franchiseCount ownedCount')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ createdAt: -1 }).lean(),
         ]);
@@ -590,7 +592,7 @@ router.get('/deals', async (req: Request, res: Response) => {
         if (assignedTo) query.assignedTo = assignedTo;
 
         const deals = await Deal.find(query)
-            .populate('company', 'name logo sector localesCount costPerLocation')
+            .populate('company', 'name logo sector localesCount franchiseCount ownedCount costPerLocation')
             .populate('primaryContact', 'fullName position profilePhotoUrl')
             .populate('contacts', 'fullName position profilePhotoUrl email phone')
             .populate('assignedTo', 'name email profilePhotoUrl')
@@ -667,7 +669,7 @@ router.get('/deals/:id', async (req: Request, res: Response) => {
 
         // 2. Consulta a BD optimizada usando lean() y proyecciones específicas
         const deal = await Deal.findOne({ _id: dealId })
-            .populate('company', 'name logo sector localesCount')
+            .populate('company', 'name logo sector localesCount franchiseCount ownedCount costPerLocation')
             .populate('primaryContact', 'fullName position profilePhotoUrl email phone')
             .populate('contacts', 'fullName position profilePhotoUrl email phone')
             .populate('assignedTo', 'name email profilePhotoUrl')
@@ -879,7 +881,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
         const task = await Task.findOne({ _id: taskId })
             .populate('contact', 'fullName profilePhotoUrl email phone')
             .populate('deal', 'title')
-            .populate('company', 'name logo sector localesCount')
+            .populate('company', 'name logo sector localesCount franchiseCount ownedCount')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 

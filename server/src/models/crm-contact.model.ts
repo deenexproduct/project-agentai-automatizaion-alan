@@ -39,6 +39,7 @@ export interface ICrmContact extends Document {
     tags: string[];
     notes: ICrmContactNote[];
     profilePhotoUrl?: string;
+    country?: string;
     userId: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -117,6 +118,7 @@ const CrmContactSchema = new Schema<ICrmContact>({
     tags: { type: [String], default: [] },
     notes: { type: [CrmContactNoteSchema], default: [] },
     profilePhotoUrl: { type: String },
+    country: { type: String, trim: true, default: 'AR' },
     userId: {
         type: Schema.Types.ObjectId,
         ref: 'User',

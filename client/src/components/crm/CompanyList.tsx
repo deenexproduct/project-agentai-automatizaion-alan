@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCompanies, CompanyData } from '../../services/crm.service';
+import { getCompanies, CompanyData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { Search, MapPin, Globe, Users, Briefcase, Plus, Filter } from 'lucide-react';
 import CompanyFormDrawer from './CompanyFormDrawer';
 import PremiumHeader from './PremiumHeader';
@@ -12,7 +12,15 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
     const [search, setSearch] = useState('');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingCompany, setEditingCompany] = useState<CompanyData | null>(null);
+    const [showFilters, setShowFilters] = useState(false);
+    const [assignedToFilter, setAssignedToFilter] = useState('');
+    const [localesFilter, setLocalesFilter] = useState('');
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        getTeamUsers().then(setTeamUsers).catch(() => { });
+    }, []);
 
     // Deep-linking effect
     useEffect(() => {
@@ -75,6 +83,20 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
         }
     };
 
+    const filteredCompanies = companies.filter(company => {
+        if (assignedToFilter && company.assignedTo?._id !== assignedToFilter) return false;
+
+        if (localesFilter) {
+            const count = company.localesCount || 0;
+            if (localesFilter === '0-10' && (count < 0 || count > 10)) return false;
+            if (localesFilter === '11-50' && (count < 11 || count > 50)) return false;
+            if (localesFilter === '51-100' && (count < 51 || count > 100)) return false;
+            if (localesFilter === '100+' && count <= 100) return false;
+        }
+
+        return true;
+    });
+
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
             {/* Premium Header Reutilizable */}
@@ -85,14 +107,57 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
                     searchPlaceholder="Buscar empresas, sectores..."
                     onAdd={handleAdd}
                     addLabel="Nueva Empresa"
-                    onFilter={() => { }} // No implementation for filters in CompanyList yet, but button exists
-                    showFilters={false}
+                    onFilter={() => setShowFilters(!showFilters)}
+                    showFilters={showFilters}
                     containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
                 />
             </div>
 
             {/* List */}
             <div className="flex-1 bg-white/40 backdrop-blur-2xl rounded-[32px] shadow-[0_8px_32px_rgba(30,27,75,0.05)] border border-white/60 overflow-hidden relative flex flex-col">
+                {/* Filter Bar */}
+                {showFilters && (
+                    <div className="px-4 md:px-6 py-3 border-b border-white/50 bg-white/40 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4 animate-in fade-in slide-in-from-top-2 shrink-0">
+                        <div className="flex bg-white/50 backdrop-blur-md rounded-[10px] p-1 shadow-sm border border-slate-200/60 divide-x divide-slate-200">
+                            <div className="flex items-center gap-2 px-3">
+                                <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Responsable:</span>
+                                <select
+                                    value={assignedToFilter}
+                                    onChange={(e) => setAssignedToFilter(e.target.value)}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer"
+                                >
+                                    <option value="">Todos</option>
+                                    {teamUsers.map(user => (
+                                        <option key={user._id} value={user._id}>{user.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2 px-3">
+                                <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Locales:</span>
+                                <select
+                                    value={localesFilter}
+                                    onChange={(e) => setLocalesFilter(e.target.value)}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 w-32 focus:outline-none cursor-pointer"
+                                >
+                                    <option value="">Todos</option>
+                                    <option value="0-10">0 a 10</option>
+                                    <option value="11-50">11 a 50</option>
+                                    <option value="51-100">51 a 100</option>
+                                    <option value="100+">Más de 100</option>
+                                </select>
+                            </div>
+                        </div>
+                        {(assignedToFilter || localesFilter) && (
+                            <button
+                                onClick={() => { setAssignedToFilter(''); setLocalesFilter(''); }}
+                                className="text-[12px] font-bold text-slate-400 hover:text-slate-600 transition-colors bg-white/50 px-3 py-1.5 rounded-[8px] border border-slate-200/60"
+                            >
+                                Limpiar Filtros
+                            </button>
+                        )}
+                    </div>
+                )}
+
                 <div className="flex-1 overflow-y-auto p-3 md:p-6 hidden-scrollbar bg-white/20">
                     {loading ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -108,9 +173,23 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
                             <h3 className="text-[16px] font-bold text-slate-700">Sin empresas</h3>
                             <p className="text-slate-500 text-[14px] font-medium max-w-sm mt-1">No encontramos empresas que coincidan con tu búsqueda.</p>
                         </div>
+                    ) : filteredCompanies.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center opacity-70">
+                            <div className="w-20 h-20 bg-violet-50/80 rounded-[24px] flex items-center justify-center mb-5 border border-violet-100/50 shadow-inner">
+                                <span className="text-4xl opacity-50 drop-shadow-sm">🏢</span>
+                            </div>
+                            <h3 className="text-[16px] font-bold text-slate-700">Sin empresas</h3>
+                            <p className="text-slate-500 text-[14px] font-medium max-w-sm mt-1">No hay empresas que coincidan con los filtros seleccionados.</p>
+                            <button
+                                onClick={() => { setAssignedToFilter(''); setLocalesFilter(''); }}
+                                className="mt-4 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                            >
+                                Limpiar Filtros
+                            </button>
+                        </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {companies.map(company => (
+                            {filteredCompanies.map(company => (
                                 <button
                                     key={company._id}
                                     onClick={(e) => {

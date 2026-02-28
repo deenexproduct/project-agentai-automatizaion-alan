@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Save, Building2, AlignLeft, Globe, Briefcase, Hash, User, Phone, Mail, Loader2, AlertTriangle, GitBranch, DollarSign, Clock, Calendar, CheckSquare, TrendingUp, History, Camera, ImagePlus, Trash2 } from 'lucide-react';
-import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, SystemConfig, PartnerData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { X, Building2, MapPin, Globe, Users, DollarSign, Calendar, Upload, Loader2, Phone, Mail, FileText, CheckCircle2, ChevronRight, Hash, Building, Briefcase, ChevronDown, User, Network, MessageSquare, Linkedin, Trash2, ShieldCheck, Swords, Search, AlignLeft, AlertTriangle, GitBranch, Clock, ImagePlus, TrendingUp, History, Camera, CheckSquare, Save } from 'lucide-react';
+import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, getCompetitors, SystemConfig, PartnerData, CompetitorData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { useAuth } from '../../contexts/AuthContext';
 import OwnerAvatar from '../common/OwnerAvatar';
+import CountrySelect from '../common/CountrySelect';
+import CategorySelect from '../common/CategorySelect';
 
 interface Props {
     company?: CompanyData | null;
@@ -21,16 +23,29 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
         logo: '',
         description: '',
         localesCount: 1,
+        franchiseCount: 0,
+        ownedCount: 0,
         costPerLocation: 0,
         category: '',
         partner: undefined,
+        country: 'AR',
     });
     const [saving, setSaving] = useState(false);
     const [config, setConfig] = useState<SystemConfig | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
+    const [allCompetitors, setAllCompetitors] = useState<CompetitorData[]>([]);
     const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
     const [companyContacts, setCompanyContacts] = useState<ContactData[]>([]);
     const [loadingContacts, setLoadingContacts] = useState(false);
+    const [competitorSearch, setCompetitorSearch] = useState('');
+    const [isCompetitorDropdownOpen, setIsCompetitorDropdownOpen] = useState(false);
+
+    // Filter competitors based on search
+    const filteredCompetitors = useMemo(() => {
+        if (!competitorSearch.trim()) return allCompetitors;
+        const q = competitorSearch.toLowerCase();
+        return allCompetitors.filter(c => c.name.toLowerCase().includes(q));
+    }, [allCompetitors, competitorSearch]);
     const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'trazabilidad'>('info');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
@@ -47,13 +62,15 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
     useEffect(() => {
         const loadInitialData = async () => {
             try {
-                const [cfg, parts, users] = await Promise.all([
+                const [cfg, parts, comps, users] = await Promise.all([
                     getSystemConfig(),
                     getPartners(),
+                    getCompetitors(),
                     getTeamUsers()
                 ]);
                 setConfig(cfg);
                 setPartners(parts.partners);
+                setAllCompetitors(comps.competitors);
                 setTeamUsers(users);
             } catch (error) {
                 console.error("Failed to load options", error);
@@ -77,10 +94,14 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                         logo: fullCompany.logo || '',
                         description: fullCompany.description || '',
                         localesCount: fullCompany.localesCount || 1,
+                        franchiseCount: fullCompany.franchiseCount || 0,
+                        ownedCount: fullCompany.ownedCount || 0,
                         costPerLocation: fullCompany.costPerLocation || 0,
                         category: fullCompany.category || '',
                         partner: fullCompany.partner || undefined,
+                        competitors: (fullCompany as any).competitors || [],
                         assignedTo: (fullCompany as any).assignedTo,
+                        country: (fullCompany as any).country || 'AR',
                     });
 
                     // Fetch contacts for this company
@@ -111,10 +132,14 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                     logo: company.logo || '',
                     description: company.description || '',
                     localesCount: company.localesCount || 1,
+                    franchiseCount: company.franchiseCount || 0,
+                    ownedCount: company.ownedCount || 0,
                     costPerLocation: company.costPerLocation || 0,
                     category: company.category || '',
                     partner: company.partner || undefined,
+                    competitors: (company as any).competitors || [],
                     assignedTo: (company as any).assignedTo,
+                    country: (company as any).country || 'AR',
                 });
                 // Fetch contacts for this company
                 setLoadingContacts(true);
@@ -146,10 +171,14 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                 logo: '',
                 description: '',
                 localesCount: 1,
+                franchiseCount: 0,
+                ownedCount: 0,
                 costPerLocation: 0,
                 category: '',
                 partner: undefined,
+                competitors: [],
                 assignedTo: (user?._id || (user as any)?.id) as any,
+                country: 'AR',
             });
             setIsDirty(false);
         }
@@ -321,6 +350,11 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                 }
             } else {
                 payload.assignedTo = null;
+            }
+
+            // Cleanup competitors — ensure array of IDs
+            if (payload.competitors && Array.isArray(payload.competitors)) {
+                payload.competitors = payload.competitors.map((c: any) => typeof c === 'object' && c._id ? c._id : c);
             }
 
             let result;
@@ -529,25 +563,25 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
 
 
 
-                            <div className="space-y-2 relative group">
-                                <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                                    <Briefcase size={14} className="text-indigo-500" />
-                                    Categoría ICP
-                                </label>
-                                <input
-                                    type="text"
-                                    list="company-categories"
-                                    value={formData.category}
-                                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                    placeholder="Ej. Gastronomía & Fast Food"
-                                    className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner"
-                                />
-                                <datalist id="company-categories">
-                                    {config?.companyCategories.map((c) => (
-                                        <option key={c} value={c} />
-                                    ))}
-                                </datalist>
-                            </div>
+                            <CategorySelect
+                                value={formData.category || ''}
+                                categories={config?.companyCategories || []}
+                                onChange={(category) => setFormData({ ...formData, category })}
+                                onAddNew={async () => {
+                                    const newCat = window.prompt('Ingrese el nombre de la nueva categoría:');
+                                    if (newCat && newCat.trim()) {
+                                        const formatted = newCat.trim();
+                                        try {
+                                            const newConfig = await addCompanyCategory(formatted);
+                                            setConfig(newConfig);
+                                            setFormData({ ...formData, category: formatted });
+                                        } catch (err) {
+                                            console.error('Error adding category:', err);
+                                            alert('Hubo un error al guardar la categoría.');
+                                        }
+                                    }
+                                }}
+                            />
 
                             <div className="space-y-2">
                                 <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
@@ -564,7 +598,11 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                 />
                             </div>
 
-
+                            {/* País */}
+                            <CountrySelect
+                                value={(formData as any).country || 'AR'}
+                                onChange={(code) => updateField({ country: code } as any)}
+                            />
 
                             {/* Responsable Selector */}
                             <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">
@@ -600,28 +638,35 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                 </label>
                                 <div className="flex items-center gap-4">
                                     <div className="flex-1 relative group/input">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold group-focus-within/input:text-amber-500 transition-colors z-10 pointer-events-none">
+                                            <Building2 size={16} />
+                                        </span>
                                         <input
                                             type="number"
+                                            onWheel={(e) => (e.target as HTMLElement).blur()}
                                             min="0"
                                             value={formData.localesCount || ''}
                                             onChange={(e) => setFormData({ ...formData, localesCount: parseInt(e.target.value) || 0 })}
                                             placeholder="Cant. locales"
-                                            className="w-full pl-4 pr-20 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                            className="w-full pl-10 pr-20 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                                         />
                                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 group-focus-within/input:text-amber-500 transition-colors">
                                             LOCALES
                                         </span>
                                     </div>
                                     <div className="flex-1 relative group/input">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold group-focus-within/input:text-emerald-500 transition-colors">$</span>
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold group-focus-within/input:text-emerald-500 transition-colors z-10 pointer-events-none">
+                                            <DollarSign size={16} />
+                                        </span>
                                         <input
                                             type="number"
+                                            onWheel={(e) => (e.target as HTMLElement).blur()}
                                             min="0"
                                             step="0.01"
                                             value={formData.costPerLocation || ''}
                                             onChange={(e) => setFormData({ ...formData, costPerLocation: parseFloat(e.target.value) || 0 })}
                                             placeholder="Costo por local"
-                                            className="w-full pl-8 pr-24 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                            className="w-full pl-10 pr-24 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                                         />
                                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 group-focus-within/input:text-emerald-500 transition-colors">
                                             CADA UNO
@@ -636,6 +681,48 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                         </span>
                                     </div>
                                 ) : null}
+
+                                {/* Franquicias y Propios */}
+                                {(formData.localesCount || 0) > 0 && (
+                                    <div className="mt-3">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex-1 relative group/input">
+                                                <input
+                                                    type="number"
+                                                    onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                    min="0"
+                                                    value={formData.ownedCount || ''}
+                                                    onChange={(e) => setFormData({ ...formData, ownedCount: parseInt(e.target.value) || 0 })}
+                                                    placeholder="0"
+                                                    className="w-full pl-4 pr-24 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 group-focus-within/input:text-blue-500 transition-colors">
+                                                    PROPIOS
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 relative group/input">
+                                                <input
+                                                    type="number"
+                                                    onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                    min="0"
+                                                    value={formData.franchiseCount || ''}
+                                                    onChange={(e) => setFormData({ ...formData, franchiseCount: parseInt(e.target.value) || 0 })}
+                                                    placeholder="0"
+                                                    className="w-full pl-4 pr-28 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 group-focus-within/input:text-violet-500 transition-colors">
+                                                    FRANQUICIAS
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {(formData.franchiseCount || 0) + (formData.ownedCount || 0) > 0 && (formData.franchiseCount || 0) + (formData.ownedCount || 0) !== (formData.localesCount || 0) && (
+                                            <p className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200/50 px-2.5 py-1.5 rounded-[8px] flex items-center gap-1.5 mt-2 shadow-sm">
+                                                <span>⚠️</span>
+                                                <span>La suma de Franquicias ({formData.franchiseCount || 0}) + Propios ({formData.ownedCount || 0}) = {(formData.franchiseCount || 0) + (formData.ownedCount || 0)} no coincide con el total de locales ({formData.localesCount || 0}).</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">
@@ -653,6 +740,118 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                         <option key={p._id} value={p._id}>{p.name}</option>
                                     ))}
                                 </select>
+                            </div>
+
+                            <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">
+                                <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                    <Swords size={14} className="text-red-500" />
+                                    Competidores
+                                </label>
+                                <p className="text-[11px] text-slate-400 mb-2">Seleccioná los competidores de esta empresa.</p>
+                                {allCompetitors.length === 0 ? (
+                                    <p className="text-[12px] text-slate-400 italic">No hay competidores registrados. Creá uno desde el menú Competidores.</p>
+                                ) : (
+                                    <div className="flex flex-col gap-3">
+                                        {/* Selected Competitors Area */}
+                                        {((formData as any).competitors || []).length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {((formData as any).competitors || []).map((c: any) => {
+                                                    const compId = typeof c === 'object' ? c._id : c;
+                                                    const comp = allCompetitors.find(x => x._id === compId);
+                                                    if (!comp) return null;
+                                                    return (
+                                                        <div key={comp._id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-[10px] text-[12px] font-bold shadow-sm group">
+                                                            {comp.logo ? (
+                                                                <img src={comp.logo} alt={comp.name} className="w-4 h-4 rounded-[4px] object-contain" />
+                                                            ) : (
+                                                                <Swords size={12} className="text-red-500" />
+                                                            )}
+                                                            {comp.name}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const current = ((formData as any).competitors || []).map((c: any) => typeof c === 'object' ? c._id : c);
+                                                                    setFormData(prev => ({ ...prev, competitors: current.filter((id: string) => id !== comp._id) as any }));
+                                                                    setIsDirty(true);
+                                                                }}
+                                                                className="ml-1 text-red-400 hover:text-red-600 hover:bg-red-100 p-0.5 rounded-full transition-colors"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Search Input Area */}
+                                        <div className="relative">
+                                            <div className="relative flex items-center">
+                                                <Search size={16} className="absolute left-3 text-slate-500 z-10 pointer-events-none" />
+                                                <input
+                                                    type="text"
+                                                    value={competitorSearch}
+                                                    onChange={(e) => {
+                                                        setCompetitorSearch(e.target.value);
+                                                        setIsCompetitorDropdownOpen(true);
+                                                    }}
+                                                    onFocus={() => setIsCompetitorDropdownOpen(true)}
+                                                    onBlur={() => {
+                                                        // Delay concealing to allow click events on dropdown items to fire
+                                                        setTimeout(() => setIsCompetitorDropdownOpen(false), 200);
+                                                    }}
+                                                    placeholder="Buscar competidores..."
+                                                    className="w-full pl-9 pr-4 py-2.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[12px] focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-300 transition-all text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                                                />
+                                            </div>
+
+                                            {/* Dropdown Menu */}
+                                            {isCompetitorDropdownOpen && filteredCompetitors.length > 0 && (
+                                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-[12px] shadow-xl max-h-[200px] overflow-y-auto custom-scrollbar z-50 py-1">
+                                                    {filteredCompetitors.map(comp => {
+                                                        const current = ((formData as any).competitors || []).map((c: any) => typeof c === 'object' ? c._id : c);
+                                                        const isSelected = current.includes(comp._id);
+                                                        if (isSelected) return null; // Don't show already selected
+
+                                                        return (
+                                                            <button
+                                                                key={comp._id}
+                                                                type="button"
+                                                                onMouseDown={(e) => {
+                                                                    // Use onMouseDown to prevent input blur from firing first
+                                                                    e.preventDefault();
+                                                                    const currentIds = ((formData as any).competitors || []).map((c: any) => typeof c === 'object' ? c._id : c);
+                                                                    if (!currentIds.includes(comp._id)) {
+                                                                        setFormData(prev => ({ ...prev, competitors: [...currentIds, comp._id] as any }));
+                                                                        setIsDirty(true);
+                                                                    }
+                                                                    setCompetitorSearch('');
+                                                                    setIsCompetitorDropdownOpen(false);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-[13px] font-bold text-slate-700 transition-colors text-left"
+                                                            >
+                                                                {comp.logo ? (
+                                                                    <img src={comp.logo} alt={comp.name} className="w-5 h-5 rounded-[4px] object-contain shrink-0" />
+                                                                ) : (
+                                                                    <Swords size={14} className="text-slate-400 shrink-0" />
+                                                                )}
+                                                                <span className="truncate">{comp.name}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                    {filteredCompetitors.length > 0 && filteredCompetitors.every(comp => ((formData as any).competitors || []).map((c: any) => typeof c === 'object' ? c._id : c).includes(comp._id)) && (
+                                                        <div className="px-3 py-2 text-[12px] text-slate-400 italic text-center">Todos seleccionados</div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {isCompetitorDropdownOpen && filteredCompetitors.length === 0 && (
+                                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-[12px] shadow-xl z-50 py-3 px-4 text-center">
+                                                    <p className="text-[13px] text-slate-500 font-medium">No se encontraron competidores.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">
@@ -912,87 +1111,91 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
             </div >
 
             {/* Modal de confirmación de eliminación */}
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] animate-[slideUp_0.3s_ease-out] border border-slate-100" onClick={e => e.stopPropagation()}>
-                        <div className="w-14 h-14 bg-red-50 text-red-500 rounded-[16px] flex items-center justify-center mb-5 border border-red-100 shadow-inner">
-                            <AlertTriangle size={28} />
-                        </div>
-                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Eliminar Empresa?</h3>
-                        <div className="text-slate-500 text-[14px] mb-6 leading-relaxed">
-                            Estás a punto de eliminar <strong>{company?.name}</strong>. Esta acción no se puede deshacer.
-                            {companyContacts.length > 0 && (
-                                <div className="mt-4 p-3.5 bg-red-50 text-red-700 text-[13px] rounded-[12px] font-medium border border-red-100 flex items-start gap-2.5 shadow-sm">
-                                    <AlertTriangle size={18} className="shrink-0 mt-0.5 text-red-500" />
-                                    <span>
-                                        Esta empresa tiene <strong>{companyContacts.length}</strong> contacto(s) vinculado(s). Eliminarla podría afectar la agenda.
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowDeleteConfirm(false)}
-                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    try {
-                                        await deleteCompany(company!._id);
-                                        onSaved({ ...company, _deleted: true } as any);
-                                        setShowDeleteConfirm(false);
-                                        onClose();
-                                    } catch (error) {
-                                        console.error('Error al eliminar empresa:', error);
-                                        alert('Ha ocurrido un error al intentar eliminar la empresa.');
-                                    }
-                                }}
-                                className="flex-1 py-3 px-4 bg-red-500 text-white font-bold rounded-[14px] hover:bg-red-600 transition-colors shadow-sm shadow-red-500/30 text-[14px]"
-                            >
-                                {companyContacts.length > 0 ? 'Eliminar igual' : 'Sí, eliminar'}
-                            </button>
+            {
+                showDeleteConfirm && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+                        <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] animate-[slideUp_0.3s_ease-out] border border-slate-100" onClick={e => e.stopPropagation()}>
+                            <div className="w-14 h-14 bg-red-50 text-red-500 rounded-[16px] flex items-center justify-center mb-5 border border-red-100 shadow-inner">
+                                <AlertTriangle size={28} />
+                            </div>
+                            <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Eliminar Empresa?</h3>
+                            <div className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                                Estás a punto de eliminar <strong>{company?.name}</strong>. Esta acción no se puede deshacer.
+                                {companyContacts.length > 0 && (
+                                    <div className="mt-4 p-3.5 bg-red-50 text-red-700 text-[13px] rounded-[12px] font-medium border border-red-100 flex items-start gap-2.5 shadow-sm">
+                                        <AlertTriangle size={18} className="shrink-0 mt-0.5 text-red-500" />
+                                        <span>
+                                            Esta empresa tiene <strong>{companyContacts.length}</strong> contacto(s) vinculado(s). Eliminarla podría afectar la agenda.
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        try {
+                                            await deleteCompany(company!._id);
+                                            onSaved({ ...company, _deleted: true } as any);
+                                            setShowDeleteConfirm(false);
+                                            onClose();
+                                        } catch (error) {
+                                            console.error('Error al eliminar empresa:', error);
+                                            alert('Ha ocurrido un error al intentar eliminar la empresa.');
+                                        }
+                                    }}
+                                    className="flex-1 py-3 px-4 bg-red-500 text-white font-bold rounded-[14px] hover:bg-red-600 transition-colors shadow-sm shadow-red-500/30 text-[14px]"
+                                >
+                                    {companyContacts.length > 0 ? 'Eliminar igual' : 'Sí, eliminar'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showUnsavedConfirm && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] animate-[slideUp_0.3s_ease-out] border border-slate-100" onClick={e => e.stopPropagation()}>
-                        <div className="w-14 h-14 bg-amber-50 text-amber-500 rounded-[16px] flex items-center justify-center mb-5 border border-amber-100 shadow-inner">
-                            <AlertTriangle size={28} />
-                        </div>
-                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Salir sin guardar?</h3>
-                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
-                            Tenés cambios sin guardar. ¿Querés guardarlos antes de salir?
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => { setShowUnsavedConfirm(false); setIsDirty(false); onClose(); }}
-                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
-                            >
-                                No, salir
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setShowUnsavedConfirm(false);
-                                    const form = document.getElementById('company-form') as HTMLFormElement;
-                                    if (form) form.requestSubmit();
-                                }}
-                                className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-violet-600 text-white font-bold rounded-[14px] hover:shadow-md transition-all shadow-sm text-[14px]"
-                            >
-                                Sí, guardar
-                            </button>
+            {
+                showUnsavedConfirm && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+                        <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] animate-[slideUp_0.3s_ease-out] border border-slate-100" onClick={e => e.stopPropagation()}>
+                            <div className="w-14 h-14 bg-amber-50 text-amber-500 rounded-[16px] flex items-center justify-center mb-5 border border-amber-100 shadow-inner">
+                                <AlertTriangle size={28} />
+                            </div>
+                            <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Salir sin guardar?</h3>
+                            <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                                Tenés cambios sin guardar. ¿Querés guardarlos antes de salir?
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowUnsavedConfirm(false); setIsDirty(false); onClose(); }}
+                                    className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                                >
+                                    No, salir
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowUnsavedConfirm(false);
+                                        const form = document.getElementById('company-form') as HTMLFormElement;
+                                        if (form) form.requestSubmit();
+                                    }}
+                                    className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-violet-600 text-white font-bold rounded-[14px] hover:shadow-md transition-all shadow-sm text-[14px]"
+                                >
+                                    Sí, guardar
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

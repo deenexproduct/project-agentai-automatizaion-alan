@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getContacts, ContactData } from '../../services/crm.service';
+import { getContacts, ContactData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { Search, MapPin, Building2, Link2, Plus, Filter, MessageCircle, Mail, Phone, Linkedin } from 'lucide-react';
 import ContactFormDrawer from './ContactFormDrawer';
 import ContactActivityDrawer from './ContactActivityDrawer';
@@ -14,10 +14,17 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
     const [showFilters, setShowFilters] = useState(false);
     const [roleFilter, setRoleFilter] = useState('');
     const [companyFilter, setCompanyFilter] = useState('');
+    const [assignedToFilter, setAssignedToFilter] = useState('');
+    const [localesFilter, setLocalesFilter] = useState('');
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
     const [isNewDrawerOpen, setIsNewDrawerOpen] = useState(false);
     const [activityContactId, setActivityContactId] = useState<string | null>(null);
     const [activityContactPreview, setActivityContactPreview] = useState<ContactData | null>(null);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        getTeamUsers().then(setTeamUsers).catch(() => { });
+    }, []);
 
     // Deep-linking effect
     useEffect(() => {
@@ -51,6 +58,21 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
             const hasCompany = (contact.companies && contact.companies.some(c => c.name === companyFilter)) ||
                 (contact.company?.name === companyFilter);
             if (!hasCompany) return false;
+        }
+
+        if (assignedToFilter && contact.assignedTo?._id !== assignedToFilter) return false;
+
+        if (localesFilter) {
+            let maxLocales = contact.company?.localesCount || 0;
+            if (contact.companies && contact.companies.length > 0) {
+                const multiMax = Math.max(...contact.companies.map((c: any) => c.localesCount || 0));
+                maxLocales = Math.max(maxLocales, multiMax);
+            }
+
+            if (localesFilter === '0-10' && (maxLocales < 0 || maxLocales > 10)) return false;
+            if (localesFilter === '11-50' && (maxLocales < 11 || maxLocales > 50)) return false;
+            if (localesFilter === '51-100' && (maxLocales < 51 || maxLocales > 100)) return false;
+            if (localesFilter === '100+' && maxLocales <= 100) return false;
         }
 
         return true;
@@ -142,6 +164,19 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
                     <div className="px-4 md:px-6 py-3 border-b border-white/50 bg-white/40 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4 animate-in fade-in slide-in-from-top-2 shrink-0">
                         <div className="flex bg-white/50 backdrop-blur-md rounded-[10px] p-1 shadow-sm border border-slate-200/60 divide-x divide-slate-200">
                             <div className="flex items-center gap-2 px-3">
+                                <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Responsable:</span>
+                                <select
+                                    value={assignedToFilter}
+                                    onChange={(e) => setAssignedToFilter(e.target.value)}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer"
+                                >
+                                    <option value="">Todos</option>
+                                    {teamUsers.map(user => (
+                                        <option key={user._id} value={user._id}>{user.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Rol:</span>
                                 <select
                                     value={roleFilter}
@@ -168,10 +203,24 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
                                     ))}
                                 </select>
                             </div>
+                            <div className="flex items-center gap-2 px-3">
+                                <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Locales:</span>
+                                <select
+                                    value={localesFilter}
+                                    onChange={(e) => setLocalesFilter(e.target.value)}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 w-32 focus:outline-none cursor-pointer"
+                                >
+                                    <option value="">Todos</option>
+                                    <option value="0-10">0 a 10</option>
+                                    <option value="11-50">11 a 50</option>
+                                    <option value="51-100">51 a 100</option>
+                                    <option value="100+">Más de 100</option>
+                                </select>
+                            </div>
                         </div>
-                        {(roleFilter || companyFilter) && (
+                        {(roleFilter || companyFilter || assignedToFilter || localesFilter) && (
                             <button
-                                onClick={() => { setRoleFilter(''); setCompanyFilter(''); }}
+                                onClick={() => { setRoleFilter(''); setCompanyFilter(''); setAssignedToFilter(''); setLocalesFilter(''); }}
                                 className="text-[12px] font-bold text-slate-400 hover:text-slate-600 transition-colors bg-white/50 px-3 py-1.5 rounded-[8px] border border-slate-200/60"
                             >
                                 Limpiar Filtros

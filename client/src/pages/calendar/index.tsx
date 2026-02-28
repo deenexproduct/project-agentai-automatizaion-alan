@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, ChevronLeft, ChevronRight, Plus, MapPin, Video, CheckSquare, ChevronDown } from 'lucide-react';
-import { format, addMonths, subMonths, subDays, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday } from 'date-fns';
+import { Settings, ChevronLeft, ChevronRight, Plus, MapPin, Video, CheckSquare, ChevronDown, RefreshCw } from 'lucide-react';
+import { format, addMonths, subMonths, addWeeks, subWeeks, subDays, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday, getWeekOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { parseSafeDate } from '../../utils/date';
 import CalendarConfigModal from '../../components/calendar/CalendarConfigModal';
@@ -9,7 +9,7 @@ import EventFormDrawer from '../../components/calendar/EventFormDrawer';
 import TaskFormDrawer from '../../components/crm/TaskFormDrawer';
 import DailyEventsDrawer from '../../components/calendar/DailyEventsDrawer';
 import WeeklyCalendarView from '../../components/calendar/WeeklyCalendarView';
-import { getEvents, EventData, TaskData } from '../../services/crm.service';
+import { getEvents, syncGoogleEvents, EventData, TaskData } from '../../services/crm.service';
 
 export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
     const [viewMode, setViewMode] = useState<'month' | 'week'>('week');
@@ -17,6 +17,7 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
     const [events, setEvents] = useState<EventData[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [isEventDrawerOpen, setIsEventDrawerOpen] = useState(false);
@@ -69,12 +70,28 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
         }
     };
 
+    const handleManualSync = async () => {
+        try {
+            setIsSyncing(true);
+            const start = subDays(startOfWeek(startOfMonth(currentDate)), 1);
+            const end = addDays(endOfWeek(endOfMonth(currentDate)), 1);
+            await syncGoogleEvents(start.toISOString(), end.toISOString());
+            // Reload local events after sync is complete
+            await loadEvents();
+        } catch (error) {
+            console.error('Error syncing events:', error);
+            // Optionally could add a toast here
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     useEffect(() => {
         loadEvents();
     }, [currentDate]);
 
-    const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
-    const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
+    const goNext = () => setCurrentDate(viewMode === 'week' ? addWeeks(currentDate, 1) : addMonths(currentDate, 1));
+    const goPrev = () => setCurrentDate(viewMode === 'week' ? subWeeks(currentDate, 1) : subMonths(currentDate, 1));
     const today = () => setCurrentDate(new Date());
 
     const openNewEvent = () => {
@@ -130,8 +147,13 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
             {/* Header */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-6 shrink-0 relative z-30 gap-3 px-4 md:px-0">
                 <div className="flex items-center gap-3 md:gap-4">
-                    <h2 className="text-base md:text-xl font-bold text-slate-600 capitalize shrink-0">
+                    <h2 className="text-base md:text-xl font-bold text-slate-600 capitalize shrink-0 flex items-center gap-2">
                         {format(currentDate, 'MMMM yyyy', { locale: es })}
+                        {viewMode === 'week' && (
+                            <span className="text-[12px] md:text-[14px] font-semibold text-slate-500 normal-case bg-slate-100/80 px-2.5 py-0.5 rounded-[8px] border border-slate-200/60 shadow-sm">
+                                Semana {getWeekOfMonth(currentDate, { weekStartsOn: 1 })}
+                            </span>
+                        )}
                     </h2>
                 </div>
 
@@ -168,13 +190,13 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
 
                 <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto flex-wrap">
                     <div className="flex items-center bg-white rounded-[14px] shadow-sm border border-slate-200 p-1">
-                        <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-[10px] transition-colors">
+                        <button onClick={goPrev} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-[10px] transition-colors">
                             <ChevronLeft size={20} />
                         </button>
                         <button onClick={today} className="px-3 md:px-4 h-8 flex items-center justify-center text-[13px] font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-[10px] transition-colors">
                             Hoy
                         </button>
-                        <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-[10px] transition-colors">
+                        <button onClick={goNext} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-[10px] transition-colors">
                             <ChevronRight size={20} />
                         </button>
                     </div>
@@ -193,6 +215,15 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
                             Mes
                         </button>
                     </div>
+
+                    <button
+                        onClick={handleManualSync}
+                        disabled={isSyncing}
+                        className="h-10 w-10 md:w-auto md:px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 transition-all flex items-center justify-center gap-2 text-[14px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+                        <span className="hidden md:inline">{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
+                    </button>
 
                     <button
                         onClick={() => setIsConfigOpen(true)}
@@ -324,18 +355,25 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
                     </div>
                 </div>
             ) : (
-                <WeeklyCalendarView
-                    currentDate={currentDate}
-                    events={events}
-                    searchQuery={searchQuery}
-                    onEventSelect={openEditEvent}
-                    onNewEvent={(date) => {
-                        setSelectedDate(date);
-                        openNewEvent();
-                    }}
-                    previewDate={selectedDate}
-                    isPreviewing={isEventDrawerOpen && !selectedEvent}
-                />
+                <div className="flex-1 relative">
+                    <WeeklyCalendarView
+                        currentDate={currentDate}
+                        events={events}
+                        searchQuery={searchQuery}
+                        onEventSelect={openEditEvent}
+                        onNewEvent={(date) => {
+                            setSelectedDate(date);
+                            openNewEvent();
+                        }}
+                        previewDate={selectedDate}
+                        isPreviewing={isEventDrawerOpen && !selectedEvent}
+                    />
+                    {loading && (
+                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm rounded-[20px]">
+                            <div className="animate-spin w-10 h-10 border-4 border-transparent border-t-violet-600 rounded-full" />
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* Drawers and Modals */}

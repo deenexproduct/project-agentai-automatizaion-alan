@@ -4,6 +4,7 @@ import { ContactData, createContact, updateContact, deleteContact, getCompanies,
 import api from '../../lib/axios';
 import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
+import CountrySelect from '../common/CountrySelect';
 
 interface Props {
     contact?: ContactData | null;
@@ -24,6 +25,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
         companies: [],
         tags: [],
         profilePhotoUrl: '',
+        country: 'AR',
     });
     const [companies, setCompanies] = useState<CompanyData[]>([]);
     const [companySearch, setCompanySearch] = useState('');
@@ -77,6 +79,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                         profilePhotoUrl: fullContact.profilePhotoUrl || '',
                         companies: fullContact.companies ? (fullContact.companies as any) : (fullContact.company ? [fullContact.company as any] : []),
                         tags: fullContact.tags || [],
+                        country: fullContact.country || 'AR',
                     });
 
                     if (fullContact.companies && fullContact.companies.length > 0) {
@@ -101,6 +104,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                     profilePhotoUrl: contact.profilePhotoUrl || '',
                     companies: contact.companies ? (contact.companies as any) : (contact.company ? [contact.company as any] : []),
                     tags: contact.tags || [],
+                    country: contact.country || 'AR',
                 });
 
                 // Initialize selected companies from contact.companies or fallback to company
@@ -126,6 +130,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                 profilePhotoUrl: '',
                 companies: [],
                 tags: [],
+                country: 'AR',
             });
             setSelectedCompanies([]);
             setCompanySearch('');
@@ -610,6 +615,12 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                             className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner"
                         />
                     </div>
+
+                    {/* País */}
+                    <CountrySelect
+                        value={(formData as any).country || 'AR'}
+                        onChange={(code) => { setFormData(prev => ({ ...prev, country: code })); setIsDirty(true); }}
+                    />
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-2">
                         <div className="space-y-2">

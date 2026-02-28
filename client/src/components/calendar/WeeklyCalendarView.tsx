@@ -65,7 +65,7 @@ export default function WeeklyCalendarView({ currentDate, events, searchQuery, o
             {/* Header: Days of the week */}
             <div className="flex border-b border-slate-200 bg-white/95 backdrop-blur-xl shrink-0 select-none sticky top-0 z-[60] shadow-[0_4px_20px_rgba(0,0,0,0.03)] rounded-t-[20px]">
                 {/* Time column spacer */}
-                <div className="w-[50px] md:w-[60px] shrink-0 border-r border-slate-100"></div>
+                <div className="w-[50px] md:w-[60px] shrink-0 border-r border-slate-100 bg-transparent"></div>
                 {/* Days headers */}
                 <div className="flex-1 grid grid-cols-7">
                     {days.map((day, i) => {
@@ -86,7 +86,7 @@ export default function WeeklyCalendarView({ currentDate, events, searchQuery, o
             </div>
 
             {/* Grid area */}
-            <div className="relative bg-white pb-6 rounded-b-[20px]">
+            <div className="relative bg-white pb-6 rounded-b-[20px] pt-4">
                 <div className="flex relative min-w-[600px] md:min-w-0 pb-8">
 
                     {/* Time labels column */}

@@ -34,6 +34,9 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
 
     const [notes, setNotes] = useState('');
     const [companyLocales, setCompanyLocales] = useState<number>(0);
+    const [companyFranchise, setCompanyFranchise] = useState<number>(0);
+    const [companyOwned, setCompanyOwned] = useState<number>(0);
+    const [companyCostPerLocation, setCompanyCostPerLocation] = useState<number>(0);
     const [initialLocales, setInitialLocales] = useState<number>(0);
     const [initialValue, setInitialValue] = useState<number>(0);
     const [companies, setCompanies] = useState<CompanyData[]>([]);
@@ -90,6 +93,9 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             });
             setCompanySearch(deal.company?.name || '');
             setCompanyLocales(deal.company?.localesCount || 0);
+            setCompanyFranchise(deal.company?.franchiseCount || 0);
+            setCompanyOwned(deal.company?.ownedCount || 0);
+            setCompanyCostPerLocation((deal.company as any)?.costPerLocation || 0);
             setInitialLocales(deal.company?.localesCount || 0);
             setInitialValue(deal.value || 0);
 
@@ -115,16 +121,37 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             getDeal(deal._id).then(fullDeal => {
                 setCurrentDealData(fullDeal);
 
+                // Recalculate value from company data if deal value is 0 and company has cost data
+                const companyData = fullDeal.company as any;
+                let recalculatedValue = fullDeal.value || 0;
+                if (recalculatedValue === 0 && companyData?.localesCount && companyData?.costPerLocation) {
+                    recalculatedValue = Math.round((companyData.localesCount * companyData.costPerLocation) * 100) / 100;
+                }
+
                 // True-up the form data to ensure absolute correctness
                 setFormData({
                     title: fullDeal.title || '',
-                    value: fullDeal.value || 0,
+                    value: recalculatedValue,
                     status: fullDeal.status || (stages.length > 0 ? stages[0].key : 'lead'),
                     expectedCloseDate: fullDeal.expectedCloseDate ? String(fullDeal.expectedCloseDate).substring(0, 10) : '',
                     company: fullDeal.company as any,
                     primaryContact: fullDeal.primaryContact as any,
                     assignedTo: (fullDeal as any).assignedTo,
                 });
+
+                // Sync company-related state (fixes empty company field on deep-link)
+                setCompanySearch(fullDeal.company?.name || '');
+                setCompanyLocales(fullDeal.company?.localesCount || 0);
+                setCompanyFranchise((fullDeal.company as any)?.franchiseCount || 0);
+                setCompanyOwned((fullDeal.company as any)?.ownedCount || 0);
+                setCompanyCostPerLocation(companyData?.costPerLocation || 0);
+                setInitialLocales(fullDeal.company?.localesCount || 0);
+                setInitialValue(recalculatedValue);
+
+                // Load contacts for the company
+                if (fullDeal.company?._id) {
+                    getContacts({ company: fullDeal.company._id, limit: 100 }).then(res => setContacts(res.contacts)).catch(() => { });
+                }
 
                 if (fullDeal.contacts && fullDeal.contacts.length > 0) {
                     setSelectedContacts(fullDeal.contacts as any);
@@ -150,6 +177,9 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             setSelectedContacts([]);
             setCompanySearch('');
             setCompanyLocales(0);
+            setCompanyFranchise(0);
+            setCompanyOwned(0);
+            setCompanyCostPerLocation(0);
             setInitialLocales(0);
             setInitialValue(0);
             setNotes('');
@@ -234,6 +264,9 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
         setCompanySearch(comp.name);
         setShowCompanyDropdown(false);
         setCompanyLocales(comp.localesCount || 0);
+        setCompanyFranchise(comp.franchiseCount || 0);
+        setCompanyOwned(comp.ownedCount || 0);
+        setCompanyCostPerLocation((comp as any).costPerLocation || 0);
         setInitialLocales(comp.localesCount || 0);
         setInitialValue(leadValue || 0);
         setSelectedContacts([]);
@@ -252,6 +285,11 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
 
     const handleLocalesChange = (val: number) => {
         setCompanyLocales(val);
+        // Auto-recalculate deal value when locales change and costPerLocation is available
+        if (companyCostPerLocation > 0 && val > 0) {
+            const newValue = Math.round((val * companyCostPerLocation) * 100) / 100;
+            setFormData(prev => ({ ...prev, value: newValue }));
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -283,7 +321,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
 
             // Sync locales back to company if it changed
             if (formData.company?._id && companyLocales > 0) {
-                await updateCompany(formData.company._id, { localesCount: companyLocales });
+                await updateCompany(formData.company._id, { localesCount: companyLocales, franchiseCount: companyFranchise, ownedCount: companyOwned } as any);
             }
 
             onSaved();
@@ -573,14 +611,20 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                                 <Building2 size={14} className="text-slate-400" />
                                                 Cant. Locales
                                             </label>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={companyLocales || ''}
-                                                onChange={(e) => handleLocalesChange(parseInt(e.target.value) || 0)}
-                                                placeholder="0"
-                                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all font-mono text-[14px] text-slate-700 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                            />
+                                            <div className="relative group/input">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold group-focus-within/input:text-violet-500 transition-colors z-10 pointer-events-none">
+                                                    <Building2 size={16} />
+                                                </span>
+                                                <input
+                                                    type="number"
+                                                    onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                    min="0"
+                                                    value={companyLocales || ''}
+                                                    onChange={(e) => handleLocalesChange(parseInt(e.target.value) || 0)}
+                                                    placeholder="0"
+                                                    className="w-full pl-10 pr-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all font-mono text-[14px] text-slate-700 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                />
+                                            </div>
                                         </div>
 
                                         {/* Valor */}
@@ -589,15 +633,21 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                                 <DollarSign size={14} className="text-emerald-500" />
                                                 Valor (USD)
                                             </label>
-                                            <input
-                                                required
-                                                type="number"
-                                                min="0"
-                                                value={formData.value ? Math.round(formData.value * 100) / 100 : ''}
-                                                onChange={(e) => setFormData({ ...formData, value: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 })}
-                                                placeholder="0"
-                                                className="w-full px-4 py-3 bg-emerald-50/30 backdrop-blur-sm border border-emerald-200/80 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-mono text-[14px] text-slate-800 font-bold placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                            />
+                                            <div className="relative group/input">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold group-focus-within/input:text-emerald-500 transition-colors z-10 pointer-events-none">
+                                                    <DollarSign size={16} />
+                                                </span>
+                                                <input
+                                                    required
+                                                    type="number"
+                                                    onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                    min="0"
+                                                    value={formData.value ? Math.round(formData.value * 100) / 100 : ''}
+                                                    onChange={(e) => setFormData({ ...formData, value: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 })}
+                                                    placeholder="0"
+                                                    className="w-full pl-10 pr-4 py-3 bg-emerald-50/30 backdrop-blur-sm border border-emerald-200/80 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all font-mono text-[14px] text-slate-800 font-bold placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                     {(companyLocales !== initialLocales || formData.value !== initialValue) && (
@@ -605,6 +655,48 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                             <span className="mt-0.5">⚠️</span>
                                             <span>Cualquier modificación en estos campos repercutirá y se guardará globalmente en los datos maestros de la Empresa <strong>{formData.company?.name || ''}</strong>.</span>
                                         </p>
+                                    )}
+
+                                    {/* Franquicias y Propios */}
+                                    {companyLocales > 0 && (
+                                        <div className="mt-3">
+                                            <div className="grid grid-cols-2 gap-5">
+                                                <div className="space-y-2">
+                                                    <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                                        Franquicias
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                        min="0"
+                                                        value={companyFranchise || ''}
+                                                        onChange={(e) => setCompanyFranchise(parseInt(e.target.value) || 0)}
+                                                        placeholder="0"
+                                                        className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all font-mono text-[14px] text-slate-700 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                                        Propios
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        onWheel={(e) => (e.target as HTMLElement).blur()}
+                                                        min="0"
+                                                        value={companyOwned || ''}
+                                                        onChange={(e) => setCompanyOwned(parseInt(e.target.value) || 0)}
+                                                        placeholder="0"
+                                                        className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-300 transition-all font-mono text-[14px] text-slate-700 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                    />
+                                                </div>
+                                            </div>
+                                            {companyFranchise + companyOwned > 0 && companyFranchise + companyOwned !== companyLocales && (
+                                                <p className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200/50 px-2.5 py-1.5 rounded-[8px] flex items-center gap-1.5 mt-2 shadow-sm">
+                                                    <span>⚠️</span>
+                                                    <span>Franquicias ({companyFranchise}) + Propios ({companyOwned}) = {companyFranchise + companyOwned} ≠ Total locales ({companyLocales}).</span>
+                                                </p>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
 

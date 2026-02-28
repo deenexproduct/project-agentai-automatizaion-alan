@@ -37,6 +37,30 @@ export type PartnerData = {
     contactsCount?: number;
 };
 
+export interface ICompetitorNote {
+    text: string;
+    createdAt?: string;
+}
+
+export type CompetitorData = {
+    _id: string;
+    name: string;
+    logo?: string;
+    url?: string;
+    ceo?: string;
+    localesCount?: number;
+    foundedYear?: number;
+    foundersCount?: number;
+    employeesCount?: number;
+    strength?: 'fuerte' | 'moderada' | 'debil';
+    notes?: string;
+    advantages?: ICompetitorNote[];
+    disadvantages?: ICompetitorNote[];
+    createdAt?: string;
+    companiesCount?: number;
+    linkedLocalesCount?: number;
+};
+
 export type CompanyData = {
     _id: string;
     name: string;
@@ -46,9 +70,12 @@ export type CompanyData = {
     website?: string;
     description?: string;
     localesCount: number;
+    franchiseCount?: number;
+    ownedCount?: number;
     costPerLocation?: number;
     category?: string;
     partner?: PartnerData;
+    competitors?: CompetitorData[];
     painPoints: string[];
     deliveries: string[];
     socialMedia?: {
@@ -64,6 +91,7 @@ export type CompanyData = {
     assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     contactsCount?: number;
     dealsCount?: number;
+    country?: string;
     createdAt: string;
 };
 
@@ -76,12 +104,13 @@ export type ContactData = {
     email?: string;
     phone?: string;
     profilePhotoUrl?: string;
-    company?: { _id: string; name: string; logo?: string };
-    companies?: { _id: string; name: string; logo?: string; sector?: string }[];
+    company?: { _id: string; name: string; logo?: string; localesCount?: number };
+    companies?: { _id: string; name: string; logo?: string; sector?: string; localesCount?: number }[];
     partner?: PartnerData;
     assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     linkedInContactId?: { _id: string; profileUrl: string };
     linkedInProfileUrl?: string;
+    country?: string;
     tags: string[];
     createdAt: string;
 };
@@ -92,7 +121,7 @@ export type DealData = {
     value: number;
     currency: string;
     status: string;
-    company?: { _id: string; name: string; logo?: string; themeColor?: string; sector?: string; localesCount?: number; costPerLocation?: number };
+    company?: { _id: string; name: string; logo?: string; themeColor?: string; sector?: string; localesCount?: number; franchiseCount?: number; ownedCount?: number; costPerLocation?: number };
     primaryContact?: { _id: string; fullName: string; position?: string; profilePhotoUrl?: string };
     contacts?: { _id: string; fullName: string; position?: string; profilePhotoUrl?: string; email?: string; phone?: string }[];
     assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
@@ -245,6 +274,13 @@ export const createPartner = async (data: Partial<PartnerData>) => (await api.po
 export const updatePartner = async (id: string, data: Partial<PartnerData>) => (await api.patch<PartnerData>(`/partners/${id}`, data)).data;
 export const deletePartner = async (id: string) => (await api.delete(`/partners/${id}`)).data;
 
+// Competitors
+export const getCompetitors = async () => (await api.get<{ competitors: CompetitorData[] }>('/competitors')).data;
+export const getCompetitorCompanies = async (id: string) => (await api.get<{ companies: CompanyData[] }>(`/competitors/${id}/companies`)).data;
+export const createCompetitor = async (data: Partial<CompetitorData>) => (await api.post<CompetitorData>('/competitors', data)).data;
+export const updateCompetitor = async (id: string, data: Partial<CompetitorData>) => (await api.patch<CompetitorData>(`/competitors/${id}`, data)).data;
+export const deleteCompetitor = async (id: string) => (await api.delete(`/competitors/${id}`)).data;
+
 // Dashboard
 export const getDashboardStats = async () => (await api.get<DashboardStats>('/dashboard/metrics')).data;
 
@@ -303,3 +339,6 @@ export const updateEvent = async (id: string, data: Partial<EventData> & { sendI
 
 export const deleteEvent = async (id: string): Promise<{ success: boolean }> =>
     (await api.delete(`/calendar/events/${id}`)).data;
+
+export const syncGoogleEvents = async (start: string, end: string): Promise<{ success: boolean; message?: string }> =>
+    (await api.post('/calendar/events/sync', { start, end })).data;

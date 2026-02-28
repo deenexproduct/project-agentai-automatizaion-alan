@@ -34,14 +34,18 @@ export interface ICompany extends Document {
     website?: string;
     description?: string;
     localesCount?: number;
+    franchiseCount?: number;
+    ownedCount?: number;
     costPerLocation?: number;
     category?: string;
     partner?: string | any;
+    competitors?: mongoose.Types.ObjectId[];
     painPoints?: string[];
     deliveries?: string[];
     socialMedia?: ISocialMedia;
     research?: IResearch;
     assignedTo?: mongoose.Types.ObjectId;
+    country?: string;
     notes: ICompanyNote[];
     userId: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -87,9 +91,12 @@ const CompanySchema = new Schema<ICompany>({
     website: { type: String, trim: true },
     description: { type: String },
     localesCount: { type: Number, default: 1 },
+    franchiseCount: { type: Number, default: 0 },
+    ownedCount: { type: Number, default: 0 },
     costPerLocation: { type: Number, default: 0 },
     category: { type: String },
     partner: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner' },
+    competitors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Competitor' }],
 
     painPoints: [{ type: String }],
     deliveries: [{ type: String }],
@@ -101,6 +108,7 @@ const CompanySchema = new Schema<ICompany>({
         default: null,
         index: true,
     },
+    country: { type: String, trim: true, default: 'AR' },
     notes: { type: [CompanyNoteSchema], default: [] },
     userId: {
         type: Schema.Types.ObjectId,
