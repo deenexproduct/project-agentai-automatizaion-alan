@@ -251,20 +251,20 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                         </div>
                     </div>
 
-                    <div className="mt-8 pt-6 border-t border-slate-200/50 flex gap-4 bg-white/50 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-6 shadow-[0_-10px_20px_rgba(255,255,255,0.8)]">
+                    <div className="mt-auto pt-4 border-t border-slate-200/50 flex gap-3 bg-white/50 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-4">
                         <button
                             type="button"
                             onClick={handleAttemptClose}
-                            className="flex-1 px-5 py-3.5 bg-white border border-slate-200/80 text-slate-600 rounded-[14px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                            className="flex-1 px-4 py-2 bg-white border border-slate-200/80 text-slate-600 rounded-[10px] text-[13px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={saving || !formData.name}
-                            className="flex-1 px-5 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-[14px] font-bold hover:shadow-[0_8px_24px_rgba(139,92,246,0.3)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(139,92,246,0.2)]"
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-[10px] text-[13px] font-bold hover:shadow-[0_8px_24px_rgba(139,92,246,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(139,92,246,0.3)]"
                         >
-                            {saving ? 'Guardando...' : <><Save size={18} /> {partner?._id ? 'Guardar Cambios' : 'Crear Partner'}</>}
+                            {saving ? 'Guardando...' : <><Save size={16} /> {partner?._id ? 'Guardar Cambios' : 'Crear Partner'}</>}
                         </button>
                     </div>
                 </form>
