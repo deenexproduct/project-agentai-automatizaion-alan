@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, Swords, Globe, User, Hash, FileText, AlertTriangle, Camera, ImagePlus, Loader2, Trash2, Plus, TrendingUp, TrendingDown, Building2, ExternalLink, Calendar } from 'lucide-react';
 import { CompetitorData, createCompetitor, updateCompetitor, extractLogo, getCompetitorCompanies, CompanyData } from '../../services/crm.service';
+import MultiCountrySelect from '../common/MultiCountrySelect';
 
 interface Props {
     competitor?: CompetitorData | null;
@@ -29,6 +30,7 @@ export default function CompetitorFormDrawer({ competitor, open, onClose, onSave
         notes: '',
         advantages: [],
         disadvantages: [],
+        countries: [],
     });
 
     const [activeTab, setActiveTab] = useState<'info' | 'ventajas' | 'desventajas' | 'empresas'>('info');
@@ -64,6 +66,7 @@ export default function CompetitorFormDrawer({ competitor, open, onClose, onSave
                 notes: competitor.notes || '',
                 advantages: competitor.advantages || [],
                 disadvantages: competitor.disadvantages || [],
+                countries: competitor.countries || [],
             });
         } else if (open && !competitor) {
             setHasManuallyUploadedLogo(false);
@@ -81,6 +84,7 @@ export default function CompetitorFormDrawer({ competitor, open, onClose, onSave
                 notes: '',
                 advantages: [],
                 disadvantages: [],
+                countries: [],
             });
         }
         setIsDirty(false);
@@ -485,6 +489,13 @@ export default function CompetitorFormDrawer({ competitor, open, onClose, onSave
                                     ))}
                                 </select>
                             </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200/50">
+                            <MultiCountrySelect
+                                value={formData.countries || []}
+                                onChange={(val) => setFormData({ ...formData, countries: val })}
+                            />
                         </div>
 
                         <div className="grid grid-cols-3 gap-4 pt-2 border-t border-slate-200/50">

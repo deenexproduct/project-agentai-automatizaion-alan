@@ -14,6 +14,7 @@ export interface ICompetitor extends Document {
     foundedYear?: number;
     foundersCount?: number;
     employeesCount?: number;
+    countries?: string[];
     strength?: 'fuerte' | 'moderada' | 'debil';
     notes?: string;
     advantages: ICompetitorNote[];
@@ -32,6 +33,7 @@ const CompetitorSchema = new Schema({
     foundedYear: { type: Number },
     foundersCount: { type: Number },
     employeesCount: { type: Number },
+    countries: [{ type: String }],
     strength: { type: String, enum: ['fuerte', 'moderada', 'debil'], default: 'moderada' },
     notes: { type: String },
     advantages: [{

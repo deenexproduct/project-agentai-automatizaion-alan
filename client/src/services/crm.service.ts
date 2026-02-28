@@ -52,6 +52,7 @@ export type CompetitorData = {
     foundedYear?: number;
     foundersCount?: number;
     employeesCount?: number;
+    countries?: string[];
     strength?: 'fuerte' | 'moderada' | 'debil';
     notes?: string;
     advantages?: ICompetitorNote[];
