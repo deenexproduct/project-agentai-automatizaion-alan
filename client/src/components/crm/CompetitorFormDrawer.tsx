@@ -702,7 +702,7 @@ export default function CompetitorFormDrawer({ competitor, open, onClose, onSave
                     {/* Empresas Tab */}
                     {activeTab === 'empresas' && (
                         <div className="flex-1 flex flex-col gap-4 animate-[fadeIn_0.3s_ease-out]">
-                            <div className="bg-blue-50 rounded-[16px] p-5 border border-blue-100/60 shadow-inner">
+                            <div className="bg-blue-50 rounded-[16px] p-5 border border-blue-100/60 shadow-inner mb-2">
                                 <label className="text-[13px] font-bold text-blue-800 flex items-center gap-1.5 uppercase tracking-wide mb-2">
                                     <Building2 size={16} className="text-blue-500" />
                                     Empresas Vinculadas
@@ -712,7 +712,7 @@ export default function CompetitorFormDrawer({ competitor, open, onClose, onSave
                                 </p>
                             </div>
 
-                            <div className="flex-1 space-y-3">
+                            <div className="flex-1 flex flex-col gap-3 pb-8">
                                 {loadingCompanies ? (
                                     <div className="flex items-center justify-center h-full min-h-[160px]">
                                         <Loader2 size={24} className="text-blue-500 animate-spin" />
