@@ -19,7 +19,7 @@
     'use strict';
 
     // ── Configuration ──────────────────────────────────────────
-    const DEFAULT_API_URL = 'http://localhost:3001';
+    const DEFAULT_API_URL = 'http://localhost:3000';
     let API_URL = DEFAULT_API_URL;
 
     chrome.storage.sync.get(['apiUrl'], (result) => {

@@ -80,6 +80,25 @@ export function formatToLocalDateTimeInput(dateInput: string | Date | undefined 
     }
 }
 
+/**
+ * Devuelve 'YYYY-MM-DDTHH:mm' usando las componentes UTC del date.
+ * Ideal para tareas cuyo dueDate se almacena/lee como UTC puro.
+ */
+export function formatToUTCDateTimeInput(dateInput: string | Date | undefined | null): string {
+    if (!dateInput) return '';
+    try {
+        const date = parseSafeDate(dateInput);
+        const y = date.getUTCFullYear();
+        const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(date.getUTCDate()).padStart(2, '0');
+        const h = String(date.getUTCHours()).padStart(2, '0');
+        const min = String(date.getUTCMinutes()).padStart(2, '0');
+        return `${y}-${m}-${d}T${h}:${min}`;
+    } catch (e) {
+        return '';
+    }
+}
+
 // Format: 21 feb, 2026
 export function formatToArgentineDate(dateInput: string | Date | undefined | null): string {
     if (!dateInput) return 'Sin fecha';
@@ -196,23 +215,23 @@ export function getDefaultTaskDueDate(initialDate?: string | Date | null): strin
 
         if (timeInMinutes < (9 * 60 + 30)) {
             // Before 09:30 -> Today 09:30
-            dateObj.setHours(9, 30, 0, 0);
+            dateObj.setUTCHours(9, 30, 0, 0);
         } else if (timeInMinutes < 14 * 60) {
             // Between 09:30 and 14:00 -> Today 14:00
-            dateObj.setHours(14, 0, 0, 0);
+            dateObj.setUTCHours(14, 0, 0, 0);
         } else if (timeInMinutes < 18 * 60) {
             // Between 14:00 and 18:00 -> Today 18:00
-            dateObj.setHours(18, 0, 0, 0);
+            dateObj.setUTCHours(18, 0, 0, 0);
         } else {
             // After 18:00 -> Tomorrow 09:30
-            dateObj.setDate(dateObj.getDate() + 1);
-            dateObj.setHours(9, 30, 0, 0);
+            dateObj.setUTCDate(dateObj.getUTCDate() + 1);
+            dateObj.setUTCHours(9, 30, 0, 0);
         }
     } else {
         // Not today, just default to 09:30 of the selected day
-        dateObj.setHours(9, 30, 0, 0);
+        dateObj.setUTCHours(9, 30, 0, 0);
     }
 
-    // Format output as 'YYYY-MM-DDTHH:mm'
-    return formatToLocalDateTimeInput(dateObj);
+    // Format output as 'YYYY-MM-DDTHH:mm' in UTC
+    return formatToUTCDateTimeInput(dateObj);
 }

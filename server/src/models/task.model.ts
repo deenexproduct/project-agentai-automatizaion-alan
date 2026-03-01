@@ -24,6 +24,7 @@ export interface ITask extends Document {
     deal?: mongoose.Types.ObjectId;
     company?: mongoose.Types.ObjectId;
     dueDate?: Date;
+    durationMinutes: number;
     completedAt?: Date;
     calendarEventId?: string;
     calendarSynced: boolean;
@@ -100,6 +101,11 @@ const TaskSchema = new Schema<ITask>({
     dueDate: {
         type: Date,
         index: true,
+    },
+    durationMinutes: {
+        type: Number,
+        default: 30,
+        min: 1,
     },
     completedAt: { type: Date },
     calendarEventId: { type: String },

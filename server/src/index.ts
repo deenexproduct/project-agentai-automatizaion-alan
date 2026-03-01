@@ -52,12 +52,13 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
   'https://desirable-compassion-production.up.railway.app',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'https://web.whatsapp.com'
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('chrome-extension://')) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -328,7 +329,7 @@ app.use('/api/whatsapp', authMiddleware, whatsappRoutes);
 app.use('/api/resumidor', authMiddleware, resumidorRoutes);
 
 // Optimizer routes
-app.use('/api/optimizer', authMiddleware, optimizerRoutes);
+app.use('/api/optimizer', optimizerRoutes);
 
 // LinkedIn routes
 app.use('/api/linkedin', authMiddleware, linkedinRoutes);

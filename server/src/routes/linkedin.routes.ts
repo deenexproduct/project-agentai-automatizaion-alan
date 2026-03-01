@@ -7,17 +7,32 @@ import { statePersistence } from '../services/linkedin/state-persistence.service
 
 const router = Router();
 
+// Helper: get userId from authenticated user (must match linkedin-accounts.routes.ts)
+function getUserId(req: Request): string {
+    if (!req.user || !req.user._id) {
+        throw new Error('Unauthorized');
+    }
+    return req.user._id.toString();
+}
+
 // ── GET /status — Session & prospecting status ──────────────
 router.get('/status', (req: Request, res: Response) => {
-    const userId = req.user?._id?.toString() || 'default';
-    const tenant = linkedinService.getTenant(userId);
-    res.json(tenant.getStatus());
+    try {
+        const userId = getUserId(req);
+        const tenant = linkedinService.getTenant(userId);
+        res.json(tenant.getStatus());
+    } catch (err: any) {
+        if (err.message === 'Unauthorized') {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        res.status(500).json({ error: 'Internal error' });
+    }
 });
 
 // ── POST /launch — Open browser, load cookies ──────────────
 router.post('/launch', async (req: Request, res: Response) => {
     try {
-        const userId = req.user?._id?.toString() || 'default';
+        const userId = getUserId(req);
         const tenant = linkedinService.getTenant(userId);
         await tenant.initialize();
         res.json({ success: true, status: tenant.getStatus() });
@@ -31,7 +46,7 @@ router.post('/launch', async (req: Request, res: Response) => {
 router.post('/start-prospecting', async (req: Request, res: Response) => {
     try {
         const { urls, sendNote, noteText } = req.body;
-        const userId = req.user?._id?.toString() || 'default';
+        const userId = getUserId(req);
         const tenant = linkedinService.getTenant(userId);
 
         if (!urls || !Array.isArray(urls) || urls.length === 0) {
@@ -54,7 +69,7 @@ router.post('/start-prospecting', async (req: Request, res: Response) => {
 
 // ── POST /pause — Pause prospecting ────────────────────────
 router.post('/pause', async (req: Request, res: Response) => {
-    const userId = req.user?._id?.toString() || 'default';
+    const userId = getUserId(req);
     const tenant = linkedinService.getTenant(userId);
     await tenant.pause();
     res.json({ success: true, message: 'Prospecting paused' });
@@ -62,7 +77,7 @@ router.post('/pause', async (req: Request, res: Response) => {
 
 // ── POST /resume — Resume prospecting ──────────────────────
 router.post('/resume', async (req: Request, res: Response) => {
-    const userId = req.user?._id?.toString() || 'default';
+    const userId = getUserId(req);
     const tenant = linkedinService.getTenant(userId);
     await tenant.resume();
     res.json({ success: true, message: 'Prospecting resumed' });
@@ -70,7 +85,7 @@ router.post('/resume', async (req: Request, res: Response) => {
 
 // ── POST /stop — Stop prospecting completely ───────────────
 router.post('/stop', async (req: Request, res: Response) => {
-    const userId = req.user?._id?.toString() || 'default';
+    const userId = getUserId(req);
     const tenant = linkedinService.getTenant(userId);
     const result = await tenant.stop();
     res.json({
@@ -82,14 +97,14 @@ router.post('/stop', async (req: Request, res: Response) => {
 
 // ── GET /progress — Current progress (polling) ─────────────
 router.get('/progress', (req: Request, res: Response) => {
-    const userId = req.user?._id?.toString() || 'default';
+    const userId = getUserId(req);
     const tenant = linkedinService.getTenant(userId);
     res.json(tenant.getProgress());
 });
 
 // ── GET /progress/stream — SSE real-time progress ──────────
 router.get('/progress/stream', (req: Request, res: Response) => {
-    const userId = req.user?._id?.toString() || 'default';
+    const userId = getUserId(req);
     const tenant = linkedinService.getTenant(userId);
 
     res.writeHead(200, {
@@ -207,7 +222,7 @@ router.post('/state/restore', async (req: Request, res: Response) => {
 // ── GET /scrape-profile — Quick scrape a single profile for CRM auto-fill ──
 router.get('/scrape-profile', async (req: Request, res: Response) => {
     try {
-        const userId = req.user?._id?.toString() || 'default';
+        const userId = getUserId(req);
         const profileUrl = req.query.url as string;
 
         if (!profileUrl || !profileUrl.includes('linkedin.com/in/')) {

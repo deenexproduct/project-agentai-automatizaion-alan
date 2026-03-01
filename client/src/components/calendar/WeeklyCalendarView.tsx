@@ -37,6 +37,7 @@ export default function WeeklyCalendarView({ currentDate, events, searchQuery, o
     // --- Drag and Drop State ---
     const [draggingEvent, setDraggingEvent] = useState<EventData | null>(null);
     const [dragGhostState, setDragGhostState] = useState<{ dayIndex: number; startDec: number; durationDec: number } | null>(null);
+    const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
     const gridRef = useRef<HTMLDivElement>(null);
 
     // Store drag start info
@@ -259,117 +260,229 @@ export default function WeeklyCalendarView({ currentDate, events, searchQuery, o
                                         }
                                         if (currentCluster.length > 0) clusters.push(currentCluster);
 
-                                        // 3. Assign columns within each cluster
-                                        const eventLayout = new Map<string, { col: number; totalCols: number }>();
+                                        // 3. Assign layout: side-by-side for small clusters, stacked rows for dense ones
+                                        // The user requested side-by-side for all overlaps (e.g., 4 items = 25% width each)
+                                        const DENSE_THRESHOLD = 100;
+                                        const ROW_HEIGHT = 24; // px per stacked row
+                                        const ROW_GAP = 2; // px gap between rows
+
+                                        const eventLayout = new Map<string, { col: number; totalCols: number; stacked: boolean; stackIndex: number; stackTotal: number; clusterStartDec: number; clusterEndDec: number; overflowed: boolean }>();
+
                                         for (const cluster of clusters) {
-                                            const cols: (typeof processed)[] = [];
-                                            for (const item of cluster) {
-                                                let placed = false;
-                                                for (let i = 0; i < cols.length; i++) {
-                                                    const colLastItem = cols[i][cols[i].length - 1];
-                                                    // Add a tiny margin (0.01) so adjacent events aren't considered overlapping if they touch exactly
-                                                    if (colLastItem.endDec <= item.startDec + 0.01) {
-                                                        cols[i].push(item);
-                                                        eventLayout.set(item.event._id, { col: i, totalCols: 0 });
-                                                        placed = true;
-                                                        break;
+                                            if (cluster.length >= DENSE_THRESHOLD) {
+                                                const cStart = Math.min(...cluster.map(i => i.startDec));
+                                                const cEnd = Math.max(...cluster.map(i => i.endDec));
+                                                // Calculate how many rows fit in the cluster's time range
+                                                const clusterHeightPx = (cEnd - cStart) * PIXELS_PER_HOUR;
+                                                const maxVisibleRows = Math.max(2, Math.floor(clusterHeightPx / (ROW_HEIGHT + ROW_GAP)));
+
+                                                cluster.forEach((item, idx) => {
+                                                    eventLayout.set(item.event._id, {
+                                                        col: 0, totalCols: 1,
+                                                        stacked: true, stackIndex: idx, stackTotal: cluster.length,
+                                                        clusterStartDec: cStart, clusterEndDec: cEnd,
+                                                        overflowed: idx >= maxVisibleRows
+                                                    });
+                                                });
+                                            } else {
+                                                const cols: (typeof processed)[] = [];
+                                                for (const item of cluster) {
+                                                    let placed = false;
+                                                    for (let i = 0; i < cols.length; i++) {
+                                                        const colLastItem = cols[i][cols[i].length - 1];
+                                                        if (colLastItem.endDec <= item.startDec + 0.01) {
+                                                            cols[i].push(item);
+                                                            eventLayout.set(item.event._id, { col: i, totalCols: 0, stacked: false, stackIndex: 0, stackTotal: 0, clusterStartDec: 0, clusterEndDec: 0, overflowed: false });
+                                                            placed = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                    if (!placed) {
+                                                        cols.push([item]);
+                                                        eventLayout.set(item.event._id, { col: cols.length - 1, totalCols: 0, stacked: false, stackIndex: 0, stackTotal: 0, clusterStartDec: 0, clusterEndDec: 0, overflowed: false });
                                                     }
                                                 }
-                                                if (!placed) {
-                                                    cols.push([item]);
-                                                    eventLayout.set(item.event._id, { col: cols.length - 1, totalCols: 0 });
+                                                for (const item of cluster) {
+                                                    const el = eventLayout.get(item.event._id)!;
+                                                    el.totalCols = cols.length;
                                                 }
                                             }
-                                            for (const item of cluster) {
-                                                eventLayout.get(item.event._id)!.totalCols = cols.length;
+                                        }
+
+                                        // Calculate "+N more" badges for overflowed clusters
+                                        const overflowBadges: { top: number; count: number; clusterKey: string }[] = [];
+                                        const processedClusters = new Set<string>();
+                                        for (const cluster of clusters) {
+                                            if (cluster.length >= DENSE_THRESHOLD) {
+                                                const cStart = Math.min(...cluster.map(i => i.startDec));
+                                                const cEnd = Math.max(...cluster.map(i => i.endDec));
+                                                const clusterKey = `${cStart}-${cEnd}`;
+                                                if (!processedClusters.has(clusterKey)) {
+                                                    processedClusters.add(clusterKey);
+                                                    const clusterHeightPx = (cEnd - cStart) * PIXELS_PER_HOUR;
+                                                    const maxVisibleRows = Math.max(2, Math.floor(clusterHeightPx / (ROW_HEIGHT + ROW_GAP)));
+                                                    const overflowCount = cluster.length - maxVisibleRows;
+                                                    if (overflowCount > 0) {
+                                                        const badgeTop = (cStart - 7) * PIXELS_PER_HOUR + maxVisibleRows * (ROW_HEIGHT + ROW_GAP);
+                                                        overflowBadges.push({ top: badgeTop, count: overflowCount, clusterKey });
+                                                    }
+                                                }
                                             }
                                         }
 
                                         // 4. Render events
-                                        return processed.map(({ event, startDec, endDec }) => {
-                                            const layout = eventLayout.get(event._id) || { col: 0, totalCols: 1 };
-                                            const widthPercent = 100 / layout.totalCols;
-                                            const leftPercent = layout.col * widthPercent;
+                                        const renderedEvents = processed
+                                            .filter(({ event }) => {
+                                                const layout = eventLayout.get(event._id);
+                                                if (!layout) return false;
+                                                if (!layout.overflowed) return true;
+                                                // Show overflowed events if their cluster is expanded
+                                                const clusterKey = `${layout.clusterStartDec}-${layout.clusterEndDec}`;
+                                                return expandedClusters.has(clusterKey);
+                                            })
+                                            .map(({ event, startDec, endDec }) => {
+                                                const layout = eventLayout.get(event._id)!;
 
-                                            const top = (startDec - 7) * PIXELS_PER_HOUR;
-                                            const maxBottom = (24 - 7) * PIXELS_PER_HOUR;
-                                            const Math1 = Math;
-                                            const calculatedHeight = (endDec - startDec) * PIXELS_PER_HOUR;
-                                            const height = Math1.min(calculatedHeight, maxBottom - top);
+                                                let top: number, height: number, leftStyle: string, widthStyle: string;
 
-                                            let styleClasses = 'bg-amber-50 border-amber-200 border-l-amber-500 text-amber-800';
-                                            let Icon = MapPin;
-                                            if (event.type === 'meet') {
-                                                styleClasses = 'bg-violet-50 border-violet-200 border-l-violet-500 text-violet-800';
-                                                Icon = Video;
-                                            } else if (event.type === 'task') {
-                                                styleClasses = 'bg-emerald-50 border-emerald-200 border-l-emerald-500 text-emerald-800';
-                                                Icon = CheckSquare;
-                                            }
+                                                if (layout.stacked) {
+                                                    const clusterTopPx = (layout.clusterStartDec - 7) * PIXELS_PER_HOUR;
+                                                    top = clusterTopPx + layout.stackIndex * (ROW_HEIGHT + ROW_GAP);
+                                                    height = ROW_HEIGHT;
+                                                    leftStyle = '2px';
+                                                    widthStyle = 'calc(100% - 4px)';
+                                                } else {
+                                                    const widthPercent = 100 / layout.totalCols;
+                                                    const leftPercent = layout.col * widthPercent;
+                                                    top = (startDec - 7) * PIXELS_PER_HOUR;
+                                                    const maxBottom = (24 - 7) * PIXELS_PER_HOUR;
+                                                    let calculatedHeight = (endDec - startDec) * PIXELS_PER_HOUR;
+                                                    if (calculatedHeight < 14) calculatedHeight = 14; // Minimum clickable height
+                                                    height = Math.min(calculatedHeight, maxBottom - top);
+                                                    leftStyle = `calc(${leftPercent}% + 2px)`;
+                                                    widthStyle = `calc(${widthPercent}% - 4px)`;
+                                                }
 
-                                            const isBeingDragged = draggingEvent?._id === event._id;
+                                                // Color system
+                                                let bgClass = 'bg-amber-50', borderClass = 'border-amber-200', leftBorderClass = 'border-l-amber-500', textClass = 'text-amber-800', hoverBg = 'hover:bg-amber-100';
+                                                let Icon = MapPin;
+                                                if (event.type === 'meet') {
+                                                    bgClass = 'bg-violet-50'; borderClass = 'border-violet-200'; leftBorderClass = 'border-l-violet-500'; textClass = 'text-violet-800'; hoverBg = 'hover:bg-violet-100';
+                                                    Icon = Video;
+                                                } else if (event.type === 'task') {
+                                                    bgClass = 'bg-emerald-50'; borderClass = 'border-emerald-200'; leftBorderClass = 'border-l-emerald-500'; textClass = 'text-emerald-800'; hoverBg = 'hover:bg-emerald-100';
+                                                    Icon = CheckSquare;
+                                                }
 
-                                            const paddingClass = layout.totalCols >= 4 ? 'px-0.5' : 'px-1.5';
-                                            const borderClass = layout.totalCols >= 4 ? 'border-l-2' : 'border-l-4';
+                                                const isBeingDragged = draggingEvent?._id === event._id;
+                                                const isStacked = layout.stacked;
+                                                const isVerySmall = height < 20 && !isStacked;
+                                                const displayTitle = event.title.replace(/\[.*?\]/g, '').trim();
 
-                                            return (
+                                                // Extract contact name for inline display
+                                                const contactName = event.linkedTo?.contacts?.length
+                                                    ? event.linkedTo.contacts[0].fullName
+                                                    : (event.linkedTo?.contact as any)?.fullName || '';
+
+                                                return (
+                                                    <div
+                                                        key={`event-${event._id}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (!dragInfo.current.isDragging) {
+                                                                onEventSelect(event);
+                                                            }
+                                                        }}
+                                                        onMouseDown={(e) => {
+                                                            if (e.button !== 0 || !onEventDrop) return;
+                                                            e.stopPropagation();
+                                                            const currentTop = (startDec - 7) * PIXELS_PER_HOUR;
+                                                            dragInfo.current = {
+                                                                startY: currentTop,
+                                                                startCursorY: e.clientY,
+                                                                eventStartDec: startDec,
+                                                                durationDec: endDec - startDec,
+                                                                isDragging: false
+                                                            };
+                                                            setDraggingEvent(event);
+                                                            setDragGhostState({
+                                                                dayIndex: index,
+                                                                startDec: startDec,
+                                                                durationDec: endDec - startDec
+                                                            });
+                                                        }}
+                                                        className={`group absolute rounded-md border ${isStacked ? 'border-l-[3px]' : 'border-l-4'} ${bgClass} ${borderClass} ${leftBorderClass} ${textClass} ${hoverBg} shadow-sm ${isStacked ? 'px-1.5 py-0' : (isVerySmall ? 'px-1.5 py-0.5' : 'px-2 py-1')} text-xs transition-all duration-150 ease-out z-20 hover:!z-[70] hover:!w-max hover:!max-w-[280px] hover:!h-auto hover:!min-w-[100%] hover:shadow-lg hover:shadow-black/10 overflow-hidden hover:!overflow-visible hover:!py-2 hover:!px-2.5 hover:!rounded-lg ${isBeingDragged ? 'opacity-40 ring-2 ring-violet-400 cursor-grabbing shadow-lg scale-[0.97]' : 'cursor-grab active:cursor-grabbing'}`}
+                                                        style={{
+                                                            top: `${top}px`,
+                                                            height: `${height}px`,
+                                                            minHeight: isStacked ? '22px' : '14px',
+                                                            left: leftStyle,
+                                                            width: widthStyle
+                                                        }}
+                                                    >
+                                                        {/* Main line: icon + title + optional contact tag */}
+                                                        <div className={`flex font-semibold ${isStacked || isVerySmall ? 'text-[10px]' : 'text-[11px]'} leading-tight items-center gap-1 overflow-hidden ${isStacked || isVerySmall ? 'h-full' : ''}`}>
+                                                            <Icon size={isStacked || isVerySmall ? 11 : 13} className="shrink-0 opacity-60" strokeWidth={2.5} />
+                                                            <span className="truncate min-w-0 flex-1 group-hover:whitespace-normal group-hover:overflow-visible select-none">
+                                                                {displayTitle}
+                                                            </span>
+                                                            {/* Inline contact pill on stacked rows to differentiate */}
+                                                            {isStacked && contactName && (
+                                                                <span className="shrink-0 text-[8px] font-medium opacity-50 bg-black/5 rounded px-1 py-0.5 truncate max-w-[80px] hidden md:inline select-none">
+                                                                    {contactName.split(' ')[0]}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Time: always visible when card has space */}
+                                                        {!isStacked && height >= 40 && (
+                                                            <div className="text-[10px] opacity-70 mt-0.5 truncate font-medium select-none flex items-center gap-1">
+                                                                <span>{event.startTime} - {event.endTime}</span>
+                                                                {contactName && <span className="opacity-60">· {contactName}</span>}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Hover popover content */}
+                                                        <div className="hidden group-hover:block mt-1 space-y-0.5">
+                                                            <div className="text-[10px] opacity-80 font-medium select-none flex items-center gap-1">
+                                                                <span>🕐</span>
+                                                                <span>{event.startTime} - {event.endTime}</span>
+                                                            </div>
+                                                            {contactName && (
+                                                                <div className="text-[10px] opacity-70 select-none flex items-center gap-1">
+                                                                    <span>👤</span>
+                                                                    <span>{event.linkedTo?.contacts?.map(c => c.fullName).join(', ') || contactName}</span>
+                                                                </div>
+                                                            )}
+                                                            {event.linkedTo?.deal && (
+                                                                <div className="text-[9px] opacity-60 select-none flex items-center gap-1">
+                                                                    <span>💼</span>
+                                                                    <span>{event.linkedTo.deal.title}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            });
+
+                                        // Render "+N more" overflow badges (hidden once expanded)
+                                        const badges = overflowBadges
+                                            .filter(({ clusterKey }) => !expandedClusters.has(clusterKey))
+                                            .map(({ top, count, clusterKey }) => (
                                                 <div
-                                                    key={`event-${event._id}`}
+                                                    key={`overflow-${clusterKey}`}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        if (!dragInfo.current.isDragging) {
-                                                            onEventSelect(event);
-                                                        }
+                                                        setExpandedClusters(prev => new Set([...prev, clusterKey]));
                                                     }}
-                                                    onMouseDown={(e) => {
-                                                        if (e.button !== 0 || !onEventDrop) return; // Only left click and if drop is enabled
-                                                        e.stopPropagation();
-
-                                                        // Calculate accurate initial positions
-                                                        const currentTop = (startDec - 7) * PIXELS_PER_HOUR;
-
-                                                        dragInfo.current = {
-                                                            startY: currentTop,
-                                                            startCursorY: e.clientY,
-                                                            eventStartDec: startDec,
-                                                            durationDec: endDec - startDec,
-                                                            isDragging: false
-                                                        };
-
-                                                        setDraggingEvent(event);
-                                                        setDragGhostState({
-                                                            dayIndex: index,
-                                                            startDec: startDec,
-                                                            durationDec: endDec - startDec
-                                                        });
-                                                    }}
-                                                    className={`group absolute rounded-[6px] border ${borderClass} shadow-sm ${paddingClass} py-1 text-xs transition-all z-20 hover:!z-[70] hover:!w-max hover:!max-w-[180px] hover:!h-auto hover:!min-w-[100%] hover:shadow-xl overflow-hidden hover:!overflow-visible ${styleClasses} ${isBeingDragged ? 'opacity-50 ring-2 ring-violet-400 scale-[1.02] cursor-grabbing shadow-lg' : 'cursor-grab hover:brightness-95'}`}
-                                                    style={{
-                                                        top: `${top}px`,
-                                                        height: `${height}px`,
-                                                        minHeight: '24px',
-                                                        left: `calc(${leftPercent}% + 2px)`,
-                                                        width: `calc(${widthPercent}% - 4px)`
-                                                    }}
+                                                    className="absolute left-1 right-1 text-center text-[10px] font-semibold text-emerald-600 bg-emerald-50/80 border border-emerald-200 border-dashed rounded-md py-0.5 cursor-pointer hover:bg-emerald-100 transition-colors z-30 select-none"
+                                                    style={{ top: `${top}px`, height: `${ROW_HEIGHT}px` }}
                                                 >
-                                                    <div className="flex font-bold text-[10px] md:text-[11px] leading-tight items-start gap-1 overflow-hidden">
-                                                        <Icon size={12} className={`shrink-0 mt-0.5 opacity-70 ${layout.totalCols >= 3 ? 'hidden group-hover:block' : ''}`} />
-                                                        <span className="truncate min-w-0 flex-1 group-hover:whitespace-normal group-hover:overflow-visible group-hover:-mt-0.5 group-hover:pb-1 select-none">
-                                                            {event.title.replace(/\[.*?\]/g, '').trim()}
-                                                        </span>
-                                                    </div>
-                                                    {/* Always show extra info on hover, or if naturally large enough */}
-                                                    <div className={`${height >= 40 && widthPercent > 30 ? 'block' : 'hidden group-hover:block'}`}>
-                                                        <div className="text-[9px] md:text-[10px] opacity-80 mt-0.5 truncate group-hover:whitespace-normal font-medium select-none">
-                                                            {event.startTime} - {event.endTime}
-                                                        </div>
-                                                        <div className="text-[9px] opacity-70 mt-0.5 truncate group-hover:whitespace-normal select-none">
-                                                            {event.linkedTo?.contacts?.length ? event.linkedTo.contacts.map(c => c.fullName).join(', ') : (event.linkedTo?.contact ? event.linkedTo.contact.fullName : (event.linkedTo?.deal ? event.linkedTo.deal.title : ''))}
-                                                        </div>
-                                                    </div>
+                                                    +{count} más
                                                 </div>
-                                            );
-                                        });
+                                            ));
+
+                                        return [...renderedEvents, ...badges];
                                     })()}
 
 

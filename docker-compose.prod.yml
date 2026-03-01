@@ -38,6 +38,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - SENTRY_DSN=${SENTRY_DSN}
+      - LINKEDIN_ENCRYPTION_KEY=${LINKEDIN_ENCRYPTION_KEY}
       - PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
       - PUPPETEER_ARGS=--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage
     volumes:

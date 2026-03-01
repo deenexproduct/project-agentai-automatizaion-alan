@@ -153,6 +153,7 @@ export type DealData = {
     primaryContact?: { _id: string; fullName: string; position?: string; profilePhotoUrl?: string };
     contacts?: { _id: string; fullName: string; position?: string; profilePhotoUrl?: string; email?: string; phone?: string }[];
     assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
+    userId?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     expectedCloseDate?: string;
     daysInStatus?: number;
     pendingTasks?: number;
@@ -167,6 +168,7 @@ export type TaskData = {
     priority: 'low' | 'medium' | 'high' | 'urgent';
     status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
     dueDate?: string;
+    durationMinutes?: number;
     contact?: { _id: string; fullName: string; profilePhotoUrl?: string };
     deal?: { _id: string; title: string };
     company?: { _id: string; name: string; logo?: string };

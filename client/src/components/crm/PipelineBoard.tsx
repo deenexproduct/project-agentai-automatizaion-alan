@@ -1,12 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { getDealsPipeline, updateDeal, DealData } from '../../services/crm.service';
-import { Settings, Plus, DollarSign, Calendar, Clock, CheckSquare, Users, Building2, Columns3, Briefcase } from 'lucide-react';
+import { Settings, Plus, DollarSign, Calendar, Clock, CheckSquare, Users, Building2, Columns3, Briefcase, Flame, CircleOff, User } from 'lucide-react';
 import { formatToArgentineDate } from '../../utils/date';
 import DealFormDrawer from './DealFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
+
+// Helper: extraer el userId del JWT almacenado en localStorage
+function getCurrentUserId(): string | null {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return null;
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.userId || payload._id || payload.id || payload.sub || null;
+    } catch { return null; }
+}
+
+// Tipos de filtros rápidos disponibles
+type QuickFilter = 'focus_hoy' | 'huerfanos' | 'mios' | null;
 
 interface StageData {
     key: string;
@@ -21,7 +34,34 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingDeal, setEditingDeal] = useState<DealData | null>(null);
     const [search, setSearch] = useState('');
+    const [activeFilter, setActiveFilter] = useState<QuickFilter>(null);
     const navigate = useNavigate();
+    const currentUserId = useMemo(() => getCurrentUserId(), []);
+
+    // Función de filtro centralizada: se aplica a TODOS los deals en el pipeline
+    const applyDealFilter = useMemo(() => {
+        return (d: DealData) => {
+            // Filtro de búsqueda por texto
+            if (search && !(
+                (d.title || '').toLowerCase().includes(search.toLowerCase()) ||
+                (d.company?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+                (d.primaryContact?.fullName || '').toLowerCase().includes(search.toLowerCase())
+            )) return false;
+            // Filtros rápidos del semáforo
+            if (activeFilter === 'focus_hoy') return d.alertLevel === 'red';
+            if (activeFilter === 'huerfanos') return d.alertLevel === 'yellow';
+            if (activeFilter === 'mios') return d.assignedTo?._id === currentUserId || d.userId?._id === currentUserId;
+            return true;
+        };
+    }, [search, activeFilter, currentUserId]);
+
+    // Stages con deals filtrados — se usa para renderar TODO el pipeline
+    const filteredStages = useMemo(() => {
+        return stages.map(stage => ({
+            ...stage,
+            deals: stage.deals.filter(applyDealFilter),
+        }));
+    }, [stages, applyDealFilter]);
 
     // Deep-linking effect
     useEffect(() => {
@@ -137,15 +177,36 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                     <div className="hidden md:flex gap-2 items-center mx-2">
                         <div className="px-3 py-1.5 bg-emerald-50/80 border border-emerald-100 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] rounded-[12px] text-[12px] font-bold text-emerald-700 flex items-center gap-1.5 transition-all hover:bg-emerald-100/80 whitespace-nowrap">
                             <DollarSign size={14} strokeWidth={2.5} className="text-emerald-500" />
-                            {stages.filter(s => {
+                            {filteredStages.filter(s => {
                                 const k = s.key.toLowerCase();
                                 return !k.includes('perdid') && !k.includes('lost') && k !== 'pausado';
                             }).reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.value || 0), 0), 0).toLocaleString()} <span className="text-emerald-500/70 font-medium">en juego</span>
                         </div>
                         <div className="px-3 py-1.5 bg-blue-50/80 border border-blue-100 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] rounded-[12px] text-[12px] font-bold text-blue-700 flex items-center gap-1.5 transition-all hover:bg-blue-100/80 whitespace-nowrap">
                             <Building2 size={14} strokeWidth={2.5} className="text-blue-500" />
-                            {stages.reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.company?.localesCount || 0), 0), 0).toLocaleString()} <span className="text-blue-500/70 font-medium">locales</span>
+                            {filteredStages.reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.company?.localesCount || 0), 0), 0).toLocaleString()} <span className="text-blue-500/70 font-medium">locales</span>
                         </div>
+                    </div>
+                    {/* Filtros rápidos del pipeline */}
+                    <div className="flex gap-1.5 items-center ml-1">
+                        {([
+                            { key: 'focus_hoy' as QuickFilter, label: 'Focus Hoy', icon: Flame, activeColors: 'bg-red-50 border-red-200 text-red-700', iconColor: 'text-red-500', tooltip: 'Deals con tareas atrasadas' },
+                            { key: 'huerfanos' as QuickFilter, label: 'Huérfanos', icon: CircleOff, activeColors: 'bg-amber-50 border-amber-200 text-amber-700', iconColor: 'text-amber-500', tooltip: 'Deals sin tareas asignadas' },
+                            { key: 'mios' as QuickFilter, label: 'Míos', icon: User, activeColors: 'bg-violet-50 border-violet-200 text-violet-700', iconColor: 'text-violet-500', tooltip: 'Deals asignados a mí' },
+                        ]).map(f => (
+                            <button
+                                key={f.key}
+                                onClick={() => setActiveFilter(prev => prev === f.key ? null : f.key)}
+                                title={f.tooltip}
+                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-[10px] text-[11px] font-bold border transition-all duration-200 whitespace-nowrap cursor-pointer ${activeFilter === f.key
+                                    ? `${f.activeColors} shadow-sm`
+                                    : 'bg-white/60 border-slate-200/50 text-slate-500 hover:bg-white hover:border-slate-300 hover:text-slate-700'
+                                    }`}
+                            >
+                                <f.icon size={13} strokeWidth={2.5} className={activeFilter === f.key ? f.iconColor : 'text-slate-400'} />
+                                <span className="hidden lg:inline">{f.label}</span>
+                            </button>
+                        ))}
                     </div>
                 </PremiumHeader>
             </div>
@@ -162,7 +223,7 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                 <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar pb-4 rounded-[24px]">
                     <DragDropContext onDragEnd={onDragEnd}>
                         <div className="flex gap-4 h-full min-w-max">
-                            {stages.map(stage => (
+                            {filteredStages.map(stage => (
                                 <div
                                     key={stage.key}
                                     className="flex flex-col w-[260px] md:w-[320px] rounded-[28px] h-full border border-white/60 overflow-hidden"
@@ -220,11 +281,6 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                                                 )}
 
                                                 {stage.deals
-                                                    .filter(d => !search ||
-                                                        (d.title || '').toLowerCase().includes(search.toLowerCase()) ||
-                                                        (d.company?.name || '').toLowerCase().includes(search.toLowerCase()) ||
-                                                        (d.primaryContact?.fullName || '').toLowerCase().includes(search.toLowerCase())
-                                                    )
                                                     .map((deal, index) => (
                                                         <Draggable key={deal._id} draggableId={deal._id} index={index}>
                                                             {(dragProvided, dragSnapshot) => (
@@ -271,10 +327,10 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                                                                                 {/* Semáforo dot: indicador visual del estado de tareas */}
                                                                                 <div
                                                                                     className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-[1.5px] border-white z-20 ${deal.alertLevel === 'red'
-                                                                                            ? 'bg-red-500 animate-pulse'
-                                                                                            : deal.alertLevel === 'green'
-                                                                                                ? 'bg-emerald-400'
-                                                                                                : 'bg-amber-400'
+                                                                                        ? 'bg-red-500 animate-pulse'
+                                                                                        : deal.alertLevel === 'green'
+                                                                                            ? 'bg-emerald-400'
+                                                                                            : 'bg-amber-400'
                                                                                         }`}
                                                                                     title={
                                                                                         deal.alertLevel === 'red'
@@ -309,8 +365,8 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                                                                             </div>
                                                                             {deal.pendingTasks !== undefined && deal.pendingTasks > 0 && (
                                                                                 <div className={`px-1.5 py-1 rounded-[8px] border flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 ${deal.alertLevel === 'red'
-                                                                                        ? 'border-red-200/60 text-red-600 bg-red-50/40'
-                                                                                        : 'border-amber-200/40 text-amber-600'
+                                                                                    ? 'border-red-200/60 text-red-600 bg-red-50/40'
+                                                                                    : 'border-amber-200/40 text-amber-600'
                                                                                     }`} title={`${deal.pendingTasks} tareas pendientes`}>
                                                                                     <CheckSquare size={12} className={`mr-0.5 hidden sm:block ${deal.alertLevel === 'red' ? 'text-red-500' : 'text-amber-500'}`} />{deal.pendingTasks}
                                                                                 </div>

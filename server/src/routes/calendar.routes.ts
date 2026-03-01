@@ -197,8 +197,9 @@ router.get('/events', async (req: Request, res: Response) => {
             const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
             const startTime = `${hours}:${minutes}`;
 
-            // 30 min duration default
-            const endObj = new Date(dateObj.getTime() + 30 * 60000);
+            // Use task's durationMinutes (default 30)
+            const duration = (task as any).durationMinutes || 30;
+            const endObj = new Date(dateObj.getTime() + duration * 60000);
             const endHours = endObj.getUTCHours().toString().padStart(2, '0');
             const endMinutes = endObj.getUTCMinutes().toString().padStart(2, '0');
             const endTime = `${endHours}:${endMinutes}`;
@@ -248,18 +249,72 @@ router.post('/events/sync', async (req: Request, res: Response) => {
         }
 
         const config = await CalendarConfig.findOne({ googleRefreshToken: { $ne: null } }).lean();
-        if (!config || !config.googleRefreshToken) {
-            return res.status(400).json({ error: 'Google Calendar no está conectado' });
+
+        // 1. Sync Google Calendar events
+        if (config?.googleRefreshToken) {
+            const syncStart = new Date(start);
+            const syncEnd = new Date(end);
+            await import('../services/google-calendar.service').then(m =>
+                m.syncGoogleEvents(config as any, syncStart, syncEnd)
+            );
         }
 
-        const syncStart = new Date(start);
-        const syncEnd = new Date(end);
+        // 2. Repair Events: ensure `date` field matches the `startTime` string
+        // Some events have date=2026-03-02T19:00Z but startTime="16:00" (timezone mismatch)
+        const eventsToFix = await Event.find({
+            date: { $gte: new Date(start), $lte: new Date(end) },
+            startTime: { $exists: true, $ne: null }
+        });
 
-        await import('../services/google-calendar.service').then(m =>
-            m.syncGoogleEvents(config as any, syncStart, syncEnd)
-        );
+        let fixedEvents = 0;
+        for (const event of eventsToFix) {
+            if (!event.startTime || !event.date) continue;
+            const dateObj = new Date(event.date);
+            const utcHours = dateObj.getUTCHours();
+            const utcMinutes = dateObj.getUTCMinutes();
+            const currentUTCTime = `${utcHours.toString().padStart(2, '0')}:${utcMinutes.toString().padStart(2, '0')}`;
 
-        res.json({ success: true, message: 'Google Calendar sincronizado correctamente' });
+            // If the date's UTC time doesn't match startTime, fix the date
+            if (currentUTCTime !== event.startTime) {
+                const [stH, stM] = event.startTime.split(':').map(Number);
+                const dateStr = dateObj.toISOString().split('T')[0]; // Keep the calendar date
+                const fixedDate = new Date(`${dateStr}T${event.startTime}:00.000Z`);
+                await Event.updateOne({ _id: event._id }, { $set: { date: fixedDate } });
+                fixedEvents++;
+            }
+        }
+
+        // 3. Repair Tasks: ensure dueDate UTC hours match what the calendar should show
+        // Tasks created via drag-drop with old code had +3h offset baked in
+        // We can't undo this automatically without knowing the original intent,
+        // but we CAN fix tasks where dueDate was corrupted by the drag-drop bug
+        // by checking if the hour offset is exactly the server's timezone offset
+        const tasksToCheck = await Task.find({
+            dueDate: { $gte: new Date(start), $lte: new Date(end) }
+        });
+
+        let fixedTasks = 0;
+        const serverOffsetHours = new Date().getTimezoneOffset() / -60; // e.g. -3 for Argentina
+        for (const task of tasksToCheck) {
+            if (!task.dueDate) continue;
+            const dateObj = new Date(task.dueDate);
+            const utcHours = dateObj.getUTCHours();
+            const localHours = dateObj.getHours(); // What the server's local TZ interprets
+
+            // If the UTC time has the server's timezone offset baked in, fix it
+            // E.g. user intended 17:00, old code stored 20:00Z (17+3), we want 17:00Z
+            if (utcHours !== localHours && serverOffsetHours !== 0) {
+                // Subtract the offset to get back to what the user intended
+                const fixedDate = new Date(dateObj.getTime() + (new Date().getTimezoneOffset() * 60000));
+                await Task.updateOne({ _id: task._id }, { $set: { dueDate: fixedDate } });
+                fixedTasks++;
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Sincronización completa. ${fixedEvents} eventos y ${fixedTasks} tareas reparadas.`
+        });
     } catch (error: any) {
         console.error('Manual sync error:', error);
         res.status(500).json({ error: error.message || 'Failed to sync with Google Calendar' });

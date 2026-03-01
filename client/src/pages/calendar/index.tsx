@@ -136,12 +136,15 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
             ));
 
             if (type === 'task') {
-                // Task updates expect a full ISO string for dueDate
-                const dateObj = new Date(`${newDate}T${newStartTime}`);
-                await updateTask(eventId, { dueDate: dateObj.toISOString() });
+                // Build UTC ISO string directly from the visual time to avoid local timezone offset.
+                // The backend calendar route reads dueDate with getUTCHours(), so we must store
+                // the intended visual time as the UTC component of the date.
+                const isoDate = `${newDate}T${newStartTime}:00.000Z`;
+                await updateTask(eventId, { dueDate: isoDate });
             } else {
-                // Regular event update
-                await updateEvent(eventId, { date: newDate, startTime: newStartTime, endTime: newEndTime });
+                // Regular event update — send the date as ISO too for consistency
+                const isoDate = `${newDate}T${newStartTime}:00.000Z`;
+                await updateEvent(eventId, { date: isoDate, startTime: newStartTime, endTime: newEndTime });
             }
 
             // Reload from server to ensure perfect sync

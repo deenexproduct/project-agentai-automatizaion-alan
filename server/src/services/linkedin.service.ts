@@ -259,12 +259,31 @@ export class LinkedInTenant extends EventEmitter {
                 this.status = 'logged-in';
                 console.log('✅ LinkedIn session restored from cookies');
             } else {
+                if (isProduction) {
+                    console.error('❌ Cookies expired in production (headless mode).');
+                    console.error('   Re-login is required locally. Run with NODE_ENV=development first.');
+                    await this.browser?.close();
+                    this.browser = null;
+                    this.page = null;
+                    this.status = 'disconnected';
+                    throw new Error('LinkedIn cookies expired. Re-login must be done locally (headful mode). Cookies will sync via MongoDB.');
+                }
                 console.log('⚠️ Cookies expired — manual login required');
                 await this.page.goto('https://www.linkedin.com/login', {
                     waitUntil: 'networkidle2',
                 }).catch(() => { });
             }
         } else {
+            if (isProduction) {
+                console.error('❌ No saved session in production (headless mode).');
+                console.error('   To set up LinkedIn, first run the server locally with NODE_ENV=development,');
+                console.error('   log in manually, then deploy. Cookies will be restored from MongoDB.');
+                await this.browser?.close();
+                this.browser = null;
+                this.page = null;
+                this.status = 'disconnected';
+                throw new Error('No saved LinkedIn session. Initial login must be done locally (headful mode). Cookies will sync via MongoDB.');
+            }
             console.log('ℹ️ No saved session — manual login required');
             await this.page.goto('https://www.linkedin.com/login', {
                 waitUntil: 'networkidle2',

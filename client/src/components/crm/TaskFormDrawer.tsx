@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2 } from 'lucide-react';
+import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2, Timer } from 'lucide-react';
 import { TaskData, createTask, updateTask, deleteTask, getTask, getContacts, getCompanies, getDealsPipeline, getCompany, ContactData, CompanyData, DealData, getTeamUsers, TeamUser, completeTask } from '../../services/crm.service';
-import { formatToLocalDateTimeInput, getDefaultTaskDueDate } from '../../utils/date';
+import { formatToUTCDateTimeInput, getDefaultTaskDueDate } from '../../utils/date';
 import AutocompleteInput from '../common/AutocompleteInput';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +22,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
         priority: 'high',
         status: 'pending',
         dueDate: '',
+        durationMinutes: 30,
         company: undefined,
         contact: undefined,
         deal: undefined,
@@ -54,7 +55,8 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                         type: fullTask.type || 'follow_up',
                         priority: fullTask.priority || 'medium',
                         status: fullTask.status || 'pending',
-                        dueDate: fullTask.dueDate ? formatToLocalDateTimeInput(fullTask.dueDate) : '', // 'YYYY-MM-DDTHH:mm'
+                        dueDate: fullTask.dueDate ? formatToUTCDateTimeInput(fullTask.dueDate) : '', // 'YYYY-MM-DDTHH:mm'
+                        durationMinutes: (fullTask as any).durationMinutes || 30,
                         company: fullTask.company,
                         contact: fullTask.contact,
                         deal: fullTask.deal,
@@ -69,7 +71,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
             } else {
                 let defaultDueDate = '';
                 if (initialDate && (initialDate.getHours() !== 0 || initialDate.getMinutes() !== 0)) {
-                    defaultDueDate = formatToLocalDateTimeInput(initialDate);
+                    defaultDueDate = formatToUTCDateTimeInput(initialDate);
                 } else {
                     defaultDueDate = getDefaultTaskDueDate(initialDate);
                 }
@@ -79,7 +81,8 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                     type: task.type || 'follow_up',
                     priority: task.priority || 'high',
                     status: task.status || 'pending',
-                    dueDate: task.dueDate ? formatToLocalDateTimeInput(task.dueDate) : defaultDueDate,
+                    dueDate: task.dueDate ? formatToUTCDateTimeInput(task.dueDate) : defaultDueDate,
+                    durationMinutes: (task as any).durationMinutes || 30,
                     company: task.company,
                     contact: task.contact,
                     deal: task.deal,
@@ -92,7 +95,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
         } else if (open && !task) {
             let defaultDueDate = '';
             if (initialDate && (initialDate.getHours() !== 0 || initialDate.getMinutes() !== 0)) {
-                defaultDueDate = formatToLocalDateTimeInput(initialDate);
+                defaultDueDate = formatToUTCDateTimeInput(initialDate);
             } else {
                 defaultDueDate = getDefaultTaskDueDate(initialDate);
             }
@@ -103,6 +106,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                 priority: 'high',
                 status: 'pending',
                 dueDate: defaultDueDate,
+                durationMinutes: 30,
                 company: undefined,
                 contact: undefined,
                 deal: undefined,
@@ -292,10 +296,16 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                 assignedTo: assignedToId,
             };
 
-            // Only send dueDate if it has a value; convert datetime-local to ISO
+            // Only send dueDate if it has a value; build UTC ISO string directly
+            // from the datetime-local value (e.g. "2026-03-02T17:30") to avoid
+            // local timezone offset — backend reads dueDate with getUTCHours()
             if (formData.dueDate) {
-                payload.dueDate = new Date(formData.dueDate as string).toISOString();
+                const dtLocal = formData.dueDate as string; // "2026-03-02T17:30"
+                payload.dueDate = `${dtLocal}:00.000Z`;
             }
+
+            // Include duration
+            payload.durationMinutes = (formData as any).durationMinutes || 30;
 
             if (task?._id) {
                 // If status changed to completed, use the completeTask endpoint for Activity creation
@@ -457,6 +467,47 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                             />
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 bg-white/80 pl-2">
                                 <Clock size={16} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Duration Selector */}
+                    <div className="space-y-2">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                            <Timer size={14} className="text-orange-500" />
+                            Duración
+                        </label>
+                        <div className="flex gap-2 flex-wrap">
+                            {[5, 15, 30, 60].map((mins) => (
+                                <button
+                                    key={mins}
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, durationMinutes: mins } as any)}
+                                    className={`px-3 py-2 rounded-xl text-[13px] font-semibold border transition-all ${(formData as any).durationMinutes === mins && !(formData as any)._customDuration
+                                        ? 'bg-violet-100 border-violet-300 text-violet-700 ring-2 ring-violet-200'
+                                        : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    {mins < 60 ? `${mins} min` : `${mins / 60}h`}
+                                </button>
+                            ))}
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="480"
+                                    placeholder="Otro"
+                                    value={![5, 15, 30, 60].includes((formData as any).durationMinutes) ? (formData as any).durationMinutes : ''}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        if (val > 0) setFormData({ ...formData, durationMinutes: val } as any);
+                                    }}
+                                    className={`w-[80px] px-3 py-2 rounded-xl text-[13px] font-semibold border transition-all text-center ${![5, 15, 30, 60].includes((formData as any).durationMinutes)
+                                        ? 'bg-violet-100 border-violet-300 text-violet-700 ring-2 ring-violet-200'
+                                        : 'bg-white/60 border-slate-200 text-slate-500 hover:bg-slate-50'
+                                        }`}
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">min</span>
                             </div>
                         </div>
                     </div>
