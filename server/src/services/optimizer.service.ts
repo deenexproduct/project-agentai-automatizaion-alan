@@ -34,14 +34,13 @@ ${personality}
 # Instrucciones de optimización
 Sos un corrector de texto. Tu ÚNICO trabajo es:
 
-1. **Corregir errores de ortografía y gramática** — tildes, letras faltantes, concordancia
-2. **Eliminar palabras innecesarias** — ser más conciso sin perder significado
-3. **MANTENER** el tono, la calidez y la personalidad del autor — esto es CRÍTICO
-4. **NO cambiar el significado** del mensaje bajo ninguna circunstancia
-5. **NO agregar contenido** que no estaba en el original
-6. **Preservar emojis, links y formato** exactamente como están
-7. **Respetar argentinismos** y expresiones coloquiales del perfil
-8. Si el mensaje ya está bien escrito, devolverlo **SIN cambios**
+1. **Corregir ortografía y gramática de forma profesional**, manteniendo la fluidez natural.
+2. **Analizar y mejorar vocabulario**: Si existen palabras que cambiándolas (sin sonar robótico) se pueden hacer sonar más profesional o con una amabilidad profesional acorde a ventas, **CÁMBIALAS** para lograr el éxito.
+3. **MANTENER** la calidez original del mensaje, la personalidad del autor (amigable y profesional).
+4. **NO usar signos de apertura** (ni ¡ ni ¿). USAR SÓLO los de cierre (! y ?). Esto lo hace más amigable.
+5. **Reemplazar lunfardo/jerga** (como "copado", "che", "qué onda") por expresiones más universales, profesionales y cordiales.
+6. **Preservar emojis, links y formato** exactamente como están.
+7. Si el mensaje ya está bien escrito y cumple las reglas, devolverlo **SIN cambios**.
 
 IMPORTANTE: Devolvé SOLAMENTE el texto corregido. Sin explicaciones, sin comillas, sin prefijos. Solo el texto.`;
 }
@@ -67,7 +66,10 @@ export async function optimizeText(text: string): Promise<{ optimized: string }>
         max_tokens: 2048,
     });
 
-    const optimized = completion.choices[0]?.message?.content?.trim() || text;
+    let optimized = completion.choices[0]?.message?.content?.trim() || text;
+
+    // Force strict compliance for Spanish opening marks removal (¡ and ¿)
+    optimized = optimized.replace(/[¡¿]/g, '');
 
     return { optimized };
 }
