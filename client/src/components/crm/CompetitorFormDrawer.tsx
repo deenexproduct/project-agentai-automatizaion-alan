@@ -544,22 +544,6 @@ export default function CompetitorFormDrawer({ competitor, open, onClose, onSave
                                     className="w-full px-3 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[12px] focus:outline-none focus:ring-4 focus:ring-pink-500/10 focus:border-pink-300 transition-all text-[13px] font-bold text-slate-700 placeholder:text-slate-400 shadow-inner [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                                 />
                             </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
-                                    <Swords size={15} className="text-red-500" />
-                                    Nivel de Competencia
-                                </label>
-                                <select
-                                    value={formData.strength || 'moderada'}
-                                    onChange={(e) => setFormData({ ...formData, strength: e.target.value as any })}
-                                    className="w-full px-4 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
-                                >
-                                    {STRENGTH_OPTIONS.map(opt => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                </select>
-                            </div>
                         </div>
 
                         <div className="space-y-2 pt-2 border-t border-slate-200/50 flex-1 flex flex-col">

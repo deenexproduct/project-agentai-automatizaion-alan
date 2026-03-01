@@ -16,6 +16,7 @@ interface Props {
     options: AutocompleteOption[];
     onSelect: (option: AutocompleteOption) => void;
     colorTheme?: 'indigo' | 'emerald' | 'amber';
+    disabled?: boolean;
 }
 
 export default function AutocompleteInput({
@@ -26,7 +27,8 @@ export default function AutocompleteInput({
     onChangeSearch,
     options,
     onSelect,
-    colorTheme = 'indigo'
+    colorTheme = 'indigo',
+    disabled = false
 }: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -92,7 +94,8 @@ export default function AutocompleteInput({
                 onChange={handleChange}
                 onFocus={handleFocus}
                 placeholder={placeholder}
-                className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 ${theme.focusRing} ${theme.focusBorder}`}
+                disabled={disabled}
+                className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-[14px] focus:outline-none transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 ${disabled ? 'opacity-70 bg-slate-100 cursor-not-allowed text-slate-500 font-semibold' : `focus:ring-4 ${theme.focusRing} ${theme.focusBorder}`}`}
             />
             {isOpen && options.length > 0 && (
                 <div className="absolute z-10 w-full mt-2 bg-white/90 backdrop-blur-xl border border-slate-200 rounded-[16px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] overflow-hidden max-h-48 overflow-y-auto p-1">

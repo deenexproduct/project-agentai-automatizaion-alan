@@ -234,29 +234,56 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                                                                     {...dragProvided.dragHandleProps}
                                                                     onClick={(e) => handleEditDeal(deal, e)}
                                                                     className={`bg-white rounded-[20px] p-5 mb-3 border ${dragSnapshot.isDragging ? 'border-violet-300 shadow-[0_20px_60px_rgba(139,92,246,0.15)] scale-[1.02] rotate-1 z-50' : 'border-slate-100 shadow-[0_2px_12px_rgba(30,27,75,0.02)] hover:border-violet-200/60 hover:shadow-[0_8px_30px_rgba(139,92,246,0.06)] hover:-translate-y-1'} transition-all duration-300 group cursor-pointer relative overflow-hidden`}
+                                                                    style={{
+                                                                        // Semáforo visual: borde izquierdo coloreado según alertLevel
+                                                                        borderLeftWidth: '3px',
+                                                                        borderLeftColor: deal.alertLevel === 'red'
+                                                                            ? '#ef4444'    // rojo — tareas atrasadas
+                                                                            : deal.alertLevel === 'green'
+                                                                                ? '#4ade80' // verde — tareas a futuro
+                                                                                : '#f59e0b', // amarillo — sin tareas
+                                                                    }}
                                                                 >
                                                                     {/* Hover Gradient Overlay Minimal */}
                                                                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 group-hover:opacity-100 rounded-bl-full transition-opacity duration-500 -z-0 blur-xl pointer-events-none" />
 
                                                                     <div className="relative z-10">
                                                                         <div className="flex items-start gap-3 mb-4">
-                                                                            <div className="w-8 h-8 rounded-[8px] border border-slate-200/80 bg-white/80 flex items-center justify-center shadow-sm shrink-0 overflow-hidden backdrop-blur-md relative mt-0.5" title={deal.company?.name || deal.primaryContact?.fullName || deal.title}>
-                                                                                {deal.company?.logo || deal.primaryContact?.profilePhotoUrl ? (
-                                                                                    <img
-                                                                                        src={deal.company?.logo || deal.primaryContact?.profilePhotoUrl}
-                                                                                        alt="Logo"
-                                                                                        className="w-full h-full object-contain p-0.5 absolute inset-0 z-10"
-                                                                                        style={{ backgroundColor: deal.company?.themeColor || 'transparent' }}
-                                                                                        onError={(e) => {
-                                                                                            e.currentTarget.style.display = 'none';
-                                                                                            const spanFallback = e.currentTarget.parentElement?.querySelector('span');
-                                                                                            if (spanFallback) spanFallback.style.display = 'block';
-                                                                                        }}
-                                                                                    />
-                                                                                ) : null}
-                                                                                <span className="font-bold text-[13px] text-slate-600 uppercase relative z-0" style={{ display: (deal.company?.logo || deal.primaryContact?.profilePhotoUrl) ? 'none' : 'block' }}>
-                                                                                    {(deal.company?.name || deal.primaryContact?.fullName || deal.title || '?').charAt(0)}
-                                                                                </span>
+                                                                            <div className="relative">
+                                                                                <div className="w-8 h-8 rounded-[8px] border border-slate-200/80 bg-white/80 flex items-center justify-center shadow-sm shrink-0 overflow-hidden backdrop-blur-md relative mt-0.5" title={deal.company?.name || deal.primaryContact?.fullName || deal.title}>
+                                                                                    {deal.company?.logo || deal.primaryContact?.profilePhotoUrl ? (
+                                                                                        <img
+                                                                                            src={deal.company?.logo || deal.primaryContact?.profilePhotoUrl}
+                                                                                            alt="Logo"
+                                                                                            className="w-full h-full object-contain p-0.5 absolute inset-0 z-10"
+                                                                                            style={{ backgroundColor: deal.company?.themeColor || 'transparent' }}
+                                                                                            onError={(e) => {
+                                                                                                e.currentTarget.style.display = 'none';
+                                                                                                const spanFallback = e.currentTarget.parentElement?.querySelector('span');
+                                                                                                if (spanFallback) spanFallback.style.display = 'block';
+                                                                                            }}
+                                                                                        />
+                                                                                    ) : null}
+                                                                                    <span className="font-bold text-[13px] text-slate-600 uppercase relative z-0" style={{ display: (deal.company?.logo || deal.primaryContact?.profilePhotoUrl) ? 'none' : 'block' }}>
+                                                                                        {(deal.company?.name || deal.primaryContact?.fullName || deal.title || '?').charAt(0)}
+                                                                                    </span>
+                                                                                </div>
+                                                                                {/* Semáforo dot: indicador visual del estado de tareas */}
+                                                                                <div
+                                                                                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-[1.5px] border-white z-20 ${deal.alertLevel === 'red'
+                                                                                            ? 'bg-red-500 animate-pulse'
+                                                                                            : deal.alertLevel === 'green'
+                                                                                                ? 'bg-emerald-400'
+                                                                                                : 'bg-amber-400'
+                                                                                        }`}
+                                                                                    title={
+                                                                                        deal.alertLevel === 'red'
+                                                                                            ? '⚠️ Tiene tareas atrasadas — acción inmediata'
+                                                                                            : deal.alertLevel === 'green'
+                                                                                                ? '✅ Tareas programadas a futuro'
+                                                                                                : '⚡ Sin tareas asignadas — requiere planificación'
+                                                                                    }
+                                                                                />
                                                                             </div>
                                                                             <h4 className="font-extrabold text-slate-800 text-[16px] leading-snug group-hover:text-violet-700 transition-colors pt-1">
                                                                                 {deal.company?.name || deal.primaryContact?.fullName || deal.title}
@@ -281,8 +308,11 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                                                                                 ${deal.value?.toLocaleString() || 0}
                                                                             </div>
                                                                             {deal.pendingTasks !== undefined && deal.pendingTasks > 0 && (
-                                                                                <div className="px-1.5 py-1 rounded-[8px] border border-amber-200/40 text-amber-600 flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0" title={`${deal.pendingTasks} tareas pendientes`}>
-                                                                                    <CheckSquare size={12} className="mr-0.5 text-amber-500 hidden sm:block" />{deal.pendingTasks}
+                                                                                <div className={`px-1.5 py-1 rounded-[8px] border flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 ${deal.alertLevel === 'red'
+                                                                                        ? 'border-red-200/60 text-red-600 bg-red-50/40'
+                                                                                        : 'border-amber-200/40 text-amber-600'
+                                                                                    }`} title={`${deal.pendingTasks} tareas pendientes`}>
+                                                                                    <CheckSquare size={12} className={`mr-0.5 hidden sm:block ${deal.alertLevel === 'red' ? 'text-red-500' : 'text-amber-500'}`} />{deal.pendingTasks}
                                                                                 </div>
                                                                             )}
                                                                             <div className="ml-auto pl-1 shrink-0">

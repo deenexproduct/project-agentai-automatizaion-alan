@@ -156,6 +156,7 @@ export type DealData = {
     expectedCloseDate?: string;
     daysInStatus?: number;
     pendingTasks?: number;
+    alertLevel?: 'red' | 'yellow' | 'green';
     createdAt: string;
 };
 

@@ -620,20 +620,51 @@ router.get('/deals', async (req: Request, res: Response) => {
             };
         }
 
-        // Attach task counts per deal
+        // Attach task counts + overdue flag per deal for traffic-light alert system
         const dealIds = deals.map(d => d._id);
-        const taskCounts = await Task.aggregate([
+        const now = new Date();
+        const taskAgg = await Task.aggregate([
             { $match: { deal: { $in: dealIds }, status: { $in: ['pending', 'in_progress'] } } },
-            { $group: { _id: '$deal', count: { $sum: 1 } } },
+            {
+                $group: {
+                    _id: '$deal',
+                    count: { $sum: 1 },
+                    // Flag: at least one task has dueDate in the past → overdue
+                    hasOverdue: {
+                        $max: {
+                            $cond: [
+                                { $and: [{ $ne: ['$dueDate', null] }, { $lt: ['$dueDate', now] }] },
+                                true,
+                                false,
+                            ],
+                        },
+                    },
+                },
+            },
         ]);
-        const taskMap: Record<string, number> = {};
-        for (const t of taskCounts) taskMap[t._id.toString()] = t.count;
+        const taskMap: Record<string, { count: number; hasOverdue: boolean }> = {};
+        for (const t of taskAgg) {
+            taskMap[t._id.toString()] = { count: t.count, hasOverdue: !!t.hasOverdue };
+        }
 
         for (const deal of deals) {
             const status = deal.status;
+            const taskInfo = taskMap[deal._id.toString()];
+            const pendingCount = taskInfo?.count || 0;
+            const hasOverdue = taskInfo?.hasOverdue || false;
+
+            // Semáforo de alertas visuales:
+            //   red    → tiene tareas atrasadas (dueDate < now) — acción inmediata
+            //   yellow → no tiene ninguna tarea pendiente/in_progress — sin próxima acción
+            //   green  → tiene tareas programadas a futuro — todo en orden
+            let alertLevel: 'red' | 'yellow' | 'green' = 'yellow';
+            if (pendingCount > 0 && hasOverdue) alertLevel = 'red';
+            else if (pendingCount > 0) alertLevel = 'green';
+
             const enrichedDeal = {
                 ...deal,
-                pendingTasks: taskMap[deal._id.toString()] || 0,
+                pendingTasks: pendingCount,
+                alertLevel,
                 daysInStatus: deal.statusHistory && deal.statusHistory.length > 0
                     ? Math.floor((Date.now() - new Date(deal.statusHistory[deal.statusHistory.length - 1].changedAt).getTime()) / (1000 * 60 * 60 * 24))
                     : Math.floor((Date.now() - new Date(deal.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
@@ -841,11 +872,44 @@ router.get('/tasks', async (req: Request, res: Response) => {
         }
         if (type) query.type = type;
         if (company) query.company = company;
-        if (deal) query.deal = deal;
+
+        let shouldAwaitForDealContacts = false;
+        let dealPromise = Promise.resolve(null);
+
+        if (deal) {
+            shouldAwaitForDealContacts = true;
+            dealPromise = Deal.findOne({ _id: deal }).lean() as any;
+        }
+
         if (contact) query.contact = contact;
         if (overdue === 'true') {
             query.dueDate = { $lt: new Date() };
             query.status = { $in: ['pending', 'in_progress'] };
+        }
+
+        const dealDoc = await dealPromise;
+        if (shouldAwaitForDealContacts) {
+            const orConditions: any[] = [{ deal: deal }];
+            if (dealDoc) {
+                if (dealDoc.primaryContact) orConditions.push({ contact: dealDoc.primaryContact });
+                if ((dealDoc as any).contacts?.length) {
+                    for (const cId of (dealDoc as any).contacts) {
+                        const cStr = cId.toString();
+                        if (cStr !== dealDoc.primaryContact?.toString()) {
+                            orConditions.push({ contact: cId });
+                        }
+                    }
+                }
+            }
+            if (query.contact) {
+                query.$and = [
+                    { $or: orConditions },
+                    { contact: query.contact }
+                ];
+                delete query.contact;
+            } else {
+                query.$or = orConditions;
+            }
         }
 
         const [tasks, total] = await Promise.all([

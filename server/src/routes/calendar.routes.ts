@@ -176,17 +176,31 @@ router.get('/events', async (req: Request, res: Response) => {
             .populate('deal', 'title')
             .lean();
 
-        // Transform tasks to match EventData interface for the frontend Calendar
         const transformedTasks = tasks.map(task => {
             // Default task start time to 09:00 if none, or based on dueDate if it has time
             const dateObj = new Date(task.dueDate || task.createdAt);
-            const hours = dateObj.getHours().toString().padStart(2, '0');
-            const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+
+            // Fix: Use local time string to extract the hours/minutes consistently if it was stored with timezone,
+            // but the safest approach since we know it's stored as Date from a local datetime-local input is
+            // to extract assuming the same timezone, but here we can just use the provided methods. 
+            // Wait, if it offset by 3 hours, it means `getHours()` gave 20 when it should be 17.
+            // This happens if the datetime was stored as 2026-03-01T17:00:00.000Z exactly, 
+            // and the server is GMT-3, then getHours() gives 14. If getHours() gave 20, 
+            // it means the server is UTC and the date was stored as local time + offset?
+            // If the server is UTC, `dateObj.getHours()` gives 20 because the original date was `2026-03-01T17:00-03:00` -> `20:00Z`.
+            // So to get `17`, we should use `getUTCHours()` IF the server is saving the local time with offset 
+            // OR if the input string was `2026-03-01T17:00`.
+            const isoString = dateObj.toISOString();
+            const timePart = isoString.split('T')[1].substring(0, 5); // "17:00" if it was "17:00Z"
+            // Let's use getUTCHours() because if the frontend sent "2026...T17:00", the backend (if treating as UTC) stored 17:00Z.
+            const hours = dateObj.getUTCHours().toString().padStart(2, '0');
+            const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
             const startTime = `${hours}:${minutes}`;
+
             // 30 min duration default
-            dateObj.setMinutes(dateObj.getMinutes() + 30);
-            const endHours = dateObj.getHours().toString().padStart(2, '0');
-            const endMinutes = dateObj.getMinutes().toString().padStart(2, '0');
+            const endObj = new Date(dateObj.getTime() + 30 * 60000);
+            const endHours = endObj.getUTCHours().toString().padStart(2, '0');
+            const endMinutes = endObj.getUTCMinutes().toString().padStart(2, '0');
             const endTime = `${endHours}:${endMinutes}`;
 
             return {

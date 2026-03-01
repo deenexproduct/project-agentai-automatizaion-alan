@@ -67,16 +67,23 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                     console.error("Failed to fetch task details", err);
                 });
             } else {
+                let defaultDueDate = '';
+                if (initialDate && (initialDate.getHours() !== 0 || initialDate.getMinutes() !== 0)) {
+                    defaultDueDate = formatToLocalDateTimeInput(initialDate);
+                } else {
+                    defaultDueDate = getDefaultTaskDueDate(initialDate);
+                }
+
                 setFormData({
                     title: task.title || '',
                     type: task.type || 'follow_up',
-                    priority: task.priority || 'medium',
+                    priority: task.priority || 'high',
                     status: task.status || 'pending',
-                    dueDate: task.dueDate ? formatToLocalDateTimeInput(task.dueDate) : '', // 'YYYY-MM-DDTHH:mm'
+                    dueDate: task.dueDate ? formatToLocalDateTimeInput(task.dueDate) : defaultDueDate,
                     company: task.company,
                     contact: task.contact,
                     deal: task.deal,
-                    assignedTo: (task as any).assignedTo,
+                    assignedTo: (task as any).assignedTo || ((user?._id || (user as any)?.id) as any),
                 });
                 setCompanySearch(task.company?.name || '');
                 setContactSearch(task.contact?.fullName || '');

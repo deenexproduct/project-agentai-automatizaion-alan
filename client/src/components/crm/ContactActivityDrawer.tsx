@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../../lib/axios';
+import { useAuth } from '../../contexts/AuthContext';
 import {
     X, Phone, MessageCircle, Linkedin, Mail, Users, StickyNote,
     CheckCircle2, Send, Clock, Pencil, Building2,
@@ -152,6 +153,7 @@ const TASK_PRIORITIES = [
 // ── Component ────────────────────────────────────────────────────
 
 export default function ContactActivityDrawer({ contactId, contactPreview, open, onClose, onSaved }: Props) {
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<DrawerTab>('datos');
     const [contact, setContact] = useState<ContactData | null>(null);
     const [activities, setActivities] = useState<ActivityData[]>([]);
@@ -189,6 +191,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
     const [taskDueDate, setTaskDueDate] = useState('');
     const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<TaskData | null>(null);
+    const [taskAssignedTo, setTaskAssignedTo] = useState<string>('');
 
     // ── Deal / Trazabilidad state ──
     const [deals, setDeals] = useState<DealData[]>([]);
@@ -284,6 +287,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
             setTaskType('follow_up');
             setTaskPriority('medium');
             setTaskDueDate('');
+            setTaskAssignedTo('');
             setSelectedCompanies([]);
             setShowCompanyPicker(false);
         }
@@ -1255,15 +1259,43 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                                     })}
                                                 </div>
                                             </div>
-                                            {/* Due Date */}
+                                            {/* Due Date & Time */}
                                             <div>
-                                                <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mb-1.5">Fecha límite</p>
-                                                <input
-                                                    type="date"
-                                                    value={taskDueDate}
-                                                    onChange={e => setTaskDueDate(e.target.value)}
-                                                    className="w-full px-3 py-2 rounded-xl border border-amber-200 bg-white text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all shadow-sm"
-                                                />
+                                                <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mb-1.5">Fecha y Hora</p>
+                                                <div className="relative w-full">
+                                                    <input
+                                                        type="datetime-local"
+                                                        value={taskDueDate}
+                                                        onChange={e => setTaskDueDate(e.target.value)}
+                                                        className="w-full px-3 py-2 rounded-xl border border-amber-200 bg-white text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all shadow-sm custom-date-input"
+                                                    />
+                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-amber-400 bg-white/80 pl-2">
+                                                        <Clock size={14} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* Responsable */}
+                                            <div>
+                                                <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mb-1.5">Responsable</p>
+                                                <div className="relative w-full">
+                                                    <select
+                                                        value={taskAssignedTo}
+                                                        onChange={e => setTaskAssignedTo(e.target.value)}
+                                                        className="w-full pl-10 pr-3 py-2 rounded-xl border border-amber-200 bg-white text-[13px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all shadow-sm appearance-none cursor-pointer"
+                                                    >
+                                                        <option value="">Sin asignar</option>
+                                                        {teamUsers.map(u => (
+                                                            <option key={u._id} value={u._id}>{u.name || u.email}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                        <OwnerAvatar
+                                                            name={teamUsers.find(u => u._id === taskAssignedTo)?.name || ''}
+                                                            profilePhotoUrl={teamUsers.find(u => u._id === taskAssignedTo)?.profilePhotoUrl}
+                                                            size="xs"
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                             {/* Actions */}
                                             <div className="flex items-center justify-between pt-1">
@@ -1280,14 +1312,18 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                                         if (!taskTitle.trim() || !contactId) return;
                                                         setSavingTask(true);
                                                         try {
-                                                            const newTask = await createTask({
+                                                            const payload: Record<string, any> = {
                                                                 title: taskTitle.trim(),
-                                                                type: taskType as any,
-                                                                priority: taskPriority as any,
-                                                                dueDate: taskDueDate || undefined,
-                                                                contact: contactId as any,
-                                                                company: contact?.company?._id as any,
-                                                            });
+                                                                type: taskType,
+                                                                priority: taskPriority,
+                                                                contact: contactId,
+                                                                company: contact?.company?._id || null,
+                                                                assignedTo: taskAssignedTo || null,
+                                                            };
+                                                            if (taskDueDate) {
+                                                                payload.dueDate = new Date(taskDueDate).toISOString();
+                                                            }
+                                                            const newTask = await createTask(payload);
                                                             setTasks(prev => [newTask, ...prev]);
                                                             setTaskTitle('');
                                                             setTaskDueDate('');
@@ -1500,7 +1536,10 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                         <div className="shrink-0 px-5 py-3 border-t border-slate-200/50 bg-white/80 backdrop-blur-md">
                             <button
                                 onClick={() => {
-                                    if (!showTaskForm) setTaskDueDate(getDefaultTaskDueDate());
+                                    if (!showTaskForm) {
+                                        setTaskDueDate(getDefaultTaskDueDate());
+                                        setTaskAssignedTo((user?._id || (user as any)?.id) || '');
+                                    }
                                     setShowTaskForm(!showTaskForm);
                                 }}
                                 className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[13px] font-bold shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 hover:-translate-y-0.5 transition-all"
@@ -1747,6 +1786,18 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
 @keyframes slideInRight { from { transform: translateX(100 %); } to { transform: translateX(0); } }
                     .hidden-scrollbar::-webkit-scrollbar { display: none; }
                     .hidden-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+                    .custom-date-input::-webkit-calendar-picker-indicator {
+                        background: transparent;
+                        bottom: 0;
+                        color: transparent;
+                        cursor: pointer;
+                        height: auto;
+                        left: 0;
+                        position: absolute;
+                        right: 0;
+                        top: 0;
+                        width: auto;
+                    }
 `}</style>
             </div>
         </div >

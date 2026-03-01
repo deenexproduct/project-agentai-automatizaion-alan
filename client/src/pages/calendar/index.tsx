@@ -9,7 +9,7 @@ import EventFormDrawer from '../../components/calendar/EventFormDrawer';
 import TaskFormDrawer from '../../components/crm/TaskFormDrawer';
 import DailyEventsDrawer from '../../components/calendar/DailyEventsDrawer';
 import WeeklyCalendarView from '../../components/calendar/WeeklyCalendarView';
-import { getEvents, syncGoogleEvents, EventData, TaskData } from '../../services/crm.service';
+import { getEvents, syncGoogleEvents, updateEvent, updateTask, EventData, TaskData } from '../../services/crm.service';
 
 export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
     const [viewMode, setViewMode] = useState<'month' | 'week'>('week');
@@ -125,6 +125,31 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
         // Don't navigate if we are already coming from a URL to avoid loops
         if (!urlEventId || urlEventId !== (event.sourceId || event._id)) {
             navigate(`/linkedin/calendar/${event.sourceId || event._id}`);
+        }
+    };
+
+    const handleEventDrop = async (eventId: string, type: 'meet' | 'physical' | 'task', newDate: string, newStartTime: string, newEndTime: string) => {
+        try {
+            // Optimistic UI update
+            setEvents(prev => prev.map(e =>
+                e._id === eventId ? { ...e, date: newDate, startTime: newStartTime, endTime: newEndTime } : e
+            ));
+
+            if (type === 'task') {
+                // Task updates expect a full ISO string for dueDate
+                const dateObj = new Date(`${newDate}T${newStartTime}`);
+                await updateTask(eventId, { dueDate: dateObj.toISOString() });
+            } else {
+                // Regular event update
+                await updateEvent(eventId, { date: newDate, startTime: newStartTime, endTime: newEndTime });
+            }
+
+            // Reload from server to ensure perfect sync
+            loadEvents();
+        } catch (error) {
+            console.error('Failed to move event', error);
+            // Revert on error
+            loadEvents();
         }
     };
 
@@ -367,6 +392,7 @@ export default function CalendarPage({ urlEventId }: { urlEventId?: string }) {
                         }}
                         previewDate={selectedDate}
                         isPreviewing={isEventDrawerOpen && !selectedEvent}
+                        onEventDrop={handleEventDrop}
                     />
                     {loading && (
                         <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm rounded-[20px]">

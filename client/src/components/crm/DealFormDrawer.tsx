@@ -829,9 +829,8 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                                     <div className="text-[11px] font-medium text-slate-500 mt-1 uppercase tracking-wide">{formatToArgentineDateTime(currentDealData?.createdAt || new Date())}</div>
                                                 </div>
                                                 {typeof (currentDealData as any)?.userId === 'object' && (currentDealData as any)?.userId !== null && (
-                                                    <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-[8px] border border-slate-200/50 shrink-0">
+                                                    <div className="flex items-center bg-slate-50 px-1.5 py-1.5 rounded-[8px] border border-slate-200/50 shrink-0" title={(currentDealData as any).userId.name}>
                                                         <OwnerAvatar name={(currentDealData as any).userId.name} profilePhotoUrl={(currentDealData as any).userId.profilePhotoUrl} size="xs" />
-                                                        <span className="text-[11px] font-semibold text-slate-600 truncate max-w-[80px]" title={(currentDealData as any).userId.name}>{(currentDealData as any).userId.name}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -860,9 +859,8 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                                             <div className="text-[11px] font-medium text-slate-500 mt-1 uppercase tracking-wide">{formatToArgentineDateTime(historyObj.changedAt)}</div>
                                                         </div>
                                                         {displayUser && displayUser.name && (
-                                                            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-[8px] border border-slate-200/50 shrink-0">
+                                                            <div className="flex items-center bg-slate-50 px-1.5 py-1.5 rounded-[8px] border border-slate-200/50 shrink-0" title={displayUser.name}>
                                                                 <OwnerAvatar name={displayUser.name} profilePhotoUrl={displayUser.profilePhotoUrl} size="xs" />
-                                                                <span className="text-[11px] font-semibold text-slate-600 truncate max-w-[80px]" title={displayUser.name}>{displayUser.name}</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1075,7 +1073,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                             <div className="flex-1">
                                                 <div className={`text-[14px] font-bold leading-tight mb-1 transition-colors ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800 group-hover:text-violet-700'}`}>{task.title}</div>
                                                 <div className="flex items-center text-[12px] font-medium text-slate-500 mt-1.5">
-                                                    <Calendar size={12} className={`mr-1.5 ${task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-500' : 'text-slate-400'}`} />
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`mr-1.5 ${task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-500' : 'text-slate-400'}`}><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg>
                                                     <span>{task.dueDate ? formatToArgentineDateTime(task.dueDate) : 'Sin fecha'}</span>
                                                     <span className="text-slate-300 mx-1.5">•</span>
                                                     <span>{
@@ -1093,7 +1091,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                                         <>
                                                             <span className="text-slate-300 mx-1.5">•</span>
                                                             <span className="text-slate-600 font-medium flex items-center gap-1">
-                                                                <User size={10} className="text-slate-400" />
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                                                 {task.contact.fullName}
                                                             </span>
                                                         </>
@@ -1146,7 +1144,11 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
 
             <TaskFormDrawer
                 open={isTaskDrawerOpen}
-                task={editingTask || (deal?._id ? { deal: deal, company: formData.company, contact: formData.primaryContact } as any : undefined)}
+                task={editingTask || {
+                    deal: currentDealData?._id ? currentDealData : (formData.title ? { _id: 'temp', title: formData.title } as any : undefined),
+                    company: formData.company,
+                    contact: formData.primaryContact
+                } as any}
                 onClose={() => {
                     setIsTaskDrawerOpen(false);
                     setEditingTask(null);
