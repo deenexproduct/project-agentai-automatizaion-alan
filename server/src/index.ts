@@ -420,6 +420,21 @@ async function startServer() {
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+
+  // Prevent Puppeteer uncaught errors from crashing the entire Node process
+  process.on('unhandledRejection', (reason: any) => {
+    console.error('⚠️ [unhandledRejection]', reason?.message || reason);
+    // Don't crash — let reconnect logic handle it
+  });
+  process.on('uncaughtException', (err: Error) => {
+    console.error('⚠️ [uncaughtException]', err.message);
+    // Only crash for truly fatal errors (like OOM), not Puppeteer protocol errors
+    if (err.message?.includes('out of memory') || err.message?.includes('ENOMEM')) {
+      console.error('💀 Fatal memory error — shutting down');
+      process.exit(1);
+    }
+    // Otherwise log and continue
+  });
 }
 
 startServer();

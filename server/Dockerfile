@@ -46,8 +46,8 @@ RUN npx tsc
 # Remove devDependencies to slim the image
 RUN npm prune --omit=dev
 
-# Create uploads directory
-RUN mkdir -p uploads
+# Create required directories (wa-sessions will be a Railway Volume mount point)
+RUN mkdir -p uploads wa-sessions
 
 ENV NODE_ENV=production
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome

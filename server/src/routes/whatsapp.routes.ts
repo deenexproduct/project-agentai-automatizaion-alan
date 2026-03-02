@@ -7,6 +7,23 @@ import { ScheduledMessage } from '../models/scheduled-message.model';
 
 const router = Router();
 
+// ── Simple Rate Limiter (per user, no extra dependency) ─────
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX = 10; // 10 requests per minute
+
+function checkRateLimit(userId: string): boolean {
+    const now = Date.now();
+    const entry = rateLimitMap.get(userId);
+    if (!entry || now > entry.resetAt) {
+        rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+        return true;
+    }
+    if (entry.count >= RATE_LIMIT_MAX) return false;
+    entry.count++;
+    return true;
+}
+
 // Configure multer for WhatsApp file uploads
 const waStorage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -21,7 +38,10 @@ const waStorage = multer.diskStorage({
     },
 });
 
-const upload = multer({ storage: waStorage });
+const upload = multer({
+    storage: waStorage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+});
 
 // ── Status & QR ─────────────────────────────────────────────
 
@@ -105,10 +125,23 @@ router.get('/contact/:id/profile-pic', async (req: Request, res: Response) => {
 
 // ── Schedule a Message ──────────────────────────────────────
 
-router.post('/schedule', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/schedule', (req: Request, res: Response, next: Function) => {
+    upload.single('file')(req, res, (err: any) => {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(413).json({ error: 'El archivo excede el límite de 10MB' });
+            }
+            return res.status(400).json({ error: err.message || 'Error al subir archivo' });
+        }
+        next();
+    });
+}, async (req: Request, res: Response) => {
     try {
-        const {
-            chatId,
+        const userId = req.user?._id?.toString();
+        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!checkRateLimit(userId)) return res.status(429).json({ error: 'Demasiadas solicitudes. Esperá un momento.' });
+
+        const { chatId,
             chatName,
             isGroup,
             messageType,
@@ -121,6 +154,15 @@ router.post('/schedule', upload.single('file'), async (req: Request, res: Respon
 
         if (!chatId || !chatName || !messageType || !scheduledAt) {
             return res.status(400).json({ error: 'Missing required fields: chatId, chatName, messageType, scheduledAt' });
+        }
+
+        // Validate that scheduledAt is in the future
+        const scheduledDate = new Date(scheduledAt);
+        if (isNaN(scheduledDate.getTime())) {
+            return res.status(400).json({ error: 'Fecha inválida' });
+        }
+        if (scheduledDate.getTime() <= Date.now()) {
+            return res.status(400).json({ error: 'La fecha de envío debe ser en el futuro' });
         }
 
         // Validate message content
@@ -141,7 +183,7 @@ router.post('/schedule', upload.single('file'), async (req: Request, res: Respon
             textContent: textContent || undefined,
             filePath: req.file ? req.file.path : undefined,
             fileName: req.file ? req.file.originalname : undefined,
-            scheduledAt: new Date(scheduledAt),
+            scheduledAt: scheduledDate,
             isRecurring: isRecurring === 'true' || isRecurring === true,
             cronPattern: cronPattern || undefined,
             recurringLabel: recurringLabel || undefined,
@@ -164,7 +206,7 @@ router.get('/scheduled', async (req: Request, res: Response) => {
     try {
         const messages = await ScheduledMessage.find({
             userId: req.user?._id?.toString(),
-            status: { $in: ['pending', 'failed'] },
+            status: 'pending',
         }).sort({ scheduledAt: 1 });
 
         res.json(messages);
@@ -177,12 +219,22 @@ router.get('/scheduled', async (req: Request, res: Response) => {
 
 router.get('/history', async (req: Request, res: Response) => {
     try {
-        const messages = await ScheduledMessage.find({
-            userId: req.user?._id?.toString(),
-            status: { $in: ['sent', 'failed'] },
-        }).sort({ sentAt: -1, scheduledAt: -1 }).limit(100);
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+        const skip = (page - 1) * limit;
 
-        res.json(messages);
+        const [messages, total] = await Promise.all([
+            ScheduledMessage.find({
+                userId: req.user?._id?.toString(),
+                status: { $in: ['sent', 'failed'] },
+            }).sort({ sentAt: -1, scheduledAt: -1 }).skip(skip).limit(limit),
+            ScheduledMessage.countDocuments({
+                userId: req.user?._id?.toString(),
+                status: { $in: ['sent', 'failed'] },
+            }),
+        ]);
+
+        res.json({ messages, total, page, limit, totalPages: Math.ceil(total / limit) });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -245,14 +297,19 @@ router.post('/retry/:id', async (req: Request, res: Response) => {
     try {
         const userId = req.user?._id?.toString();
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-        const tenant = whatsappService.getTenant(userId);
+        if (!checkRateLimit(userId)) return res.status(429).json({ error: 'Demasiadas solicitudes. Esperá un momento.' });
 
-        const result = await tenant.retryMessage(req.params.id);
-        if (result.success) {
-            res.json({ success: true, message: 'Mensaje enviado exitosamente' });
-        } else {
-            res.status(400).json({ success: false, error: result.error });
-        }
+        const msg = await ScheduledMessage.findOne({ _id: req.params.id, userId });
+        if (!msg) return res.status(404).json({ error: 'Mensaje no encontrado' });
+
+        // Reschedule to 1 minute from now so it goes through the scheduler with proper delays
+        msg.status = 'pending';
+        msg.retryCount = 0;
+        msg.error = undefined;
+        msg.scheduledAt = new Date(Date.now() + 60 * 1000); // 1 minute from now
+        await msg.save();
+
+        res.json({ success: true, message: 'Mensaje reprogramado para enviar en 1 minuto' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

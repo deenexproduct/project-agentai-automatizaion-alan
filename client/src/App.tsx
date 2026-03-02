@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import WhatsAppTab from './components/whatsapp/WhatsAppTab'
 import ResumidorTab from './components/resumidor/ResumidorTab'
 import TeamPermissions from './components/team/TeamPermissions'
 
@@ -363,9 +362,6 @@ function App() {
                     </div>
                 )}
 
-                {activeTab === 'whatsapp' && (
-                    <WhatsAppTab />
-                )}
 
                 {activeTab === 'resumidor' && (
                     <ResumidorTab />

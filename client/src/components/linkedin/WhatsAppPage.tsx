@@ -201,6 +201,20 @@ function SchedulerPanel() {
     const [submitting, setSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [waConnected, setWaConnected] = useState(true);
+
+    // Poll connection status inside SchedulerPanel
+    useEffect(() => {
+        const check = async () => {
+            try {
+                const res = await api.get(`${API_URL}/status`);
+                setWaConnected(res.data.status === 'connected');
+            } catch { setWaConnected(false); }
+        };
+        check();
+        const t = setInterval(check, 10000);
+        return () => clearInterval(t);
+    }, []);
 
     const applyQuickSlot = (minutes: number) => {
         if (minutes === -1) {
@@ -238,7 +252,7 @@ function SchedulerPanel() {
             if (messageType === 'text') formData.append('textContent', textContent);
             if (file) {
                 formData.append('file', file);
-                if (messageType === 'text') formData.append('textContent', textContent);
+                if (messageType === 'file' && textContent) formData.append('textContent', textContent); // caption for file
             }
             if (recurrence && recurrenceOption?.cron) {
                 formData.append('isRecurring', 'true');
@@ -272,6 +286,12 @@ function SchedulerPanel() {
 
     return (
         <div className="max-w-5xl mx-auto space-y-6">
+            {/* Disconnect Warning */}
+            {!waConnected && (
+                <div className="flex items-center gap-3 p-3 rounded-xl text-sm font-medium" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#dc2626' }}>
+                    ⚠️ WhatsApp desconectado — los mensajes se enviarán cuando se reconecte
+                </div>
+            )}
             {/* Quick Slots */}
             <div className="rounded-2xl p-4" style={{ background: 'rgba(124, 58, 237, 0.04)', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
                 <div className="flex items-center gap-2 mb-3">
@@ -632,7 +652,11 @@ function QueuePanel() {
         }
     };
 
-    const cancelMessage = async (id: string) => {
+    const cancelMessage = async (id: string, isRecurring?: boolean) => {
+        if (isRecurring) {
+            const confirmed = window.confirm('Este mensaje es recurrente. ¿Cancelar este y todos los pendientes futuros de la serie?');
+            if (!confirmed) return;
+        }
         try {
             const res = await api.delete(`${API_URL}/scheduled/${id}`);
             if (res.data.success) setMessages(prev => prev.filter(m => m._id !== id));
@@ -791,7 +815,7 @@ function QueuePanel() {
                                                         {isRetryingThis ? '⏳...' : '▶️ Enviar'}
                                                     </button>
                                                 )}
-                                                <button onClick={() => cancelMessage(msg._id)} className="text-xs py-1.5 px-3 rounded-lg font-medium border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all">
+                                                <button onClick={() => cancelMessage(msg._id, msg.isRecurring)} className="text-xs py-1.5 px-3 rounded-lg font-medium border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all">
                                                     <Trash2 size={14} />
                                                 </button>
                                             </div>
@@ -833,8 +857,10 @@ function DashboardPanel() {
 
     const loadData = async () => {
         try {
-            const res = await api.get(`${API_URL}/history`);
-            setSentMessages(res.data);
+            const res = await api.get(`${API_URL}/history?limit=100`);
+            // Handle paginated response
+            const data = res.data;
+            setSentMessages(Array.isArray(data) ? data : data.messages || []);
         } catch {
             console.error('Error loading dashboard');
         } finally {

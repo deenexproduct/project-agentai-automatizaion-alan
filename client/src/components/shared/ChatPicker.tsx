@@ -37,6 +37,7 @@ export default function ChatPicker({
     const [search, setSearch] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
     const [showDropdown, setShowDropdown] = useState(false)
+    const [localFilter, setLocalFilter] = useState<'all' | 'groups' | 'contacts'>(filter)
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     // Default placeholder based on filter
@@ -90,10 +91,11 @@ export default function ChatPicker({
         return () => document.removeEventListener('mousedown', handle)
     }, [])
 
-    // Filter chats by type (groups/contacts) locally, but the text search is remote
+    // Filter chats by type (groups/contacts) locally using localFilter, but the text search is remote
+    const activeFilter = filter !== 'all' ? filter : localFilter
     const filteredChats = chats.filter(c => {
-        if (filter === 'groups') return c.isGroup
-        if (filter === 'contacts') return !c.isGroup
+        if (activeFilter === 'groups') return c.isGroup
+        if (activeFilter === 'contacts') return !c.isGroup
         return true
     })
 
@@ -159,13 +161,17 @@ export default function ChatPicker({
                         {filter === 'all' && chats.length > 0 && (
                             <div className="flex px-2 pt-2 pb-2 gap-1 bg-slate-50/50 backdrop-blur-md border-b border-slate-200/50">
                                 {[
-                                    { key: 'all', label: 'Todos', icon: '📋' },
-                                    { key: 'groups', label: 'Grupos', icon: '👥' },
-                                    { key: 'contacts', label: 'Contactos', icon: '👤' },
+                                    { key: 'all' as const, label: 'Todos', icon: '📋' },
+                                    { key: 'groups' as const, label: 'Grupos', icon: '👥' },
+                                    { key: 'contacts' as const, label: 'Contactos', icon: '👤' },
                                 ].map(tab => (
                                     <button
                                         key={tab.key}
-                                        className="flex-1 text-[12px] font-bold px-3 py-1.5 rounded-[12px] text-slate-500 hover:bg-white hover:text-violet-600 hover:shadow-sm transition-all"
+                                        onClick={() => setLocalFilter(tab.key)}
+                                        className={`flex-1 text-[12px] font-bold px-3 py-1.5 rounded-[12px] transition-all ${localFilter === tab.key
+                                                ? 'bg-white text-violet-600 shadow-sm'
+                                                : 'text-slate-500 hover:bg-white hover:text-violet-600 hover:shadow-sm'
+                                            }`}
                                     >
                                         <span className="mr-1">{tab.icon}</span> {tab.label}
                                     </button>

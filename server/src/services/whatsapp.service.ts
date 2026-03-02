@@ -9,6 +9,11 @@ import { ScheduledMessage, IScheduledMessage } from '../models/scheduled-message
 
 const execFileAsync = promisify(execFile);
 
+// Session path: absolute for Railway Volume, relative for local dev
+const WA_SESSIONS_DIR = process.env.NODE_ENV === 'production'
+    ? '/app/wa-sessions'
+    : path.join(__dirname, '../../wa-sessions');
+
 // ============================================================
 // WhatsApp Tenant — Connection, Sending, Scheduling per User
 // ============================================================
@@ -19,16 +24,19 @@ export class WhatsAppTenant {
     private status: 'disconnected' | 'qr' | 'connecting' | 'connected' = 'disconnected';
     private schedulerJob: cron.ScheduledTask | null = null;
     public readonly userId: string;
+    private isInitializing = false;
 
     // ── Session Persistence State ────────────────────────────────
     private reconnectAttempts = 0;
     private readonly MAX_RECONNECT_ATTEMPTS = 10;
     private isReconnecting = false;
+    private lastReconnectFailTime: Date | null = null;
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private connectedSince: Date | null = null;
     private totalReconnects = 0;
     private preventiveRestartJob: cron.ScheduledTask | null = null;
     private lastPreventiveRestart: Date | null = null;
+    private connectingTimeout: NodeJS.Timeout | null = null;
 
     constructor(userId: string) {
         this.userId = userId;
@@ -50,15 +58,16 @@ export class WhatsAppTenant {
     // ── Initialization ──────────────────────────────────────────
 
     async initialize(): Promise<void> {
-        if (this.status !== 'disconnected') {
+        if (this.status !== 'disconnected' || this.isInitializing) {
             return;
         }
+        this.isInitializing = true;
         this.status = 'connecting';
         console.log(`📱 [User ${this.userId}] Initializing WhatsApp client...`);
 
         this.client = new Client({
             authStrategy: new LocalAuth({
-                dataPath: path.join(__dirname, '../../wa-sessions', this.userId),
+                dataPath: path.join(WA_SESSIONS_DIR, this.userId),
             }),
             // ── Memory optimization ──────────────────────────────────
             webVersionCache: {
@@ -104,14 +113,21 @@ export class WhatsAppTenant {
         // Ready event
         this.client.on('ready', () => {
             console.log(`✅ [User ${this.userId}] WhatsApp client ready!`);
+            // Clear connecting timeout — we made it
+            if (this.connectingTimeout) {
+                clearTimeout(this.connectingTimeout);
+                this.connectingTimeout = null;
+            }
             this.status = 'connected';
             this.qrCode = null;
             this.reconnectAttempts = 0;
             this.isReconnecting = false;
+            this.isInitializing = false;
             this.connectedSince = new Date();
             this.startKeepAlive();
             this.startPreventiveRestart();
-            // Scheduler already running from constructor, no need to start again
+            // Ensure scheduler is running (might have been stopped by reset)
+            this.startScheduler();
             this.refreshChats();
         });
 
@@ -120,12 +136,29 @@ export class WhatsAppTenant {
             console.log(`🔐 [User ${this.userId}] WhatsApp authenticated`);
             this.status = 'connecting';
             this.refreshChats();
+
+            // Safety timeout: if `ready` doesn't fire within 2 minutes, force reconnect
+            if (this.connectingTimeout) clearTimeout(this.connectingTimeout);
+            this.connectingTimeout = setTimeout(async () => {
+                if (this.status === 'connecting') {
+                    console.warn(`⚠️ [User ${this.userId}] Stuck in 'connecting' for 2min — forcing reconnect`);
+                    if (this.client) {
+                        try { await this.client.destroy(); } catch { }
+                        this.client = null;
+                    }
+                    this.status = 'disconnected';
+                    this.isInitializing = false;
+                    this.connectingTimeout = null;
+                    this.attemptReconnect('connecting_timeout');
+                }
+            }, 120_000); // 2 minutes
         });
 
         // Auth failure
         this.client.on('auth_failure', (msg: string) => {
             console.error(`❌ [User ${this.userId}] WhatsApp auth failure:`, msg);
             this.status = 'disconnected';
+            this.isInitializing = false;
             this.deleteSessionData();
         });
 
@@ -149,11 +182,53 @@ export class WhatsAppTenant {
         // State change
         this.client.on('change_state', (state: string) => {
             console.log(`📱 [User ${this.userId}] WhatsApp state changed:`, state);
-            if (state === 'CONFLICT' || state === 'UNLAUNCHED' || state === 'UNPAIRED') {
-                console.warn(`⚠️ [User ${this.userId}] Problematic state detected: ${state} — triggering reconnect`);
+
+            if (state === 'CONFLICT') {
+                // CONFLICT = WhatsApp Web opened elsewhere temporarily
+                // Wait 30s and re-check — usually resolves itself
+                console.warn(`⚠️ [User ${this.userId}] CONFLICT detected — waiting 30s for auto-resolution...`);
+                setTimeout(async () => {
+                    try {
+                        if (!this.client) return;
+                        const currentState = await this.client.getState();
+                        if (currentState !== 'CONNECTED') {
+                            console.warn(`⚠️ [User ${this.userId}] Still in bad state (${currentState}) after CONFLICT — reconnecting`);
+                            this.stopKeepAlive();
+                            this.attemptReconnect('conflict_persistent');
+                        } else {
+                            console.log(`✅ [User ${this.userId}] CONFLICT resolved — back to CONNECTED`);
+                        }
+                    } catch { this.attemptReconnect('conflict_check_error'); }
+                }, 30000);
+            } else if (state === 'UNPAIRED') {
+                // UNPAIRED can be a false positive during reconnections
+                // Wait 60s and re-check before wiping session
+                console.warn(`⚠️ [User ${this.userId}] UNPAIRED detected — waiting 60s to confirm...`);
+                setTimeout(async () => {
+                    try {
+                        if (!this.client) {
+                            // Client was already destroyed, session is truly gone
+                            this.deleteSessionData();
+                            return;
+                        }
+                        const currentState = await this.client.getState();
+                        if (currentState === 'CONNECTED') {
+                            console.log(`✅ [User ${this.userId}] UNPAIRED was false positive — back to CONNECTED`);
+                            return;
+                        }
+                        // Confirmed UNPAIRED — delete session and reconnect
+                        console.warn(`🔴 [User ${this.userId}] UNPAIRED confirmed after 60s — deleting session`);
+                        this.stopKeepAlive();
+                        this.deleteSessionData();
+                        this.attemptReconnect('unpaired_confirmed');
+                    } catch {
+                        this.deleteSessionData();
+                        this.attemptReconnect('unpaired_check_error');
+                    }
+                }, 60000);
+            } else if (state === 'UNLAUNCHED') {
+                console.warn(`⚠️ [User ${this.userId}] UNLAUNCHED — triggering reconnect`);
                 this.stopKeepAlive();
-                // Keep scheduler running — it will resume sending once reconnected
-                if (state === 'UNPAIRED') this.deleteSessionData();
                 this.attemptReconnect(state);
             }
         });
@@ -163,13 +238,16 @@ export class WhatsAppTenant {
         } catch (error: any) {
             console.error(`❌ [User ${this.userId}] WhatsApp init error:`, error.message);
             this.status = 'disconnected';
+            this.isInitializing = false;
+            // Auto-retry initialization instead of dying silently
+            this.attemptReconnect('init_failure');
         }
     }
 
     // ── Session Cleanup ─────────────────────────────────────────
 
     public deleteSessionData() {
-        const sessionPath = path.join(__dirname, '../../wa-sessions', this.userId);
+        const sessionPath = path.join(WA_SESSIONS_DIR, this.userId);
         if (fs.existsSync(sessionPath)) {
             try {
                 fs.rmSync(sessionPath, { recursive: true, force: true });
@@ -185,6 +263,7 @@ export class WhatsAppTenant {
         this.stopPreventiveRestart();
         this.stopKeepAlive();
         this.stopScheduler();
+        if (this.connectingTimeout) { clearTimeout(this.connectingTimeout); this.connectingTimeout = null; }
         if (this.client) {
             try { await this.client.destroy(); } catch (err) { }
             this.client = null;
@@ -192,6 +271,7 @@ export class WhatsAppTenant {
         this.status = 'disconnected';
         this.connectedSince = null;
         this.isReconnecting = false;
+        this.isInitializing = false;
         this.reconnectAttempts = 0;
         this.deleteSessionData();
 
@@ -204,7 +284,7 @@ export class WhatsAppTenant {
 
     getStatus(): { status: string; qr: string | null } {
         // Auto-initialize if someone asks for status and we are fully disconnected
-        if (this.status === 'disconnected') {
+        if (this.status === 'disconnected' && !this.isInitializing) {
             this.initialize().catch(err => console.error(err));
         }
 
@@ -271,15 +351,10 @@ export class WhatsAppTenant {
     async getChats(limit: number = 50, search?: string): Promise<{ id: string; name: string; isGroup: boolean }[]> {
         if (!this.client || !this.isConnected()) return [];
 
+        // If cache is empty, trigger refresh in background but return immediately
         if (!this.chatsCache || this.chatsCache.length === 0) {
             if (!this.isFetchingChats) this.refreshChats();
-            let retries = 0;
-            // Wait up to 60 seconds for massive contact histories
-            while (this.isFetchingChats && retries < 60) {
-                await this.delay(1000);
-                if (this.chatsCache && this.chatsCache.length > 0) break;
-                retries++;
-            }
+            return []; // Return empty — frontend will poll again
         }
 
         let results = this.chatsCache || [];
@@ -395,6 +470,11 @@ export class WhatsAppTenant {
             msg.sentAt = new Date();
             msg.error = undefined;
             await msg.save();
+
+            // Cleanup uploaded file after successful send (only for non-recurring)
+            if (msg.filePath && !msg.isRecurring && fs.existsSync(msg.filePath)) {
+                try { fs.unlinkSync(msg.filePath); } catch { }
+            }
         } catch (error: any) {
             const errorMsg = error.message || error.toString() || 'Error desconocido';
             msg.retryCount += 1;
@@ -402,6 +482,10 @@ export class WhatsAppTenant {
 
             if (msg.retryCount >= 3) {
                 msg.status = 'failed';
+                // Cleanup file for permanently failed non-recurring messages
+                if (msg.filePath && !msg.isRecurring && fs.existsSync(msg.filePath)) {
+                    try { fs.unlinkSync(msg.filePath); } catch { }
+                }
             }
             await msg.save();
         }
@@ -461,27 +545,72 @@ export class WhatsAppTenant {
             const parts = cronPattern.split(' ');
             if (parts.length !== 5) return null;
             const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-            const now = new Date();
-            const next = new Date();
-            next.setSeconds(0);
-            next.setMilliseconds(0);
-            if (minute !== '*') next.setMinutes(parseInt(minute));
-            if (hour !== '*') next.setHours(parseInt(hour));
+
+            // Get current time in Argentina timezone
+            const argFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hour12: false,
+                weekday: 'short',
+            });
+            const argParts = argFormatter.formatToParts(new Date());
+            const getPart = (type: string) => argParts.find(p => p.type === type)?.value || '0';
+            const nowArgYear = parseInt(getPart('year'));
+            const nowArgMonth = parseInt(getPart('month')) - 1;
+            const nowArgDay = parseInt(getPart('day'));
+            const nowArgHour = parseInt(getPart('hour'));
+            const nowArgMinute = parseInt(getPart('minute'));
+            const nowArgWeekday = new Date().toLocaleDateString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', weekday: 'short' });
+            const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+            const nowArgDayOfWeek = dayMap[nowArgWeekday] ?? 0;
+
+            // Build the target time in Argentina, then convert to UTC Date
+            const targetMinute = minute !== '*' ? parseInt(minute) : nowArgMinute;
+            const targetHour = hour !== '*' ? parseInt(hour) : nowArgHour;
+            let targetDay = nowArgDay;
+            let targetMonth = nowArgMonth;
+            let targetYear = nowArgYear;
+
             if (dayOfWeek !== '*') {
-                const targetDay = parseInt(dayOfWeek);
-                const currentDay = now.getDay();
-                let daysUntil = targetDay - currentDay;
-                if (daysUntil <= 0) daysUntil += 7;
-                next.setDate(now.getDate() + daysUntil);
+                const targetDayOfWeek = parseInt(dayOfWeek);
+                let daysUntil = targetDayOfWeek - nowArgDayOfWeek;
+                if (daysUntil < 0) daysUntil += 7;
+                if (daysUntil === 0) {
+                    // Same day — check if time already passed
+                    const nowTimeMinutes = nowArgHour * 60 + nowArgMinute;
+                    const targetTimeMinutes = targetHour * 60 + targetMinute;
+                    if (targetTimeMinutes <= nowTimeMinutes) daysUntil = 7;
+                }
+                targetDay += daysUntil;
             } else if (dayOfMonth !== '*') {
-                const targetDate = parseInt(dayOfMonth);
-                next.setDate(targetDate);
-                if (next <= now) next.setMonth(next.getMonth() + 1);
+                targetDay = parseInt(dayOfMonth);
+                // If the target day already passed this month
+                const nowTimeMinutes = nowArgHour * 60 + nowArgMinute;
+                const targetTimeMinutes = targetHour * 60 + targetMinute;
+                if (targetDay < nowArgDay || (targetDay === nowArgDay && targetTimeMinutes <= nowTimeMinutes)) {
+                    targetMonth += 1;
+                    if (targetMonth > 11) { targetMonth = 0; targetYear += 1; }
+                }
             } else {
-                if (next <= now) next.setDate(next.getDate() + 1);
+                // Daily — if today's time passed, go to tomorrow
+                const nowTimeMinutes = nowArgHour * 60 + nowArgMinute;
+                const targetTimeMinutes = targetHour * 60 + targetMinute;
+                if (targetTimeMinutes <= nowTimeMinutes) targetDay += 1;
             }
-            if (next <= now) next.setDate(next.getDate() + 7);
-            return next;
+
+            // Construct the date string in Argentina timezone and parse it
+            // Using a workaround: create date in UTC then adjust for Argentina offset (-3)
+            const argDate = new Date(targetYear, targetMonth, targetDay, targetHour, targetMinute, 0, 0);
+            // Convert from Argentina time to UTC by adding 3 hours
+            const utcDate = new Date(argDate.getTime() + 3 * 60 * 60 * 1000);
+
+            // Safety check: if somehow still in the past, skip ahead
+            if (utcDate <= new Date()) {
+                if (dayOfWeek !== '*') utcDate.setDate(utcDate.getDate() + 7);
+                else utcDate.setDate(utcDate.getDate() + 1);
+            }
+
+            return utcDate;
         } catch {
             return null;
         }
@@ -541,7 +670,17 @@ export class WhatsAppTenant {
     private async attemptReconnect(reason: string): Promise<void> {
         if (this.isReconnecting) return;
         if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
-            console.error(`🔴 [User ${this.userId}] Max reconnect attempts reached. Manual restart required.`);
+            // Cooldown reset: after 30 minutes, reset counter and try again
+            if (!this.lastReconnectFailTime) {
+                this.lastReconnectFailTime = new Date();
+                console.error(`🔴 [User ${this.userId}] Max reconnect attempts reached. Will retry after cooldown.`);
+                setTimeout(() => {
+                    console.log(`🔄 [User ${this.userId}] Cooldown expired — resetting reconnect counter.`);
+                    this.reconnectAttempts = 0;
+                    this.lastReconnectFailTime = null;
+                    this.attemptReconnect('cooldown_reset');
+                }, 30 * 60 * 1000); // 30 minutes
+            }
             return;
         }
         this.isReconnecting = true;
@@ -559,6 +698,7 @@ export class WhatsAppTenant {
         }
 
         this.status = 'disconnected'; // explicitly reset
+        this.isInitializing = false;  // reset to allow re-initialization
         this.isReconnecting = false;  // release lock before calling initialize which checks it
 
         try {
@@ -580,7 +720,7 @@ export class WhatsAppTenant {
                     this.stopKeepAlive();
                     this.status = 'disconnected';
                     this.connectedSince = null;
-                    this.stopScheduler();
+                    // DO NOT stop scheduler — it will resume sending once reconnected
                     this.attemptReconnect(`heartbeat_state_${state}`);
                     return;
                 }
@@ -593,7 +733,7 @@ export class WhatsAppTenant {
                     this.stopKeepAlive();
                     this.status = 'disconnected';
                     this.connectedSince = null;
-                    this.stopScheduler();
+                    // DO NOT stop scheduler — it will resume sending once reconnected
                     this.attemptReconnect('heartbeat_error');
                 }
             }
@@ -630,17 +770,25 @@ export class WhatsAppTenant {
     }
 
     private async doPreventiveRestart(): Promise<void> {
+        console.log(`🔄 [User ${this.userId}] Starting preventive restart...`);
         this.stopKeepAlive();
-        this.stopScheduler();
+        // DO NOT stop scheduler — keep it running to send messages after restart
+
+        // Give Puppeteer time to flush session data to disk (Railway Volume)
+        await this.delay(3000);
+
         if (this.client) {
             try { await this.client.destroy(); } catch (err) { }
             this.client = null;
         }
         this.status = 'disconnected';
+        this.isInitializing = false;
         this.connectedSince = null;
         this.lastPreventiveRestart = new Date();
         if (global.gc) global.gc();
-        await this.delay(5000);
+
+        // Longer delay to let filesystem sync to volume
+        await this.delay(8000);
         try {
             await this.initialize();
         } catch (err: any) {
@@ -710,6 +858,7 @@ export class WhatsAppTenant {
         this.stopPreventiveRestart();
         this.stopKeepAlive();
         this.stopScheduler();
+        if (this.connectingTimeout) { clearTimeout(this.connectingTimeout); this.connectingTimeout = null; }
         if (this.client) {
             try { await this.client.destroy(); } catch (err) { }
             this.client = null;
@@ -725,6 +874,15 @@ export class WhatsAppTenant {
 
 export class WhatsAppManager {
     private tenants = new Map<string, WhatsAppTenant>();
+    private cleanupJob: cron.ScheduledTask | null = null;
+
+    constructor() {
+        // Weekly cleanup cron: every Sunday at 3:00 AM
+        this.cleanupJob = cron.schedule('0 3 * * 0', async () => {
+            await this.cleanupOldMessages();
+            await this.cleanupInactiveTenants();
+        });
+    }
 
     getTenant(userId: string): WhatsAppTenant {
         if (!this.tenants.has(userId)) {
@@ -736,6 +894,7 @@ export class WhatsAppManager {
 
     async destroyAll(): Promise<void> {
         console.log('🛑 Shutting down all WhatsApp tenants...');
+        if (this.cleanupJob) { this.cleanupJob.stop(); this.cleanupJob = null; }
         for (const tenant of this.tenants.values()) {
             await tenant.destroy();
         }
@@ -770,15 +929,70 @@ export class WhatsAppManager {
                 status: 'pending'
             });
             console.log(`📡 Found ${userIdsWithTasks.length} user(s) with pending messages.`);
-            for (const userId of userIdsWithTasks) {
-                if (userId) {
-                    const tenant = this.getTenant(userId.toString());
-                    // This kicks off async puppeteer launch, which might take ~10s each
-                    tenant.initialize().catch(console.error);
+
+            // Limit concurrency: initialize max 3 tenants at a time
+            const CONCURRENT_LIMIT = 3;
+            const DELAY_BETWEEN_CHUNKS_MS = 5000;
+
+            for (let i = 0; i < userIdsWithTasks.length; i += CONCURRENT_LIMIT) {
+                const chunk = userIdsWithTasks.slice(i, i + CONCURRENT_LIMIT);
+                const promises = chunk
+                    .filter((uid: any) => !!uid)
+                    .map((uid: any) => {
+                        const tenant = this.getTenant(uid.toString());
+                        return tenant.initialize().catch(console.error);
+                    });
+
+                await Promise.allSettled(promises);
+
+                // Delay between chunks to let memory stabilize
+                if (i + CONCURRENT_LIMIT < userIdsWithTasks.length) {
+                    console.log(`⏳ Waiting ${DELAY_BETWEEN_CHUNKS_MS / 1000}s before next batch...`);
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CHUNKS_MS));
+                }
+            }
+
+            console.log(`✅ All ${userIdsWithTasks.length} tenant(s) initialization started.`);
+        } catch (error) {
+            console.error('❌ Error initializing active WhatsApp tenants:', error);
+        }
+    }
+
+    // ── TTL Cleanup: delete messages older than 90 days ──────────
+    private async cleanupOldMessages(): Promise<void> {
+        try {
+            const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+            const result = await ScheduledMessage.deleteMany({
+                status: { $in: ['sent', 'failed', 'cancelled'] },
+                createdAt: { $lt: cutoffDate },
+            });
+            if (result.deletedCount > 0) {
+                console.log(`🗑️ [Cleanup] Deleted ${result.deletedCount} messages older than 90 days`);
+            }
+        } catch (error) {
+            console.error('❌ [Cleanup] Error cleaning old messages:', error);
+        }
+    }
+
+    // ── Inactive Tenant Cleanup ─────────────────────────────────
+    private async cleanupInactiveTenants(): Promise<void> {
+        try {
+            for (const [userId, tenant] of this.tenants.entries()) {
+                const health = tenant.getHealthInfo();
+                if (health.status === 'disconnected') {
+                    const pendingCount = await ScheduledMessage.countDocuments({
+                        userId,
+                        status: 'pending',
+                    });
+                    if (pendingCount === 0) {
+                        console.log(`🧹 [Cleanup] Destroying inactive tenant for user ${userId}`);
+                        await tenant.destroy();
+                        this.tenants.delete(userId);
+                    }
                 }
             }
         } catch (error) {
-            console.error('❌ Error initializing active WhatsApp tenants:', error);
+            console.error('❌ [Cleanup] Error cleaning inactive tenants:', error);
         }
     }
 }
