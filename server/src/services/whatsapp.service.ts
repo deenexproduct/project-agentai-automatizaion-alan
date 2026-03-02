@@ -480,6 +480,56 @@ export class WhatsAppTenant {
             msg.retryCount += 1;
             msg.error = errorMsg;
 
+            // Detect Puppeteer/connection death errors → immediate reconnect + fast retry
+            const isPuppeteerDeath = errorMsg.includes('Protocol error') ||
+                errorMsg.includes('Target closed') ||
+                errorMsg.includes('Execution context') ||
+                errorMsg.includes('Session closed') ||
+                errorMsg.includes('not connected');
+
+            if (isPuppeteerDeath && msg.retryCount < 3) {
+                console.warn(`⚡ [User ${this.userId}] Puppeteer connection dead — triggering reconnect + fast retry for msg ${msg._id}`);
+                await msg.save();
+
+                // Trigger reconnect
+                this.status = 'disconnected';
+                this.connectedSince = null;
+                this.stopKeepAlive();
+                this.attemptReconnect('send_puppeteer_death');
+
+                // Wait up to 20s for reconnection
+                for (let wait = 0; wait < 20; wait++) {
+                    await this.delay(1000);
+                    if (this.isConnected()) break;
+                }
+
+                // If reconnected, retry immediately
+                if (this.isConnected()) {
+                    console.log(`⚡ [User ${this.userId}] Reconnected — retrying msg ${msg._id} immediately`);
+                    try {
+                        if (msg.messageType === 'text' && msg.textContent) {
+                            await this.sendTextMessage(msg.chatId, msg.textContent);
+                        } else if ((msg.messageType === 'audio' || msg.messageType === 'file') && msg.filePath) {
+                            await this.sendMediaMessage(msg.chatId, msg.filePath, msg.textContent, msg.messageType === 'audio');
+                        }
+                        msg.status = 'sent';
+                        msg.sentAt = new Date();
+                        msg.error = undefined;
+                        await msg.save();
+                        if (msg.filePath && !msg.isRecurring && fs.existsSync(msg.filePath)) {
+                            try { fs.unlinkSync(msg.filePath); } catch { }
+                        }
+                        return; // Success on fast retry
+                    } catch (retryErr: any) {
+                        msg.retryCount += 1;
+                        msg.error = retryErr.message || 'Error en reintento rápido';
+                        if (msg.retryCount >= 3) msg.status = 'failed';
+                        await msg.save();
+                    }
+                }
+                return; // Already saved above
+            }
+
             if (msg.retryCount >= 3) {
                 msg.status = 'failed';
                 // Cleanup file for permanently failed non-recurring messages

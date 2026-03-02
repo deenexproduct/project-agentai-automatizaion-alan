@@ -17,6 +17,7 @@ interface ScheduledMsg {
     textContent?: string;
     fileName?: string;
     scheduledAt: string;
+    sentAt?: string;
     isRecurring: boolean;
     recurringLabel?: string;
     status: string;
@@ -173,6 +174,7 @@ function SchedulerPanel() {
     const [audioMode, setAudioMode] = useState<'record' | 'upload'>('record');
     const [textContent, setTextContent] = useState('');
     const [file, setFile] = useState<File | null>(null);
+    const [isOptimizing, setIsOptimizing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -376,13 +378,44 @@ function SchedulerPanel() {
                     {messageType === 'text' && (
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mensaje</label>
-                            <textarea
-                                value={textContent}
-                                onChange={(e) => setTextContent(e.target.value)}
-                                placeholder="Escribí tu mensaje..."
-                                rows={5}
-                                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none resize-none text-sm"
-                            />
+                            <div className="relative">
+                                <textarea
+                                    value={textContent}
+                                    onChange={(e) => setTextContent(e.target.value)}
+                                    placeholder="Escribí tu mensaje..."
+                                    rows={5}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none resize-none text-sm pr-12"
+                                />
+                                {textContent.trim().length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            if (isOptimizing || !textContent.trim()) return;
+                                            setIsOptimizing(true);
+                                            try {
+                                                const res = await api.post('/optimizer/optimize', { text: textContent });
+                                                if (res.data.optimized) setTextContent(res.data.optimized);
+                                            } catch (err) {
+                                                console.error('Optimizer error:', err);
+                                            } finally {
+                                                setIsOptimizing(false);
+                                            }
+                                        }}
+                                        disabled={isOptimizing}
+                                        title="Optimizar texto con IA"
+                                        className="absolute bottom-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110"
+                                        style={{
+                                            background: isOptimizing ? 'rgba(124,58,237,0.15)' : 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                                            boxShadow: isOptimizing ? 'none' : '0 2px 8px rgba(124,58,237,0.3)',
+                                        }}
+                                    >
+                                        {isOptimizing
+                                            ? <Loader2 size={14} className="animate-spin text-violet-600" />
+                                            : <Zap size={14} className="text-white" />
+                                        }
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -626,8 +659,9 @@ function QueuePanel() {
     const [messages, setMessages] = useState<ScheduledMsg[]>([]);
     const [loading, setLoading] = useState(true);
     const [retrying, setRetrying] = useState<string | null>(null);
-    const [filter, setFilter] = useState<'all' | 'today' | 'recurring' | 'failed'>('all');
+    const [filter, setFilter] = useState<'all' | 'today' | 'recurring' | 'failed' | 'sent'>('all');
     const [, setTick] = useState(0);
+    const [sentMessages, setSentMessages] = useState<ScheduledMsg[]>([]);
 
     useEffect(() => {
         loadScheduled();
@@ -650,6 +684,13 @@ function QueuePanel() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const loadSent = async () => {
+        try {
+            const res = await api.get(`${API_URL}/history?limit=50`);
+            setSentMessages(res.data.messages || []);
+        } catch { }
     };
 
     const cancelMessage = async (id: string, isRecurring?: boolean) => {
@@ -701,12 +742,14 @@ function QueuePanel() {
         switch (type) { case 'text': return '💬'; case 'audio': return '🎵'; case 'file': return '📎'; default: return '📨'; }
     };
 
-    const filtered = messages.filter(m => {
-        if (filter === 'today') return new Date(m.scheduledAt).toDateString() === new Date().toDateString();
-        if (filter === 'recurring') return m.isRecurring;
-        if (filter === 'failed') return m.status === 'failed';
-        return true;
-    });
+    const filtered = filter === 'sent'
+        ? sentMessages
+        : messages.filter(m => {
+            if (filter === 'today') return new Date(m.scheduledAt).toDateString() === new Date().toDateString();
+            if (filter === 'recurring') return m.isRecurring;
+            if (filter === 'failed') return m.status === 'failed';
+            return true;
+        });
 
     const pendingCount = messages.filter(m => m.status === 'pending').length;
     const failedCount = messages.filter(m => m.status === 'failed').length;
@@ -742,10 +785,14 @@ function QueuePanel() {
                     { id: 'today' as const, label: 'Hoy' },
                     { id: 'recurring' as const, label: '🔁 Recurrentes' },
                     { id: 'failed' as const, label: '⚠️ Fallidos' },
+                    { id: 'sent' as const, label: '✅ Enviados' },
                 ]).map(f => (
                     <button
                         key={f.id}
-                        onClick={() => setFilter(f.id)}
+                        onClick={() => {
+                            setFilter(f.id);
+                            if (f.id === 'sent') loadSent();
+                        }}
                         className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                         style={{
                             background: filter === f.id ? '#7c3aed' : '#f1f5f9',
@@ -773,13 +820,14 @@ function QueuePanel() {
                     <div className="space-y-4">
                         {filtered.map(msg => {
                             const isFailed = msg.status === 'failed';
+                            const isSent = msg.status === 'sent';
                             const isRetryingThis = retrying === msg._id;
 
                             return (
                                 <div key={msg._id} className="relative">
                                     {/* Timeline dot */}
                                     <div className="absolute -left-6 top-5 w-3 h-3 rounded-full border-2 border-white z-10"
-                                        style={{ background: isFailed ? '#ef4444' : '#7c3aed', boxShadow: `0 0 8px ${isFailed ? 'rgba(239,68,68,0.4)' : 'rgba(124,58,237,0.4)'}` }}
+                                        style={{ background: isSent ? '#22c55e' : isFailed ? '#ef4444' : '#7c3aed', boxShadow: `0 0 8px ${isSent ? 'rgba(34,197,94,0.4)' : isFailed ? 'rgba(239,68,68,0.4)' : 'rgba(124,58,237,0.4)'}` }}
                                     />
 
                                     <div className="rounded-xl p-4 transition-all hover:shadow-md" style={{ background: 'white', border: `1px solid ${isFailed ? 'rgba(239,68,68,0.2)' : 'rgba(0,0,0,0.06)'}` }}>
@@ -795,8 +843,10 @@ function QueuePanel() {
                                                         {msg.isRecurring && <span className="text-xs bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full font-medium">🔁 {msg.recurringLabel}</span>}
                                                     </div>
                                                     <div className="flex items-center gap-2 mt-0.5">
-                                                        <p className="text-sm text-violet-600 font-medium">{formatDate(msg.scheduledAt)}</p>
-                                                        {!isFailed && (
+                                                        <p className={`text-sm font-medium ${isSent ? 'text-green-600' : 'text-violet-600'}`}>
+                                                            {isSent ? `Enviado ${msg.sentAt ? formatDate(msg.sentAt) : formatDate(msg.scheduledAt)}` : formatDate(msg.scheduledAt)}
+                                                        </p>
+                                                        {!isFailed && !isSent && (
                                                             <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(124,58,237,0.08)', color: '#7c3aed' }}>
                                                                 ⏱️ {getCountdown(msg.scheduledAt)}
                                                             </span>
@@ -806,7 +856,11 @@ function QueuePanel() {
                                             </div>
 
                                             <div className="flex items-center gap-1.5 shrink-0">
-                                                {isFailed ? (
+                                                {isSent ? (
+                                                    <span className="text-xs py-1.5 px-3 rounded-lg font-semibold bg-green-50 text-green-600 border border-green-200">
+                                                        ✅ Enviado
+                                                    </span>
+                                                ) : isFailed ? (
                                                     <button onClick={() => retryMessage(msg._id)} disabled={isRetryingThis} className="text-xs py-1.5 px-3 rounded-lg font-semibold transition-all bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
                                                         {isRetryingThis ? '⏳...' : '🔄 Reintentar'}
                                                     </button>
@@ -815,9 +869,11 @@ function QueuePanel() {
                                                         {isRetryingThis ? '⏳...' : '▶️ Enviar'}
                                                     </button>
                                                 )}
-                                                <button onClick={() => cancelMessage(msg._id, msg.isRecurring)} className="text-xs py-1.5 px-3 rounded-lg font-medium border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all">
-                                                    <Trash2 size={14} />
-                                                </button>
+                                                {!isSent && (
+                                                    <button onClick={() => cancelMessage(msg._id, msg.isRecurring)} className="text-xs py-1.5 px-3 rounded-lg font-medium border border-slate-200 text-slate-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all">
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
 
