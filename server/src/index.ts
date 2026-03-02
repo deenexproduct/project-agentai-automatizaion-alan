@@ -70,7 +70,7 @@ app.use(cors({
 }));
 
 app.use((req, res, next) => {
-  console.log(`[REQUEST] ${req.method} ${req.url}`);
+  logger.info(`[REQUEST] ${req.method} ${req.url}`);
   next();
 });
 app.use(express.json({ limit: '10mb' }));
@@ -106,6 +106,7 @@ app.get('/api/history', authMiddleware, async (req: any, res) => {
 // ── Transcription: Groq API (cloud) or Whisper CLI (local) ──────────
 // Priority: Groq API if GROQ_API_KEY is set → Local Whisper (dynamic path)
 import Groq from 'groq-sdk';
+import { logger } from './utils/logger';
 
 let _groqInstance: Groq | null = null;
 function getGroqForTranscription(): Groq {
@@ -123,11 +124,11 @@ async function findWhisperPath(): Promise<string | null> {
     const resolved = stdout.trim();
     if (resolved) {
       _cachedWhisperPath = resolved;
-      console.log(`🎤 [TRANSCRIBE] Whisper CLI found at: ${resolved}`);
+      logger.info(`🎤 [TRANSCRIBE] Whisper CLI found at: ${resolved}`);
       return resolved;
     }
   } catch { /* Whisper not installed */ }
-  console.warn('🎤 [TRANSCRIBE] ⚠️ Whisper CLI not found in PATH');
+  logger.warn('🎤 [TRANSCRIBE] ⚠️ Whisper CLI not found in PATH');
   return null;
 }
 
@@ -135,16 +136,16 @@ async function convertToWav(audioPath: string): Promise<string> {
   const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
   try {
     await execAsync(`ffmpeg -y -i "${audioPath}" -ar 16000 -ac 1 "${wavPath}" 2>/dev/null`);
-    console.log(`🎤 [TRANSCRIBE] FFmpeg conversion OK → ${path.basename(wavPath)}`);
+    logger.info(`🎤 [TRANSCRIBE] FFmpeg conversion OK → ${path.basename(wavPath)}`);
   } catch {
-    console.log('🎤 [TRANSCRIBE] FFmpeg conversion skipped, using original file');
+    logger.info('🎤 [TRANSCRIBE] FFmpeg conversion skipped, using original file');
   }
   return fs.existsSync(wavPath) ? wavPath : audioPath;
 }
 
 async function transcribeWithGroqAPI(audioPath: string): Promise<string> {
   const t0 = Date.now();
-  console.log(`🎤 [TRANSCRIBE] Using Groq API (whisper-large-v3-turbo)...`);
+  logger.info(`🎤 [TRANSCRIBE] Using Groq API (whisper-large-v3-turbo)...`);
   const fileToSend = await convertToWav(audioPath);
   const groq = getGroqForTranscription();
   const audioFile = fs.createReadStream(fileToSend);
@@ -162,7 +163,7 @@ async function transcribeWithGroqAPI(audioPath: string): Promise<string> {
   }
 
   const text = typeof transcription === 'string' ? transcription : (transcription as any).text || '';
-  console.log(`🎤 [TRANSCRIBE] Groq API OK (${Date.now() - t0}ms) → "${text.substring(0, 60)}..."`);
+  logger.info(`🎤 [TRANSCRIBE] Groq API OK (${Date.now() - t0}ms) → "${text.substring(0, 60)}..."`);
   return text.trim() || 'No se detectó texto';
 }
 
@@ -173,7 +174,7 @@ async function transcribeWithWhisperLocal(audioPath: string): Promise<string> {
     throw new Error('Whisper CLI not available and no GROQ_API_KEY configured');
   }
 
-  console.log(`🎤 [TRANSCRIBE] Using Whisper CLI at ${whisperPath}...`);
+  logger.info(`🎤 [TRANSCRIBE] Using Whisper CLI at ${whisperPath}...`);
   const fileToTranscribe = await convertToWav(audioPath);
 
   await execAsync(
@@ -190,7 +191,7 @@ async function transcribeWithWhisperLocal(audioPath: string): Promise<string> {
     if (fileToTranscribe !== audioPath) {
       try { fs.unlinkSync(fileToTranscribe); } catch { }
     }
-    console.log(`🎤 [TRANSCRIBE] Whisper CLI OK (${Date.now() - t0}ms) → "${text.substring(0, 60)}..."`);
+    logger.info(`🎤 [TRANSCRIBE] Whisper CLI OK (${Date.now() - t0}ms) → "${text.substring(0, 60)}..."`);
     return text || 'No se detectó texto';
   }
   return 'No se pudo obtener la transcripción';
@@ -203,15 +204,15 @@ async function transcribeWithWhisper(audioPath: string): Promise<string> {
       try {
         return await transcribeWithGroqAPI(audioPath);
       } catch (groqErr: any) {
-        console.error(`🎤 [TRANSCRIBE] ❌ Groq API failed: ${groqErr.message}`);
-        console.log('🎤 [TRANSCRIBE] Falling back to local Whisper CLI...');
+        logger.error(`🎤 [TRANSCRIBE] ❌ Groq API failed: ${groqErr.message}`);
+        logger.info('🎤 [TRANSCRIBE] Falling back to local Whisper CLI...');
         return await transcribeWithWhisperLocal(audioPath);
       }
     }
     // No Groq key → try local Whisper
     return await transcribeWithWhisperLocal(audioPath);
   } catch (error: any) {
-    console.error(`🎤 [TRANSCRIBE] ❌ All transcription methods failed: ${error.message}`);
+    logger.error(`🎤 [TRANSCRIBE] ❌ All transcription methods failed: ${error.message}`);
     return `Error de transcripción: ${error.message}`;
   }
 }
@@ -243,7 +244,7 @@ app.post('/api/transcribe/file', authMiddleware, upload.array('files'), async (r
 
     res.json(results);
   } catch (error) {
-    console.error('Transcription error:', error);
+    logger.error('Transcription error:', error);
     res.status(500).json({ error: 'Error processing transcription' });
   }
 });
@@ -256,9 +257,9 @@ app.post('/api/transcribe/blob', authMiddleware, upload.single('audio'), async (
       return res.status(400).json({ error: 'No audio uploaded' });
     }
 
-    console.log('Transcribing audio blob:', file.path);
+    logger.info('Transcribing audio blob:', file.path);
     const text = await transcribeWithWhisper(file.path);
-    console.log('Transcription result:', text);
+    logger.info('Transcription result:', text);
 
     const transDoc = await Transcription.create({
       userId: req.user._id,
@@ -278,7 +279,7 @@ app.post('/api/transcribe/blob', authMiddleware, upload.single('audio'), async (
 
     res.json(result);
   } catch (error) {
-    console.error('Transcription error:', error);
+    logger.error('Transcription error:', error);
     res.status(500).json({ error: 'Error processing transcription' });
   }
 });
@@ -336,18 +337,18 @@ app.use('/api/linkedin', authMiddleware, linkedinRoutes);
 
 // LinkedIn CRM routes
 app.use('/api/linkedin/crm', authMiddleware, linkedinCrmRoutes);
-console.log('📊 LinkedIn CRM routes mounted at /api/linkedin/crm');
+logger.info('📊 LinkedIn CRM routes mounted at /api/linkedin/crm');
 
 // LinkedIn Accounts routes (multi-account management)
 app.use('/api/linkedin/accounts', authMiddleware, linkedinAccountsRoutes);
 app.use('/api/linkedin/posts', authMiddleware, linkedinPostsRoutes);
 app.use('/api/linkedin/publishing', authMiddleware, linkedinPublishingConfigRoutes);
-console.log('🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts');
+logger.info('🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts');
 
 // CRM and Dashboard routes
 app.use('/api/crm', authMiddleware, crmRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
-console.log('📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard');
+logger.info('📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard');
 
 // System Settings & Partners
 app.use('/api/system-config', authMiddleware, systemConfigRoutes);
@@ -355,7 +356,7 @@ app.use('/api/partners', authMiddleware, partnerRoutes);
 app.use('/api/competitors', authMiddleware, competitorRoutes);
 app.use('/api/pos-systems', authMiddleware, posSystemRoutes);
 app.use('/api/calendar', calendarRoutes);
-console.log('⚙️ System Config, Partners, Competitors & POS Systems routes mounted');
+logger.info('⚙️ System Config, Partners, Competitors & POS Systems routes mounted');
 
 // Start server
 async function startServer() {
@@ -366,41 +367,41 @@ async function startServer() {
   await connectDB();
 
   app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`🕐 Server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone} | UTC offset: ${new Date().getTimezoneOffset()}min | Now: ${new Date().toISOString()}`);
-    console.log(`🎙️ Using Whisper for transcription`);
-    console.log(`📱 WhatsApp scheduler enabled (runs independently of WA connection)`);
-    console.log(`📡 API endpoints available:`);
-    console.log(`   GET  /api/health`);
-    console.log(`   GET  /api/history`);
-    console.log(`   POST /api/transcribe/file`);
-    console.log(`   POST /api/transcribe/blob`);
-    console.log(`   GET  /api/settings`);
-    console.log(`   GET  /api/whatsapp/status`);
-    console.log(`   GET  /api/whatsapp/qr`);
-    console.log(`   GET  /api/whatsapp/chats`);
-    console.log(`   POST /api/whatsapp/schedule`);
-    console.log(`   GET  /api/whatsapp/scheduled`);
-    console.log(`   GET  /api/whatsapp/history`);
-    console.log(`   📊 Resumidor:`);
-    console.log(`   GET  /api/resumidor/health`);
-    console.log(`   GET  /api/resumidor/groups`);
-    console.log(`   POST /api/resumidor/summarize`);
-    console.log(`   GET  /api/resumidor/models`);
-    console.log(`   GET  /api/resumidor/history`);
-    console.log(`   🔗 LinkedIn:`);
-    console.log(`   GET  /api/linkedin/status`);
-    console.log(`   POST /api/linkedin/launch`);
-    console.log(`   POST /api/linkedin/start-prospecting`);
-    console.log(`   POST /api/linkedin/pause`);
-    console.log(`   POST /api/linkedin/resume`);
-    console.log(`   POST /api/linkedin/stop`);
-    console.log(`   GET  /api/linkedin/progress`);
-    console.log(`   GET  /api/linkedin/progress/stream`);
+    logger.info(`✅ Server running on http://localhost:${PORT}`);
+    logger.info(`🕐 Server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone} | UTC offset: ${new Date().getTimezoneOffset()}min | Now: ${new Date().toISOString()}`);
+    logger.info(`🎙️ Using Whisper for transcription`);
+    logger.info(`📱 WhatsApp scheduler enabled (runs independently of WA connection)`);
+    logger.info(`📡 API endpoints available:`);
+    logger.info(`   GET  /api/health`);
+    logger.info(`   GET  /api/history`);
+    logger.info(`   POST /api/transcribe/file`);
+    logger.info(`   POST /api/transcribe/blob`);
+    logger.info(`   GET  /api/settings`);
+    logger.info(`   GET  /api/whatsapp/status`);
+    logger.info(`   GET  /api/whatsapp/qr`);
+    logger.info(`   GET  /api/whatsapp/chats`);
+    logger.info(`   POST /api/whatsapp/schedule`);
+    logger.info(`   GET  /api/whatsapp/scheduled`);
+    logger.info(`   GET  /api/whatsapp/history`);
+    logger.info(`   📊 Resumidor:`);
+    logger.info(`   GET  /api/resumidor/health`);
+    logger.info(`   GET  /api/resumidor/groups`);
+    logger.info(`   POST /api/resumidor/summarize`);
+    logger.info(`   GET  /api/resumidor/models`);
+    logger.info(`   GET  /api/resumidor/history`);
+    logger.info(`   🔗 LinkedIn:`);
+    logger.info(`   GET  /api/linkedin/status`);
+    logger.info(`   POST /api/linkedin/launch`);
+    logger.info(`   POST /api/linkedin/start-prospecting`);
+    logger.info(`   POST /api/linkedin/pause`);
+    logger.info(`   POST /api/linkedin/resume`);
+    logger.info(`   POST /api/linkedin/stop`);
+    logger.info(`   GET  /api/linkedin/progress`);
+    logger.info(`   GET  /api/linkedin/progress/stream`);
 
     // Initialize active WhatsApp tenants after server is ready (based on pending scheduled messages)
     whatsappService.initializeActiveTenants().catch((err) => {
-      console.error('WhatsApp initialization error:', err);
+      logger.error('WhatsApp initialization error:', err);
     });
   });
 
@@ -408,12 +409,12 @@ async function startServer() {
   // Cleanly destroy the WhatsApp client on SIGTERM/SIGINT
   // This prevents session file corruption during Railway redeploys
   const shutdown = async (signal: string) => {
-    console.log(`\n🛑 Received ${signal} — shutting down gracefully...`);
+    logger.info(`\n🛑 Received ${signal} — shutting down gracefully...`);
     try {
       await whatsappService.destroyAll();
-      console.log('✅ All WhatsApp tenants destroyed cleanly');
+      logger.info('✅ All WhatsApp tenants destroyed cleanly');
     } catch (err) {
-      console.error('⚠️ Error during shutdown:', err);
+      logger.error('⚠️ Error during shutdown:', err);
     }
     process.exit(0);
   };
@@ -423,14 +424,14 @@ async function startServer() {
 
   // Prevent Puppeteer uncaught errors from crashing the entire Node process
   process.on('unhandledRejection', (reason: any) => {
-    console.error('⚠️ [unhandledRejection]', reason?.message || reason);
+    logger.error('⚠️ [unhandledRejection]', reason?.message || reason);
     // Don't crash — let reconnect logic handle it
   });
   process.on('uncaughtException', (err: Error) => {
-    console.error('⚠️ [uncaughtException]', err.message);
+    logger.error('⚠️ [uncaughtException]', err.message);
     // Only crash for truly fatal errors (like OOM), not Puppeteer protocol errors
     if (err.message?.includes('out of memory') || err.message?.includes('ENOMEM')) {
-      console.error('💀 Fatal memory error — shutting down');
+      logger.error('💀 Fatal memory error — shutting down');
       process.exit(1);
     }
     // Otherwise log and continue

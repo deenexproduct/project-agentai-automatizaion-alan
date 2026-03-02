@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { whatsappService } from '../services/whatsapp.service';
 import { ScheduledMessage } from '../models/scheduled-message.model';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -82,30 +83,30 @@ router.get('/debug', (req: Request, res: Response) => {
 
 router.get('/chats', async (req: Request, res: Response) => {
     try {
-        console.log(`📡 [HTTP GET /chats] Request received from token ${req.user?._id}`);
+        logger.info(`📡 [HTTP GET /chats] Request received from token ${req.user?._id}`);
         const userId = req.user?._id?.toString();
         if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
         const tenant = whatsappService.getTenant(userId);
-        console.log(`📡 [HTTP GET /chats] Tenant retrieved, isConnected: ${tenant.isConnected()}`);
+        logger.info(`📡 [HTTP GET /chats] Tenant retrieved, isConnected: ${tenant.isConnected()}`);
 
         // Force refresh if ?refresh=true or cache is empty
         const forceRefresh = req.query.refresh === 'true';
         if (forceRefresh) {
-            console.log(`📡 [HTTP GET /chats] Forcing refreshChats()...`);
+            logger.info(`📡 [HTTP GET /chats] Forcing refreshChats()...`);
             await tenant.refreshChats();
-            console.log(`📡 [HTTP GET /chats] refreshChats() completed.`);
+            logger.info(`📡 [HTTP GET /chats] refreshChats() completed.`);
         }
 
         const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
         const search = req.query.search ? (req.query.search as string) : undefined;
 
-        console.log(`📡 [HTTP GET /chats] Calling getChats() with limit=${limit}, search=${search}`);
+        logger.info(`📡 [HTTP GET /chats] Calling getChats() with limit=${limit}, search=${search}`);
         const chats = await tenant.getChats(limit, search);
-        console.log(`📡 [HTTP GET /chats] Returning ${chats.length} elements to client.`);
+        logger.info(`📡 [HTTP GET /chats] Returning ${chats.length} elements to client.`);
         res.json(chats);
     } catch (error: any) {
-        console.error(`❌ [HTTP GET /chats] Error: ${error.message}`);
+        logger.error(`❌ [HTTP GET /chats] Error: ${error.message}`);
         res.status(500).json({ error: error.message });
     }
 });
@@ -191,11 +192,11 @@ router.post('/schedule', (req: Request, res: Response, next: Function) => {
 
         await message.save();
 
-        console.log(`📅 Message scheduled: ${chatName} at ${scheduledAt} (${messageType})`);
-        console.log(`📅 Parsed scheduledAt: ${message.scheduledAt.toISOString()} | Server now: ${new Date().toISOString()}`);
+        logger.info(`📅 Message scheduled: ${chatName} at ${scheduledAt} (${messageType})`);
+        logger.info(`📅 Parsed scheduledAt: ${message.scheduledAt.toISOString()} | Server now: ${new Date().toISOString()}`);
         res.json(message);
     } catch (error: any) {
-        console.error('Schedule error:', error.message);
+        logger.error('Schedule error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

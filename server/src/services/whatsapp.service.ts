@@ -6,6 +6,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { ScheduledMessage, IScheduledMessage } from '../models/scheduled-message.model';
+import { logger } from '../utils/logger';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,14 +18,6 @@ const WA_SESSIONS_DIR = process.env.NODE_ENV === 'production'
 // ============================================================
 // WhatsApp Tenant — Connection, Sending, Scheduling per User
 // ============================================================
-
-// ── Event Log ────────────────────────────────────────────────
-interface LogEntry {
-    timestamp: string;
-    level: 'info' | 'warn' | 'error' | 'success';
-    event: string;
-    detail?: string;
-}
 
 export class WhatsAppTenant {
     public client: Client | null = null;
@@ -46,33 +39,8 @@ export class WhatsAppTenant {
     private lastPreventiveRestart: Date | null = null;
     private connectingTimeout: NodeJS.Timeout | null = null;
 
-    // ── Event Log (ring buffer) ──────────────────────────────────
-    private eventLog: LogEntry[] = [];
-    private readonly MAX_LOG_SIZE = 150;
-
-    private log(level: LogEntry['level'], event: string, detail?: string) {
-        const entry: LogEntry = {
-            timestamp: new Date().toISOString(),
-            level,
-            event,
-            detail,
-        };
-        this.eventLog.push(entry);
-        if (this.eventLog.length > this.MAX_LOG_SIZE) this.eventLog.shift();
-        const prefix = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : level === 'success' ? '✅' : '📱';
-        const msg = `${prefix} [User ${this.userId}] ${event}${detail ? ` — ${detail}` : ''}`;
-        if (level === 'error') console.error(msg);
-        else if (level === 'warn') console.warn(msg);
-        else console.log(msg);
-    }
-
-    public getLogs(): LogEntry[] {
-        return [...this.eventLog];
-    }
-
     constructor(userId: string) {
         this.userId = userId;
-        this.log('info', 'Tenant created', 'Scheduler starting independently');
         // Start the scheduler immediately — it checks isConnected() internally
         this.startScheduler();
     }
@@ -83,7 +51,7 @@ export class WhatsAppTenant {
             const url = await this.client.getProfilePicUrl(contactId);
             return url || null;
         } catch (error: any) {
-            console.error(`[User ${this.userId}] Error fetching profile pic for ${contactId}:`, error.message);
+            logger.error(`[User ${this.userId}] Error fetching profile pic for ${contactId}:`, error.message);
             return null;
         }
     }
@@ -96,7 +64,7 @@ export class WhatsAppTenant {
         }
         this.isInitializing = true;
         this.status = 'connecting';
-        this.log('info', 'Initializing WhatsApp client');
+        logger.info(`📱 [User ${this.userId}] Initializing WhatsApp client...`);
 
         this.client = new Client({
             authStrategy: new LocalAuth({
@@ -134,18 +102,18 @@ export class WhatsAppTenant {
 
         // QR event
         this.client.on('qr', async (qr: string) => {
-            this.log('info', 'QR code received');
+            logger.info(`📱 [User ${this.userId}] QR code received`);
             this.status = 'qr';
             try {
                 this.qrCode = await QRCode.toDataURL(qr, { width: 300 });
             } catch (err) {
-                this.log('error', 'QR generation failed', String(err));
+                logger.error(`[User ${this.userId}] QR generation error:`, err);
             }
         });
 
         // Ready event
         this.client.on('ready', () => {
-            this.log('success', 'WhatsApp client ready!');
+            logger.info(`✅ [User ${this.userId}] WhatsApp client ready!`);
             // Clear connecting timeout — we made it
             if (this.connectingTimeout) {
                 clearTimeout(this.connectingTimeout);
@@ -159,13 +127,14 @@ export class WhatsAppTenant {
             this.connectedSince = new Date();
             this.startKeepAlive();
             this.startPreventiveRestart();
+            // Ensure scheduler is running (might have been stopped by reset)
             this.startScheduler();
             this.refreshChats();
         });
 
         // Authenticated event
         this.client.on('authenticated', () => {
-            this.log('success', 'Authenticated — loading session');
+            logger.info(`🔐 [User ${this.userId}] WhatsApp authenticated`);
             this.status = 'connecting';
             this.refreshChats();
 
@@ -173,7 +142,7 @@ export class WhatsAppTenant {
             if (this.connectingTimeout) clearTimeout(this.connectingTimeout);
             this.connectingTimeout = setTimeout(async () => {
                 if (this.status === 'connecting') {
-                    this.log('warn', 'Stuck in connecting for 2min — forcing reconnect');
+                    logger.warn(`⚠️ [User ${this.userId}] Stuck in 'connecting' for 2min — forcing reconnect`);
                     if (this.client) {
                         try { await this.client.destroy(); } catch { }
                         this.client = null;
@@ -183,12 +152,12 @@ export class WhatsAppTenant {
                     this.connectingTimeout = null;
                     this.attemptReconnect('connecting_timeout');
                 }
-            }, 120_000);
+            }, 120_000); // 2 minutes
         });
 
         // Auth failure
         this.client.on('auth_failure', (msg: string) => {
-            this.log('error', 'Auth failure — deleting session', msg);
+            logger.error(`❌ [User ${this.userId}] WhatsApp auth failure:`, msg);
             this.status = 'disconnected';
             this.isInitializing = false;
             this.deleteSessionData();
@@ -196,14 +165,15 @@ export class WhatsAppTenant {
 
         // Disconnected — trigger auto-reconnect
         this.client.on('disconnected', (reason: string) => {
-            this.log('warn', 'Disconnected', reason);
+            logger.warn(`⚠️ [User ${this.userId}] WhatsApp disconnected:`, reason);
             this.status = 'disconnected';
             this.qrCode = null;
             this.connectedSince = null;
             this.stopKeepAlive();
+            // Keep scheduler running — it checks isConnected() internally
+            // and will send messages once WA reconnects
 
             if (reason === 'NAVIGATION' || reason === 'LOGOUT' || reason.toLowerCase().includes('logout')) {
-                this.log('warn', 'Logout detected — deleting session', reason);
                 this.deleteSessionData();
             }
 
@@ -212,29 +182,29 @@ export class WhatsAppTenant {
 
         // State change
         this.client.on('change_state', (state: string) => {
-            this.log('info', 'State changed', state);
+            logger.info(`📱 [User ${this.userId}] WhatsApp state changed:`, state);
 
             if (state === 'CONFLICT') {
                 // CONFLICT = WhatsApp Web opened elsewhere temporarily
                 // Wait 30s and re-check — usually resolves itself
-                console.warn(`⚠️ [User ${this.userId}] CONFLICT detected — waiting 30s for auto-resolution...`);
+                logger.warn(`⚠️ [User ${this.userId}] CONFLICT detected — waiting 30s for auto-resolution...`);
                 setTimeout(async () => {
                     try {
                         if (!this.client) return;
                         const currentState = await this.client.getState();
                         if (currentState !== 'CONNECTED') {
-                            console.warn(`⚠️ [User ${this.userId}] Still in bad state (${currentState}) after CONFLICT — reconnecting`);
+                            logger.warn(`⚠️ [User ${this.userId}] Still in bad state (${currentState}) after CONFLICT — reconnecting`);
                             this.stopKeepAlive();
                             this.attemptReconnect('conflict_persistent');
                         } else {
-                            console.log(`✅ [User ${this.userId}] CONFLICT resolved — back to CONNECTED`);
+                            logger.info(`✅ [User ${this.userId}] CONFLICT resolved — back to CONNECTED`);
                         }
                     } catch { this.attemptReconnect('conflict_check_error'); }
                 }, 30000);
             } else if (state === 'UNPAIRED') {
                 // UNPAIRED can be a false positive during reconnections
                 // Wait 60s and re-check before wiping session
-                console.warn(`⚠️ [User ${this.userId}] UNPAIRED detected — waiting 60s to confirm...`);
+                logger.warn(`⚠️ [User ${this.userId}] UNPAIRED detected — waiting 60s to confirm...`);
                 setTimeout(async () => {
                     try {
                         if (!this.client) {
@@ -244,11 +214,11 @@ export class WhatsAppTenant {
                         }
                         const currentState = await this.client.getState();
                         if (currentState === 'CONNECTED') {
-                            console.log(`✅ [User ${this.userId}] UNPAIRED was false positive — back to CONNECTED`);
+                            logger.info(`✅ [User ${this.userId}] UNPAIRED was false positive — back to CONNECTED`);
                             return;
                         }
                         // Confirmed UNPAIRED — delete session and reconnect
-                        console.warn(`🔴 [User ${this.userId}] UNPAIRED confirmed after 60s — deleting session`);
+                        logger.warn(`🔴 [User ${this.userId}] UNPAIRED confirmed after 60s — deleting session`);
                         this.stopKeepAlive();
                         this.deleteSessionData();
                         this.attemptReconnect('unpaired_confirmed');
@@ -258,7 +228,7 @@ export class WhatsAppTenant {
                     }
                 }, 60000);
             } else if (state === 'UNLAUNCHED') {
-                console.warn(`⚠️ [User ${this.userId}] UNLAUNCHED — triggering reconnect`);
+                logger.warn(`⚠️ [User ${this.userId}] UNLAUNCHED — triggering reconnect`);
                 this.stopKeepAlive();
                 this.attemptReconnect(state);
             }
@@ -267,7 +237,7 @@ export class WhatsAppTenant {
         try {
             await this.client.initialize();
         } catch (error: any) {
-            console.error(`❌ [User ${this.userId}] WhatsApp init error:`, error.message);
+            logger.error(`❌ [User ${this.userId}] WhatsApp init error:`, error.message);
             this.status = 'disconnected';
             this.isInitializing = false;
             // Auto-retry initialization instead of dying silently
@@ -282,15 +252,15 @@ export class WhatsAppTenant {
         if (fs.existsSync(sessionPath)) {
             try {
                 fs.rmSync(sessionPath, { recursive: true, force: true });
-                console.log(`🗑️ [User ${this.userId}] Local session data cleared.`);
+                logger.info(`🗑️ [User ${this.userId}] Local session data cleared.`);
             } catch (err) {
-                console.error(`❌ [User ${this.userId}] Failed to clear session data:`, err);
+                logger.error(`❌ [User ${this.userId}] Failed to clear session data:`, err);
             }
         }
     }
 
     public async resetSession(): Promise<void> {
-        console.log(`♻️ [User ${this.userId}] Forcing session reset...`);
+        logger.info(`♻️ [User ${this.userId}] Forcing session reset...`);
         this.stopPreventiveRestart();
         this.stopKeepAlive();
         this.stopScheduler();
@@ -316,7 +286,7 @@ export class WhatsAppTenant {
     getStatus(): { status: string; qr: string | null } {
         // Auto-initialize if someone asks for status and we are fully disconnected
         if (this.status === 'disconnected' && !this.isInitializing) {
-            this.initialize().catch(err => console.error(err));
+            this.initialize().catch(err => logger.error(err));
         }
 
         return {
@@ -342,12 +312,12 @@ export class WhatsAppTenant {
         if (this.isFetchingChats || !this.client || !this.isConnected()) return;
 
         this.isFetchingChats = true;
-        console.log(`🔄 [User ${this.userId}] Refreshing contacts...`);
+        logger.info(`🔄 [User ${this.userId}] Refreshing contacts...`);
 
         try {
             // Use getContacts to get the full address book instead of just active chats
             const contacts = await this.client.getContacts();
-            console.log(`📡 [User ${this.userId}] RAW contacts fetched: ${contacts.length}`);
+            logger.info(`📡 [User ${this.userId}] RAW contacts fetched: ${contacts.length}`);
 
             const mapped = contacts
                 // Exclude status updates
@@ -364,16 +334,16 @@ export class WhatsAppTenant {
                 // Sort alphabetically
                 .sort((a, b) => a.name.localeCompare(b.name));
 
-            console.log(`🔍 [User ${this.userId}] Filtered mapped contacts: ${mapped.length}`);
+            logger.info(`🔍 [User ${this.userId}] Filtered mapped contacts: ${mapped.length}`);
 
             if (mapped.length > 0) {
                 this.chatsCache = mapped;
-                console.log(`✅ [User ${this.userId}] Cached ${this.chatsCache.length} contacts/groups`);
+                logger.info(`✅ [User ${this.userId}] Cached ${this.chatsCache.length} contacts/groups`);
             } else {
-                console.log(`⚠️ [User ${this.userId}] No contacts returned by WhatsApp client.`);
+                logger.info(`⚠️ [User ${this.userId}] No contacts returned by WhatsApp client.`);
             }
         } catch (error: any) {
-            console.error(`❌ [User ${this.userId}] Error refreshing contacts:`, error.message);
+            logger.error(`❌ [User ${this.userId}] Error refreshing contacts:`, error.message);
         } finally {
             this.isFetchingChats = false;
         }
@@ -413,7 +383,7 @@ export class WhatsAppTenant {
         if (ext === '.ogg') return inputPath;
 
         const outputPath = inputPath.replace(/\.[^.]+$/, '.ogg');
-        console.log(`🔄 [User ${this.userId}] Converting ${path.basename(inputPath)} → OGG/Opus...`);
+        logger.info(`🔄 [User ${this.userId}] Converting ${path.basename(inputPath)} → OGG/Opus...`);
 
         try {
             await execFileAsync('ffmpeg', [
@@ -441,10 +411,10 @@ export class WhatsAppTenant {
             await this.delay(1000 + Math.random() * 1000);
 
             await chat.sendMessage(text);
-            console.log(`✅ [User ${this.userId}] Message sent to ${chat.name}`);
+            logger.info(`✅ [User ${this.userId}] Message sent to ${chat.name}`);
             return true;
         } catch (error: any) {
-            console.error(`❌ [User ${this.userId}] Error sending to ${chatId}:`, error.message);
+            logger.error(`❌ [User ${this.userId}] Error sending to ${chatId}:`, error.message);
             throw error;
         }
     }
@@ -474,7 +444,7 @@ export class WhatsAppTenant {
             if (caption) options.caption = caption;
 
             await chat.sendMessage(media, options);
-            console.log(`✅ [User ${this.userId}] Media sent to ${chat.name} [${isAudio ? 'voice' : 'file'}]`);
+            logger.info(`✅ [User ${this.userId}] Media sent to ${chat.name} [${isAudio ? 'voice' : 'file'}]`);
             return true;
         } catch (error: any) {
             const errorMsg = error.message || error.toString() || 'Error desconocido';
@@ -519,7 +489,7 @@ export class WhatsAppTenant {
                 errorMsg.includes('not connected');
 
             if (isPuppeteerDeath && msg.retryCount < 3) {
-                console.warn(`⚡ [User ${this.userId}] Puppeteer connection dead — triggering reconnect + fast retry for msg ${msg._id}`);
+                logger.warn(`⚡ [User ${this.userId}] Puppeteer connection dead — triggering reconnect + fast retry for msg ${msg._id}`);
                 await msg.save();
 
                 // Trigger reconnect
@@ -536,7 +506,7 @@ export class WhatsAppTenant {
 
                 // If reconnected, retry immediately
                 if (this.isConnected()) {
-                    console.log(`⚡ [User ${this.userId}] Reconnected — retrying msg ${msg._id} immediately`);
+                    logger.info(`⚡ [User ${this.userId}] Reconnected — retrying msg ${msg._id} immediately`);
                     try {
                         if (msg.messageType === 'text' && msg.textContent) {
                             await this.sendTextMessage(msg.chatId, msg.textContent);
@@ -617,7 +587,7 @@ export class WhatsAppTenant {
 
             await newMsg.save();
         } catch (error: any) {
-            console.error(`[User ${this.userId}] Error creating recurring instance:`, error.message);
+            logger.error(`[User ${this.userId}] Error creating recurring instance:`, error.message);
         }
     }
 
@@ -701,8 +671,8 @@ export class WhatsAppTenant {
 
     startScheduler(): void {
         if (this.schedulerJob) return;
-        console.log(`⏰ [User ${this.userId}] WhatsApp scheduler started (runs independently of WA connection)`);
-        console.log(`⏰ [User ${this.userId}] Server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}, UTC offset: ${new Date().getTimezoneOffset()}min`);
+        logger.info(`⏰ [User ${this.userId}] WhatsApp scheduler started (runs independently of WA connection)`);
+        logger.info(`⏰ [User ${this.userId}] Server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}, UTC offset: ${new Date().getTimezoneOffset()}min`);
 
         this.schedulerJob = cron.schedule('* * * * *', async () => {
             try {
@@ -717,14 +687,14 @@ export class WhatsAppTenant {
 
                 // Check if WA is connected before trying to send
                 if (!this.isConnected()) {
-                    console.warn(`⏰ [User ${this.userId}] ${pendingMessages.length} message(s) ready to send but WhatsApp is NOT connected (status: ${this.status}). Will retry next minute.`);
+                    logger.warn(`⏰ [User ${this.userId}] ${pendingMessages.length} message(s) ready to send but WhatsApp is NOT connected (status: ${this.status}). Will retry next minute.`);
                     return;
                 }
 
-                console.log(`📤 [User ${this.userId}] Processing ${pendingMessages.length} pending message(s)...`);
+                logger.info(`📤 [User ${this.userId}] Processing ${pendingMessages.length} pending message(s)...`);
                 for (let i = 0; i < pendingMessages.length; i++) {
                     const msg = pendingMessages[i];
-                    console.log(`📤 [User ${this.userId}] Sending scheduled msg ${msg._id} to ${msg.chatName} (scheduled: ${msg.scheduledAt.toISOString()}, now: ${now.toISOString()})`);
+                    logger.info(`📤 [User ${this.userId}] Sending scheduled msg ${msg._id} to ${msg.chatName} (scheduled: ${msg.scheduledAt.toISOString()}, now: ${now.toISOString()})`);
                     await this.sendScheduledMessage(msg);
                     if (msg.status === 'sent' && msg.isRecurring) {
                         await this.generateNextRecurringInstance(msg);
@@ -734,7 +704,7 @@ export class WhatsAppTenant {
                     }
                 }
             } catch (error: any) {
-                console.error(`[User ${this.userId}] Scheduler error:`, error.message);
+                logger.error(`[User ${this.userId}] Scheduler error:`, error.message);
             }
         });
     }
@@ -754,9 +724,9 @@ export class WhatsAppTenant {
             // Cooldown reset: after 30 minutes, reset counter and try again
             if (!this.lastReconnectFailTime) {
                 this.lastReconnectFailTime = new Date();
-                console.error(`🔴 [User ${this.userId}] Max reconnect attempts reached. Will retry after cooldown.`);
+                logger.error(`🔴 [User ${this.userId}] Max reconnect attempts reached. Will retry after cooldown.`);
                 setTimeout(() => {
-                    console.log(`🔄 [User ${this.userId}] Cooldown expired — resetting reconnect counter.`);
+                    logger.info(`🔄 [User ${this.userId}] Cooldown expired — resetting reconnect counter.`);
                     this.reconnectAttempts = 0;
                     this.lastReconnectFailTime = null;
                     this.attemptReconnect('cooldown_reset');
@@ -769,7 +739,7 @@ export class WhatsAppTenant {
         this.totalReconnects++;
 
         const backoffDelay = Math.min(5000 * Math.pow(2, this.reconnectAttempts - 1), 300000);
-        console.log(`🔄 [User ${this.userId}] Reconnect ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${backoffDelay / 1000}s (${reason})`);
+        logger.info(`🔄 [User ${this.userId}] Reconnect ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${backoffDelay / 1000}s (${reason})`);
 
         await this.delay(backoffDelay);
 
@@ -785,7 +755,7 @@ export class WhatsAppTenant {
         try {
             await this.initialize();
         } catch (err: any) {
-            console.error(`❌ [User ${this.userId}] Reconnect initialization failed:`, err.message);
+            logger.error(`❌ [User ${this.userId}] Reconnect initialization failed:`, err.message);
         }
     }
 
@@ -851,7 +821,7 @@ export class WhatsAppTenant {
     }
 
     private async doPreventiveRestart(): Promise<void> {
-        console.log(`🔄 [User ${this.userId}] Starting preventive restart...`);
+        logger.info(`🔄 [User ${this.userId}] Starting preventive restart...`);
         this.stopKeepAlive();
         // DO NOT stop scheduler — keep it running to send messages after restart
 
@@ -935,7 +905,7 @@ export class WhatsAppTenant {
     }
 
     async destroy(): Promise<void> {
-        console.log(`🛑 [User ${this.userId}] Destroying WhatsApp tenant`);
+        logger.info(`🛑 [User ${this.userId}] Destroying WhatsApp tenant`);
         this.stopPreventiveRestart();
         this.stopKeepAlive();
         this.stopScheduler();
@@ -974,7 +944,7 @@ export class WhatsAppManager {
     }
 
     async destroyAll(): Promise<void> {
-        console.log('🛑 Shutting down all WhatsApp tenants...');
+        logger.info('🛑 Shutting down all WhatsApp tenants...');
         if (this.cleanupJob) { this.cleanupJob.stop(); this.cleanupJob = null; }
         for (const tenant of this.tenants.values()) {
             await tenant.destroy();
@@ -1004,12 +974,12 @@ export class WhatsAppManager {
 
     // Lazy load or auto-load active tenants based on pending DB schedules on startup Server Init
     async initializeActiveTenants(): Promise<void> {
-        console.log('🚀 Checking for pending scheduled messages to boot specific users...');
+        logger.info('🚀 Checking for pending scheduled messages to boot specific users...');
         try {
             const userIdsWithTasks = await ScheduledMessage.distinct('userId', {
                 status: 'pending'
             });
-            console.log(`📡 Found ${userIdsWithTasks.length} user(s) with pending messages.`);
+            logger.info(`📡 Found ${userIdsWithTasks.length} user(s) with pending messages.`);
 
             // Limit concurrency: initialize max 3 tenants at a time
             const CONCURRENT_LIMIT = 3;
@@ -1028,14 +998,14 @@ export class WhatsAppManager {
 
                 // Delay between chunks to let memory stabilize
                 if (i + CONCURRENT_LIMIT < userIdsWithTasks.length) {
-                    console.log(`⏳ Waiting ${DELAY_BETWEEN_CHUNKS_MS / 1000}s before next batch...`);
+                    logger.info(`⏳ Waiting ${DELAY_BETWEEN_CHUNKS_MS / 1000}s before next batch...`);
                     await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CHUNKS_MS));
                 }
             }
 
-            console.log(`✅ All ${userIdsWithTasks.length} tenant(s) initialization started.`);
+            logger.info(`✅ All ${userIdsWithTasks.length} tenant(s) initialization started.`);
         } catch (error) {
-            console.error('❌ Error initializing active WhatsApp tenants:', error);
+            logger.error('❌ Error initializing active WhatsApp tenants:', error);
         }
     }
 
@@ -1048,10 +1018,10 @@ export class WhatsAppManager {
                 createdAt: { $lt: cutoffDate },
             });
             if (result.deletedCount > 0) {
-                console.log(`🗑️ [Cleanup] Deleted ${result.deletedCount} messages older than 90 days`);
+                logger.info(`🗑️ [Cleanup] Deleted ${result.deletedCount} messages older than 90 days`);
             }
         } catch (error) {
-            console.error('❌ [Cleanup] Error cleaning old messages:', error);
+            logger.error('❌ [Cleanup] Error cleaning old messages:', error);
         }
     }
 
@@ -1066,14 +1036,14 @@ export class WhatsAppManager {
                         status: 'pending',
                     });
                     if (pendingCount === 0) {
-                        console.log(`🧹 [Cleanup] Destroying inactive tenant for user ${userId}`);
+                        logger.info(`🧹 [Cleanup] Destroying inactive tenant for user ${userId}`);
                         await tenant.destroy();
                         this.tenants.delete(userId);
                     }
                 }
             }
         } catch (error) {
-            console.error('❌ [Cleanup] Error cleaning inactive tenants:', error);
+            logger.error('❌ [Cleanup] Error cleaning inactive tenants:', error);
         }
     }
 }
