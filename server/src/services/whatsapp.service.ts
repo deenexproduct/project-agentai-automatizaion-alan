@@ -18,6 +18,14 @@ const WA_SESSIONS_DIR = process.env.NODE_ENV === 'production'
 // WhatsApp Tenant — Connection, Sending, Scheduling per User
 // ============================================================
 
+// ── Event Log ────────────────────────────────────────────────
+interface LogEntry {
+    timestamp: string;
+    level: 'info' | 'warn' | 'error' | 'success';
+    event: string;
+    detail?: string;
+}
+
 export class WhatsAppTenant {
     public client: Client | null = null;
     private qrCode: string | null = null;
@@ -38,8 +46,33 @@ export class WhatsAppTenant {
     private lastPreventiveRestart: Date | null = null;
     private connectingTimeout: NodeJS.Timeout | null = null;
 
+    // ── Event Log (ring buffer) ──────────────────────────────────
+    private eventLog: LogEntry[] = [];
+    private readonly MAX_LOG_SIZE = 150;
+
+    private log(level: LogEntry['level'], event: string, detail?: string) {
+        const entry: LogEntry = {
+            timestamp: new Date().toISOString(),
+            level,
+            event,
+            detail,
+        };
+        this.eventLog.push(entry);
+        if (this.eventLog.length > this.MAX_LOG_SIZE) this.eventLog.shift();
+        const prefix = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : level === 'success' ? '✅' : '📱';
+        const msg = `${prefix} [User ${this.userId}] ${event}${detail ? ` — ${detail}` : ''}`;
+        if (level === 'error') console.error(msg);
+        else if (level === 'warn') console.warn(msg);
+        else console.log(msg);
+    }
+
+    public getLogs(): LogEntry[] {
+        return [...this.eventLog];
+    }
+
     constructor(userId: string) {
         this.userId = userId;
+        this.log('info', 'Tenant created', 'Scheduler starting independently');
         // Start the scheduler immediately — it checks isConnected() internally
         this.startScheduler();
     }
@@ -63,7 +96,7 @@ export class WhatsAppTenant {
         }
         this.isInitializing = true;
         this.status = 'connecting';
-        console.log(`📱 [User ${this.userId}] Initializing WhatsApp client...`);
+        this.log('info', 'Initializing WhatsApp client');
 
         this.client = new Client({
             authStrategy: new LocalAuth({
@@ -101,18 +134,18 @@ export class WhatsAppTenant {
 
         // QR event
         this.client.on('qr', async (qr: string) => {
-            console.log(`📱 [User ${this.userId}] QR code received`);
+            this.log('info', 'QR code received');
             this.status = 'qr';
             try {
                 this.qrCode = await QRCode.toDataURL(qr, { width: 300 });
             } catch (err) {
-                console.error(`[User ${this.userId}] QR generation error:`, err);
+                this.log('error', 'QR generation failed', String(err));
             }
         });
 
         // Ready event
         this.client.on('ready', () => {
-            console.log(`✅ [User ${this.userId}] WhatsApp client ready!`);
+            this.log('success', 'WhatsApp client ready!');
             // Clear connecting timeout — we made it
             if (this.connectingTimeout) {
                 clearTimeout(this.connectingTimeout);
@@ -126,14 +159,13 @@ export class WhatsAppTenant {
             this.connectedSince = new Date();
             this.startKeepAlive();
             this.startPreventiveRestart();
-            // Ensure scheduler is running (might have been stopped by reset)
             this.startScheduler();
             this.refreshChats();
         });
 
         // Authenticated event
         this.client.on('authenticated', () => {
-            console.log(`🔐 [User ${this.userId}] WhatsApp authenticated`);
+            this.log('success', 'Authenticated — loading session');
             this.status = 'connecting';
             this.refreshChats();
 
@@ -141,7 +173,7 @@ export class WhatsAppTenant {
             if (this.connectingTimeout) clearTimeout(this.connectingTimeout);
             this.connectingTimeout = setTimeout(async () => {
                 if (this.status === 'connecting') {
-                    console.warn(`⚠️ [User ${this.userId}] Stuck in 'connecting' for 2min — forcing reconnect`);
+                    this.log('warn', 'Stuck in connecting for 2min — forcing reconnect');
                     if (this.client) {
                         try { await this.client.destroy(); } catch { }
                         this.client = null;
@@ -151,12 +183,12 @@ export class WhatsAppTenant {
                     this.connectingTimeout = null;
                     this.attemptReconnect('connecting_timeout');
                 }
-            }, 120_000); // 2 minutes
+            }, 120_000);
         });
 
         // Auth failure
         this.client.on('auth_failure', (msg: string) => {
-            console.error(`❌ [User ${this.userId}] WhatsApp auth failure:`, msg);
+            this.log('error', 'Auth failure — deleting session', msg);
             this.status = 'disconnected';
             this.isInitializing = false;
             this.deleteSessionData();
@@ -164,15 +196,14 @@ export class WhatsAppTenant {
 
         // Disconnected — trigger auto-reconnect
         this.client.on('disconnected', (reason: string) => {
-            console.warn(`⚠️ [User ${this.userId}] WhatsApp disconnected:`, reason);
+            this.log('warn', 'Disconnected', reason);
             this.status = 'disconnected';
             this.qrCode = null;
             this.connectedSince = null;
             this.stopKeepAlive();
-            // Keep scheduler running — it checks isConnected() internally
-            // and will send messages once WA reconnects
 
             if (reason === 'NAVIGATION' || reason === 'LOGOUT' || reason.toLowerCase().includes('logout')) {
+                this.log('warn', 'Logout detected — deleting session', reason);
                 this.deleteSessionData();
             }
 
@@ -181,7 +212,7 @@ export class WhatsAppTenant {
 
         // State change
         this.client.on('change_state', (state: string) => {
-            console.log(`📱 [User ${this.userId}] WhatsApp state changed:`, state);
+            this.log('info', 'State changed', state);
 
             if (state === 'CONFLICT') {
                 // CONFLICT = WhatsApp Web opened elsewhere temporarily
