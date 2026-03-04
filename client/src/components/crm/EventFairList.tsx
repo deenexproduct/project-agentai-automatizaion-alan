@@ -110,6 +110,7 @@ export default function EventFairList() {
     const objectivesTotal = eventsWithObjective.length;
     const upcomingEvents = events.filter(e => e.status === 'upcoming' || e.status === 'attending');
     const projectedLeads = upcomingEvents.reduce((sum, e) => sum + (e.leadObjective || 0), 0);
+    const totalLeadsAchieved = events.reduce((sum, e) => sum + (e.leadObjectiveMet ? (e.leadsAchieved || 0) : 0), 0);
 
     const formatDate = (dateStr: string) => {
         if (!dateStr) return '';
@@ -138,7 +139,7 @@ export default function EventFairList() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-5 gap-3 mb-4 shrink-0">
+            <div className="grid grid-cols-6 gap-3 mb-4 shrink-0">
                 <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">
                     <div className="flex items-center gap-2 mb-1">
                         <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
@@ -198,6 +199,20 @@ export default function EventFairList() {
                     </p>
                     <p className="text-[10px] font-medium text-slate-400 mt-0.5">
                         {objectivesTotal > 0 ? `${Math.round((objectivesMet / objectivesTotal) * 100)}% cumplimiento` : 'Sin objetivos'}
+                    </p>
+                </div>
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-sm">
+                            <Trophy size={14} className="text-white" />
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Conseguidos</span>
+                    </div>
+                    <p className="text-[19px] font-black text-slate-800 tracking-tight">
+                        {totalLeadsAchieved > 0 ? <span className="text-teal-600">{totalLeadsAchieved}</span> : <span className="text-slate-300">—</span>}
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                        {totalLeadsAchieved > 0 ? `De ${objectivesMet} obj. cumplidos` : 'Sin resultados'}
                     </p>
                 </div>
                 <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">

@@ -391,3 +391,6 @@
 [2026-03-04 12:11:57] INFO: [REQUEST] GET /api/auth/users
 [2026-03-04 12:12:40] INFO: [REQUEST] PATCH /api/event-fairs/69a83610836531c155e8686f
 [2026-03-04 12:12:40] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:13:02] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:16:24] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:16:57] INFO: [REQUEST] GET /api/event-fairs

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Calendar, MapPin, Globe, FileText, DollarSign, Ticket, Users, Plus, Trash2, AlertTriangle, Search, Activity, Target, CheckCircle2 } from 'lucide-react';
+import { X, Save, Calendar, MapPin, Globe, FileText, DollarSign, Ticket, Users, Plus, Trash2, AlertTriangle, Search, Activity, Target, CheckCircle2, Trophy } from 'lucide-react';
 import { EventFairData, InvestmentItem, createEventFair, updateEventFair, getTeamUsers, TeamUser, ContactData, getContacts } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
@@ -51,6 +51,11 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
 
     // Investment breakdown
     const [breakdown, setBreakdown] = useState<InvestmentItem[]>([]);
+
+    // Completion modal inside drawer
+    const [showCompletionInDrawer, setShowCompletionInDrawer] = useState(false);
+    const [drawerCompletionLeads, setDrawerCompletionLeads] = useState<number>(0);
+    const [savingDrawerCompletion, setSavingDrawerCompletion] = useState(false);
 
     useEffect(() => {
         if (open && event) {
@@ -166,6 +171,30 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
         setFormData({ ...formData, expectedLeads: (formData.expectedLeads || []).filter(lid => lid !== id) });
         setSelectedLeads(selectedLeads.filter(l => l._id !== id));
         setIsDirty(true);
+    };
+
+    const handleCompleteObjectiveInDrawer = async () => {
+        if (!event?._id) return;
+        const objective = formData.leadObjective || 0;
+        setSavingDrawerCompletion(true);
+        try {
+            await updateEventFair(event._id, {
+                leadsAchieved: drawerCompletionLeads,
+                leadObjectiveMet: drawerCompletionLeads >= objective && objective > 0,
+            });
+            setFormData(prev => ({
+                ...prev,
+                leadsAchieved: drawerCompletionLeads,
+                leadObjectiveMet: drawerCompletionLeads >= objective && objective > 0,
+            }));
+            setShowCompletionInDrawer(false);
+            onSaved();
+        } catch (error) {
+            console.error('Error completing objective:', error);
+            alert('Error al guardar el objetivo');
+        } finally {
+            setSavingDrawerCompletion(false);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -529,11 +558,17 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                     </div>
 
                     {/* Actions */}
-                    <div className="mt-auto pt-4 border-t border-slate-200/80 flex gap-3 bg-white/80 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-4">
+                    <div className="mt-auto pt-4 border-t border-slate-200/80 flex gap-2 bg-white/80 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-4">
                         <button type="button" onClick={handleAttemptClose}
-                            className="flex-1 px-4 py-2.5 bg-white border border-slate-200/80 text-slate-600 rounded-[10px] text-[13px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+                            className="px-3 py-2.5 bg-white border border-slate-200/80 text-slate-500 rounded-[10px] text-[12px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
                             Cancelar
                         </button>
+                        {event?._id && (formData.leadObjective || 0) > 0 && !(formData.leadsAchieved && formData.leadsAchieved > 0) && (
+                            <button type="button" onClick={() => { setDrawerCompletionLeads(0); setShowCompletionInDrawer(true); }}
+                                className="flex-1 px-3 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-[10px] text-[12px] font-bold hover:shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:-translate-y-0.5 transition-all flex items-center justify-center gap-1.5 shadow-[0_4px_14px_rgba(16,185,129,0.25)]">
+                                <Trophy size={14} /> Cumplí con el objetivo
+                            </button>
+                        )}
                         <button type="submit" disabled={saving || !formData.name}
                             className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-[10px] text-[13px] font-bold hover:shadow-[0_8px_24px_rgba(245,158,11,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(245,158,11,0.3)]">
                             {saving ? 'Guardando...' : <><Save size={16} /> {event?._id ? 'Guardar Cambios' : 'Crear Evento'}</>}
@@ -571,11 +606,103 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+                @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
                 .drawer-form .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                 .drawer-form .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .drawer-form .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.2); border-radius: 10px; }
                 .drawer-form .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.4); }
             `}</style>
+
+            {/* Completion Modal inside Drawer */}
+            {showCompletionInDrawer && (() => {
+                const objective = formData.leadObjective || 0;
+                const met = drawerCompletionLeads >= objective && objective > 0;
+                const diff = drawerCompletionLeads - objective;
+                return (
+                    <div
+                        className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                        style={{ background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(8px)', animation: 'fadeIn 0.2s ease-out' }}
+                        onClick={() => setShowCompletionInDrawer(false)}
+                    >
+                        <div
+                            className="bg-white rounded-[24px] p-6 max-w-md w-full shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-100"
+                            onClick={e => e.stopPropagation()}
+                            style={{ animation: 'scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                        >
+                            <div className="flex items-center justify-between mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                        <Trophy size={22} className="text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-[18px] font-bold text-slate-800 tracking-tight">Registrar resultado</h3>
+                                        <p className="text-[12px] text-slate-400 font-medium">{formData.name}</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowCompletionInDrawer(false)}
+                                    className="w-8 h-8 rounded-[10px] flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600">
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center gap-2 px-4 py-3 bg-amber-50/80 rounded-[12px] border border-amber-200/60 mb-4">
+                                <Target size={16} className="text-amber-600" />
+                                <span className="text-[13px] font-bold text-amber-700">Objetivo proyectado:</span>
+                                <span className="text-[15px] font-black text-amber-800">{objective} leads</span>
+                            </div>
+
+                            <div className="space-y-2 mb-4">
+                                <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                    <CheckCircle2 size={15} className="text-emerald-500" />
+                                    ¿Cuántos leads conseguiste?
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    autoFocus
+                                    value={drawerCompletionLeads || ''}
+                                    onChange={(e) => setDrawerCompletionLeads(Number(e.target.value) || 0)}
+                                    placeholder="Ej. 12"
+                                    className="w-full px-4 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-300 transition-all text-[16px] font-bold text-slate-700 placeholder:text-slate-400 shadow-inner"
+                                />
+                            </div>
+
+                            {drawerCompletionLeads > 0 && (
+                                <div className={`flex items-center gap-3 px-4 py-3 rounded-[12px] border mb-5 transition-all ${met ? 'bg-emerald-50 border-emerald-300' : 'bg-red-50/60 border-red-200'}`}>
+                                    {met ? <CheckCircle2 size={20} className="text-emerald-500" /> : <Target size={20} className="text-red-400" />}
+                                    <div className="flex-1">
+                                        <p className={`text-[13px] font-bold ${met ? 'text-emerald-700' : 'text-red-600'}`}>
+                                            {met
+                                                ? (diff > 0 ? `¡Superaste el objetivo por +${diff} leads!` : '¡Cumpliste el objetivo de leads!')
+                                                : `Faltan ${Math.abs(diff)} leads para el objetivo`
+                                            }
+                                        </p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                            {drawerCompletionLeads} conseguidos de {objective} proyectados
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowCompletionInDrawer(false)}
+                                    className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleCompleteObjectiveInDrawer}
+                                    disabled={savingDrawerCompletion || drawerCompletionLeads <= 0}
+                                    className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold rounded-[14px] hover:shadow-[0_8px_24px_rgba(16,185,129,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none shadow-[0_4px_16px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 text-[14px]"
+                                >
+                                    {savingDrawerCompletion ? 'Guardando...' : <><Trophy size={16} /> Confirmar</>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }
