@@ -143,13 +143,15 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
 
     const getTypeInfo = (type: string) => {
         switch (type) {
-            case 'call': return { label: 'Llamada', color: 'text-emerald-700 bg-emerald-50 border-emerald-200/60' };
-            case 'meeting': return { label: 'Reunión', color: 'text-indigo-700 bg-indigo-50 border-indigo-200/60' };
-            case 'email': return { label: 'Email', color: 'text-amber-700 bg-amber-50 border-amber-200/60' };
-            case 'follow_up': return { label: 'Seguimiento', color: 'text-blue-700 bg-blue-50 border-blue-200/60' };
-            case 'proposal': return { label: 'Propuesta', color: 'text-fuchsia-700 bg-fuchsia-50 border-fuchsia-200/60' };
-            case 'research': return { label: 'Investigación', color: 'text-purple-700 bg-purple-50 border-purple-200/60' };
-            default: return { label: 'Otro', color: 'text-slate-700 bg-slate-50 border-slate-200/60' };
+            case 'call': return { label: '📞 Llamada', color: 'text-emerald-700 bg-emerald-50 border-emerald-200/60' };
+            case 'whatsapp': return { label: '💬 WhatsApp', color: 'text-green-700 bg-green-50 border-green-200/60' };
+            case 'email': return { label: '✉️ Email', color: 'text-amber-700 bg-amber-50 border-amber-200/60' };
+            case 'linkedin_message': return { label: '🔗 LinkedIn', color: 'text-sky-700 bg-sky-50 border-sky-200/60' };
+            case 'meeting': return { label: '🤝 Reunión', color: 'text-indigo-700 bg-indigo-50 border-indigo-200/60' };
+            case 'follow_up': return { label: '🔄 Seguimiento', color: 'text-blue-700 bg-blue-50 border-blue-200/60' };
+            case 'proposal': return { label: '📋 Propuesta', color: 'text-fuchsia-700 bg-fuchsia-50 border-fuchsia-200/60' };
+            case 'research': return { label: '🔍 Investigación', color: 'text-purple-700 bg-purple-50 border-purple-200/60' };
+            default: return { label: '📌 Otro', color: 'text-slate-700 bg-slate-50 border-slate-200/60' };
         }
     };
 

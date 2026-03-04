@@ -538,3 +538,217 @@
 [2026-03-04 13:19:48] INFO: [REQUEST] GET /api/crm/tasks/69a859268fd190e9dd4ada39
 [2026-03-04 13:19:50] INFO: [REQUEST] PATCH /api/crm/tasks/69a854c58fd190e9dd4ada01/complete
 [2026-03-04 13:19:50] INFO: [REQUEST] GET /api/crm/tasks/69a854c58fd190e9dd4ada01
+[2026-03-04 13:29:49] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:29:50] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:44:30] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 13:44:32] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 13:44:34] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:44:34] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:44:34] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:45:49] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:45:50] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:47:51] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:47:52] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:47:52] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:47:52] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:47:52] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:48:11] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:48:12] INFO: [REQUEST] GET /api/crm/companies?search=&limit=10
+[2026-03-04 13:48:12] INFO: [REQUEST] GET /api/crm/contacts?search=&limit=10
+[2026-03-04 13:48:12] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 13:49:42] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 13:49:43] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:50:23] INFO: [REQUEST] PATCH /api/crm/tasks/69a862a78fd190e9dd4adb8e/complete
+[2026-03-04 13:50:23] INFO: [REQUEST] GET /api/crm/tasks/69a862a78fd190e9dd4adb8e
+[2026-03-04 13:53:48] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:53:48] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:53:48] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:53:48] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:53:48] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:54:31] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=5
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 13:55:05] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 13:55:06] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 13:55:10] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 13:55:15] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 13:55:20] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 13:55:23] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:55:23] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:55:23] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:55:38] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:55:38] INFO: [REQUEST] GET /api/crm/companies?search=&limit=10
+[2026-03-04 13:55:38] INFO: [REQUEST] GET /api/crm/contacts?search=&limit=10
+[2026-03-04 13:55:38] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 13:56:44] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:56:44] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:56:44] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:56:44] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:56:44] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:57:38] INFO: [REQUEST] PATCH /api/crm/tasks/69a5f2067896ea31135724bc/complete
+[2026-03-04 13:57:39] INFO: [REQUEST] GET /api/crm/tasks/69a5f2067896ea31135724bc
+[2026-03-04 13:58:41] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=5
+[2026-03-04 13:59:30] INFO: [REQUEST] PATCH /api/crm/tasks/69a440fc96c336ec9f44835a/complete
+[2026-03-04 13:59:31] INFO: [REQUEST] GET /api/crm/tasks/69a440fc96c336ec9f44835a
+[2026-03-04 13:59:55] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=5
+[2026-03-04 14:00:23] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=20
+[2026-03-04 14:01:09] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=50
+[2026-03-04 14:02:26] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=50
+[2026-03-04 14:03:27] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 14:03:27] INFO: [REQUEST] GET /api/crm/companies?search=&limit=10
+[2026-03-04 14:03:27] INFO: [REQUEST] GET /api/crm/contacts?search=&limit=10
+[2026-03-04 14:03:27] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 14:06:10] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 14:07:24] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 14:08:39] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 14:09:19] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=1
+[2026-03-04 14:12:54] INFO: [REQUEST] PATCH /api/crm/tasks/69a0622e4c5f4cc104972333/complete
+[2026-03-04 14:12:55] INFO: [REQUEST] GET /api/crm/tasks/69a0622e4c5f4cc104972333
+[2026-03-04 14:15:00] INFO: [REQUEST] PATCH /api/crm/tasks/69a4473096c336ec9f448787/complete
+[2026-03-04 14:15:01] INFO: [REQUEST] GET /api/crm/tasks/69a4473096c336ec9f448787
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 14:15:53] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 14:15:54] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 14:15:54] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 14:15:54] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 14:15:57] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 14:16:02] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 14:16:02] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 14:16:02] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 14:16:02] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 14:16:02] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 14:16:02] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 14:16:03] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 14:16:03] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 14:16:07] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 14:16:12] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=visitando&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=interactuando&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=conectando&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=enriqueciendo&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=esperando_aceptacion&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=aceptado&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts?status=mensaje_enviado&page=1&limit=50
+[2026-03-04 14:16:17] INFO: [REQUEST] GET /api/linkedin/crm/contacts/counts
+[2026-03-04 14:16:19] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 14:16:19] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 14:16:19] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 14:16:19] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 14:16:19] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 14:31:12] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 14:31:12] INFO: [REQUEST] GET /api/crm/companies?search=&limit=10
+[2026-03-04 14:31:12] INFO: [REQUEST] GET /api/crm/contacts?search=&limit=10
+[2026-03-04 14:31:12] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 14:35:42] INFO: 
+🛑 Received SIGTERM — shutting down gracefully...
+[2026-03-04 14:35:45] INFO: 📊 LinkedIn CRM routes mounted at /api/linkedin/crm
+[2026-03-04 14:35:45] INFO: 🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts
+[2026-03-04 14:35:45] INFO: 📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard
+[2026-03-04 14:35:45] INFO: ⚙️ System Config, Partners, Competitors, POS Systems & Event Fairs routes mounted
+[2026-03-04 14:35:46] INFO: ✅ Server running on http://localhost:3000
+[2026-03-04 14:35:46] INFO: 🕐 Server timezone: America/Buenos_Aires | UTC offset: 180min | Now: 2026-03-04T17:35:46.535Z
+[2026-03-04 14:35:46] INFO: 🎙️ Using Whisper for transcription
+[2026-03-04 14:35:46] INFO: 📱 WhatsApp scheduler enabled (runs independently of WA connection)
+[2026-03-04 14:35:46] INFO: 📡 API endpoints available:
+[2026-03-04 14:35:46] INFO:    GET  /api/health
+[2026-03-04 14:35:46] INFO:    GET  /api/history
+[2026-03-04 14:35:46] INFO:    POST /api/transcribe/file
+[2026-03-04 14:35:46] INFO:    POST /api/transcribe/blob
+[2026-03-04 14:35:46] INFO:    GET  /api/settings
+[2026-03-04 14:35:46] INFO:    GET  /api/whatsapp/status
+[2026-03-04 14:35:46] INFO:    GET  /api/whatsapp/qr
+[2026-03-04 14:35:46] INFO:    GET  /api/whatsapp/chats
+[2026-03-04 14:35:46] INFO:    POST /api/whatsapp/schedule
+[2026-03-04 14:35:46] INFO:    GET  /api/whatsapp/scheduled
+[2026-03-04 14:35:46] INFO:    GET  /api/whatsapp/history
+[2026-03-04 14:35:46] INFO:    📊 Resumidor:
+[2026-03-04 14:35:46] INFO:    GET  /api/resumidor/health
+[2026-03-04 14:35:46] INFO:    GET  /api/resumidor/groups
+[2026-03-04 14:35:46] INFO:    POST /api/resumidor/summarize
+[2026-03-04 14:35:46] INFO:    GET  /api/resumidor/models
+[2026-03-04 14:35:46] INFO:    GET  /api/resumidor/history
+[2026-03-04 14:35:46] INFO:    🔗 LinkedIn:
+[2026-03-04 14:35:46] INFO:    GET  /api/linkedin/status
+[2026-03-04 14:35:46] INFO:    POST /api/linkedin/launch
+[2026-03-04 14:35:46] INFO:    POST /api/linkedin/start-prospecting
+[2026-03-04 14:35:46] INFO:    POST /api/linkedin/pause
+[2026-03-04 14:35:46] INFO:    POST /api/linkedin/resume
+[2026-03-04 14:35:46] INFO:    POST /api/linkedin/stop
+[2026-03-04 14:35:46] INFO:    GET  /api/linkedin/progress
+[2026-03-04 14:35:46] INFO:    GET  /api/linkedin/progress/stream
+[2026-03-04 14:35:46] INFO: 🚀 Checking for pending scheduled messages to boot specific users...
+[2026-03-04 14:35:47] INFO: 📡 Found 0 user(s) with pending messages.
+[2026-03-04 14:35:47] INFO: ✅ All 0 tenant(s) initialization started.
+[2026-03-04 14:36:10] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 14:36:10] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 14:36:11] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 14:36:11] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 14:36:11] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 14:36:38] INFO: [REQUEST] PATCH /api/crm/tasks/69a43f4d96c336ec9f44803e/complete
+[2026-03-04 14:36:38] INFO: [REQUEST] GET /api/crm/tasks/69a43f4d96c336ec9f44803e
+[2026-03-04 14:38:04] INFO: [REQUEST] GET /api/crm/activities?page=1&limit=5

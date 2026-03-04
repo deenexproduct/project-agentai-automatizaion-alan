@@ -193,7 +193,7 @@ export type DealData = {
 export type TaskData = {
     _id: string;
     title: string;
-    type: 'call' | 'meeting' | 'follow_up' | 'proposal' | 'research' | 'other';
+    type: 'call' | 'whatsapp' | 'email' | 'linkedin_message' | 'meeting' | 'follow_up' | 'proposal' | 'research' | 'other';
     priority: 'low' | 'medium' | 'high' | 'urgent';
     status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
     dueDate?: string;

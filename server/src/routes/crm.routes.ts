@@ -1034,6 +1034,8 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
 router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
+
+        // 1. Find and complete WITHOUT populate (avoids Mongoose saving populated objects)
         const task = await Task.findOne({ _id: req.params.id });
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
@@ -1041,10 +1043,50 @@ router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
         task.completedAt = new Date();
         await task.save();
 
-        // Auto-create Activity from completed task
+        // 2. Re-fetch with populate for context (read-only lean query)
+        const populatedTask = await Task.findById(task._id)
+            .populate('contact', 'fullName profilePhotoUrl phone email')
+            .populate('deal', 'title')
+            .populate('company', 'name logo localesCount')
+            .populate('assignedTo', 'name email profilePhotoUrl')
+            .lean();
+
+        // 3. Intelligent mapping: task.type → activity.type
+        const TASK_TO_ACTIVITY: Record<string, string> = {
+            call: 'call',
+            whatsapp: 'whatsapp',
+            email: 'email',
+            linkedin_message: 'linkedin_message',
+            meeting: 'meeting',
+        };
+
+        const activityType = TASK_TO_ACTIVITY[task.type] || 'task_completed';
+        console.log(`[ACTIVITY-MAP] task.type="${task.type}" → activityType="${activityType}" | title="${task.title}"`);
+
+        // 4. Build contextual description from populated data
+        const contactName = (populatedTask?.contact as any)?.fullName || '';
+        const companyName = (populatedTask?.company as any)?.name || '';
+        const contextParts = [contactName, companyName].filter(Boolean);
+        const contextSuffix = contextParts.length ? ` — ${contextParts.join(' / ')}` : '';
+
+        const DESCRIPTION_PREFIXES: Record<string, string> = {
+            call: '📞 Llamada realizada',
+            whatsapp: '💬 Mensaje de WhatsApp enviado',
+            email: '✉️ Email enviado',
+            linkedin_message: '🔗 Mensaje de LinkedIn enviado',
+            meeting: '🤝 Reunión realizada',
+            follow_up: '🔄 Seguimiento realizado',
+            proposal: '📋 Propuesta enviada',
+            research: '🔍 Investigación completada',
+        };
+
+        const prefix = DESCRIPTION_PREFIXES[task.type] || '✅ Tarea completada';
+        const description = `${prefix}: ${task.title}${contextSuffix}`;
+
+        // 5. Auto-create Activity with correct type (use raw ObjectIds from unpopulated task)
         await Activity.create({
-            type: 'task_completed',
-            description: `Tarea completada: ${task.title}`,
+            type: activityType,
+            description,
             contact: task.contact || undefined,
             deal: task.deal || undefined,
             company: task.company || undefined,
@@ -1054,13 +1096,7 @@ router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
             userId,
         });
 
-        const populated = await Task.findById(task._id)
-            .populate('contact', 'fullName profilePhotoUrl phone email')
-            .populate('deal', 'title')
-            .populate('company', 'name logo localesCount')
-            .lean();
-
-        res.json({ success: true, task: populated });
+        res.json({ success: true, task: populatedTask });
     } catch (err: any) {
         console.error('CRM complete task error:', err.message);
         res.status(500).json({ error: 'Failed to complete task' });

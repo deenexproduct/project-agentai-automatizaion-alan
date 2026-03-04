@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 // ── Enums ─────────────────────────────────────────────────────
 
-export const TASK_TYPES = ['call', 'meeting', 'follow_up', 'proposal', 'research', 'other'] as const;
+export const TASK_TYPES = ['call', 'whatsapp', 'email', 'linkedin_message', 'meeting', 'follow_up', 'proposal', 'research', 'other'] as const;
 export type TaskType = typeof TASK_TYPES[number];
 
 export const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;

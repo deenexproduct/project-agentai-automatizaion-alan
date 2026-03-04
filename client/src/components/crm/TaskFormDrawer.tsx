@@ -408,13 +408,15 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                                 onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                                 className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
                             >
-                                <option value="call">Llamada</option>
-                                <option value="meeting">Reunión</option>
-                                <option value="email">Email</option>
-                                <option value="follow_up">Seguimiento</option>
-                                <option value="proposal">Propuesta</option>
-                                <option value="research">Investigación</option>
-                                <option value="other">Otro</option>
+                                <option value="call">📞 Llamada</option>
+                                <option value="whatsapp">💬 WhatsApp</option>
+                                <option value="email">✉️ Email</option>
+                                <option value="linkedin_message">🔗 LinkedIn</option>
+                                <option value="meeting">🤝 Reunión</option>
+                                <option value="follow_up">🔄 Seguimiento</option>
+                                <option value="proposal">📋 Propuesta</option>
+                                <option value="research">🔍 Investigación</option>
+                                <option value="other">📌 Otro</option>
                             </select>
                         </div>
 
