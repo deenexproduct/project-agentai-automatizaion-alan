@@ -394,3 +394,147 @@
 [2026-03-04 12:13:02] INFO: [REQUEST] GET /api/auth/users
 [2026-03-04 12:16:24] INFO: [REQUEST] GET /api/event-fairs
 [2026-03-04 12:16:57] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:28:03] INFO: [REQUEST] GET /api/calendar/events?start=2026-02-28T03%3A00%3A00.000Z&end=2026-04-06T02%3A59%3A59.999Z
+[2026-03-04 12:28:03] INFO: [REQUEST] GET /api/calendar/events?start=2026-02-28T03%3A00%3A00.000Z&end=2026-04-06T02%3A59%3A59.999Z
+[2026-03-04 12:28:05] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 12:28:05] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 12:28:23] INFO: [REQUEST] GET /api/dashboard/metrics
+[2026-03-04 12:28:23] INFO: [REQUEST] GET /api/crm/activities?limit=40&unified=true
+[2026-03-04 12:28:23] INFO: [REQUEST] GET /api/crm/tasks?overdue=true&limit=5
+[2026-03-04 12:28:23] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 12:28:24] INFO: [REQUEST] GET /api/crm/tasks?overdue=true&limit=5
+[2026-03-04 12:28:24] INFO: [REQUEST] GET /api/crm/activities?limit=40&unified=true
+[2026-03-04 12:28:24] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 12:28:24] INFO: [REQUEST] GET /api/dashboard/metrics
+[2026-03-04 12:28:36] INFO: [REQUEST] GET /api/pos-systems
+[2026-03-04 12:28:36] INFO: [REQUEST] GET /api/pos-systems
+[2026-03-04 12:28:37] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:28:37] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:48:29] INFO: 📊 LinkedIn CRM routes mounted at /api/linkedin/crm
+[2026-03-04 12:48:29] INFO: 🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts
+[2026-03-04 12:48:29] INFO: 📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard
+[2026-03-04 12:48:29] INFO: ⚙️ System Config, Partners, Competitors, POS Systems & Event Fairs routes mounted
+[2026-03-04 12:48:29] INFO: ✅ Server running on http://localhost:3000
+[2026-03-04 12:48:29] INFO: 🕐 Server timezone: America/Buenos_Aires | UTC offset: 180min | Now: 2026-03-04T15:48:29.969Z
+[2026-03-04 12:48:29] INFO: 🎙️ Using Whisper for transcription
+[2026-03-04 12:48:29] INFO: 📱 WhatsApp scheduler enabled (runs independently of WA connection)
+[2026-03-04 12:48:29] INFO: 📡 API endpoints available:
+[2026-03-04 12:48:29] INFO:    GET  /api/health
+[2026-03-04 12:48:29] INFO:    GET  /api/history
+[2026-03-04 12:48:29] INFO:    POST /api/transcribe/file
+[2026-03-04 12:48:29] INFO:    POST /api/transcribe/blob
+[2026-03-04 12:48:29] INFO:    GET  /api/settings
+[2026-03-04 12:48:29] INFO:    GET  /api/whatsapp/status
+[2026-03-04 12:48:29] INFO:    GET  /api/whatsapp/qr
+[2026-03-04 12:48:29] INFO:    GET  /api/whatsapp/chats
+[2026-03-04 12:48:29] INFO:    POST /api/whatsapp/schedule
+[2026-03-04 12:48:29] INFO:    GET  /api/whatsapp/scheduled
+[2026-03-04 12:48:29] INFO:    GET  /api/whatsapp/history
+[2026-03-04 12:48:29] INFO:    📊 Resumidor:
+[2026-03-04 12:48:29] INFO:    GET  /api/resumidor/health
+[2026-03-04 12:48:29] INFO:    GET  /api/resumidor/groups
+[2026-03-04 12:48:29] INFO:    POST /api/resumidor/summarize
+[2026-03-04 12:48:29] INFO:    GET  /api/resumidor/models
+[2026-03-04 12:48:29] INFO:    GET  /api/resumidor/history
+[2026-03-04 12:48:29] INFO:    🔗 LinkedIn:
+[2026-03-04 12:48:29] INFO:    GET  /api/linkedin/status
+[2026-03-04 12:48:29] INFO:    POST /api/linkedin/launch
+[2026-03-04 12:48:29] INFO:    POST /api/linkedin/start-prospecting
+[2026-03-04 12:48:29] INFO:    POST /api/linkedin/pause
+[2026-03-04 12:48:29] INFO:    POST /api/linkedin/resume
+[2026-03-04 12:48:29] INFO:    POST /api/linkedin/stop
+[2026-03-04 12:48:29] INFO:    GET  /api/linkedin/progress
+[2026-03-04 12:48:29] INFO:    GET  /api/linkedin/progress/stream
+[2026-03-04 12:48:29] INFO: 🚀 Checking for pending scheduled messages to boot specific users...
+[2026-03-04 12:48:30] INFO: 📡 Found 0 user(s) with pending messages.
+[2026-03-04 12:48:30] INFO: ✅ All 0 tenant(s) initialization started.
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/dashboard/metrics
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/crm/tasks?overdue=true&limit=5
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/crm/activities?limit=40&unified=true
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/crm/tasks?overdue=true&limit=5
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/crm/activities?limit=40&unified=true
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/dashboard/metrics
+[2026-03-04 12:48:37] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 12:48:38] INFO: [REQUEST] GET /api/calendar/events?start=2026-02-28T03%3A00%3A00.000Z&end=2026-04-06T02%3A59%3A59.999Z
+[2026-03-04 12:48:39] INFO: [REQUEST] GET /api/calendar/events?start=2026-02-28T03%3A00%3A00.000Z&end=2026-04-06T02%3A59%3A59.999Z
+[2026-03-04 12:48:43] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:48:44] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:48:44] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 12:48:45] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:48:45] INFO: [REQUEST] GET /api/crm/contacts?search=&limit=10
+[2026-03-04 12:48:45] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 12:48:45] INFO: [REQUEST] GET /api/crm/companies?search=&limit=10
+[2026-03-04 12:48:52] INFO: [REQUEST] GET /api/crm/companies?search=luc&limit=10
+[2026-03-04 12:48:52] INFO: [REQUEST] GET /api/crm/companies/69a34f7796c336ec9f446c68
+[2026-03-04 12:48:54] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 12:48:54] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 12:50:06] INFO: [REQUEST] PATCH /api/crm/tasks/69a854668fd190e9dd4ad9e3/complete
+[2026-03-04 12:50:06] INFO: [REQUEST] GET /api/crm/tasks/69a854668fd190e9dd4ad9e3
+[2026-03-04 12:50:29] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 12:50:29] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 12:50:35] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 12:50:35] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 12:50:35] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:50:35] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:50:36] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:09:01] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:09:02] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:09:02] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:09:02] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:09:02] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:09:05] INFO: [REQUEST] PATCH /api/crm/tasks/69a859156e602107f32b20c6/complete
+[2026-03-04 13:09:05] INFO: [REQUEST] GET /api/crm/tasks/69a859156e602107f32b20c6
+[2026-03-04 13:09:10] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 13:09:10] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:09:22] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:09:23] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:09:23] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:09:23] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:09:23] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:09:27] INFO: [REQUEST] GET /api/crm/tasks?limit=100
+[2026-03-04 13:09:28] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:09:54] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:09:54] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:09:54] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:09:54] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:09:54] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:09:58] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:09:58] INFO: [REQUEST] GET /api/crm/tasks/699e32c9cd90819e7ed4b14a
+[2026-03-04 13:10:07] INFO: [REQUEST] PATCH /api/crm/tasks/699e32c9cd90819e7ed4b14a/complete
+[2026-03-04 13:10:07] INFO: [REQUEST] GET /api/crm/tasks/699e32c9cd90819e7ed4b14a
+[2026-03-04 13:10:10] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 13:10:11] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:10:13] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:10:13] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:10:13] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:10:13] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:10:13] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:19:04] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:19:05] INFO: [REQUEST] GET /api/crm/companies?search=&limit=10
+[2026-03-04 13:19:05] INFO: [REQUEST] GET /api/crm/contacts?search=&limit=10
+[2026-03-04 13:19:05] INFO: [REQUEST] GET /api/crm/deals
+[2026-03-04 13:19:14] INFO: [REQUEST] GET /api/crm/companies/69a58d4b7896ea3113571dfa
+[2026-03-04 13:19:16] INFO: [REQUEST] GET /api/crm/companies?search=&limit=10
+[2026-03-04 13:19:17] INFO: [REQUEST] GET /api/crm/companies?search=luci&limit=10
+[2026-03-04 13:19:18] INFO: [REQUEST] GET /api/crm/companies?search=lucc&limit=10
+[2026-03-04 13:19:19] INFO: [REQUEST] GET /api/crm/companies/69a34f7796c336ec9f446c68
+[2026-03-04 13:19:21] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 13:19:21] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:19:24] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:19:25] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 13:19:25] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:19:25] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 13:19:25] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:19:26] INFO: [REQUEST] PATCH /api/crm/tasks/69a85b898fd190e9dd4adae1/complete
+[2026-03-04 13:19:26] INFO: [REQUEST] GET /api/crm/tasks/69a85b898fd190e9dd4adae1
+[2026-03-04 13:19:28] INFO: [REQUEST] POST /api/crm/tasks
+[2026-03-04 13:19:29] INFO: [REQUEST] GET /api/crm/tasks?limit=100&status=pending,in_progress
+[2026-03-04 13:19:44] INFO: [REQUEST] PATCH /api/crm/tasks/69a85b908fd190e9dd4adb0c/complete
+[2026-03-04 13:19:45] INFO: [REQUEST] GET /api/crm/tasks/69a85b908fd190e9dd4adb0c
+[2026-03-04 13:19:48] INFO: [REQUEST] PATCH /api/crm/tasks/69a859268fd190e9dd4ada39/complete
+[2026-03-04 13:19:48] INFO: [REQUEST] GET /api/crm/tasks/69a859268fd190e9dd4ada39
+[2026-03-04 13:19:50] INFO: [REQUEST] PATCH /api/crm/tasks/69a854c58fd190e9dd4ada01/complete
+[2026-03-04 13:19:50] INFO: [REQUEST] GET /api/crm/tasks/69a854c58fd190e9dd4ada01

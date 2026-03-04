@@ -235,3 +235,61 @@ export function getDefaultTaskDueDate(initialDate?: string | Date | null): strin
     // Format output as 'YYYY-MM-DDTHH:mm' in UTC
     return formatToUTCDateTimeInput(dateObj);
 }
+
+/**
+ * Adds N business days to a date (skips Saturday and Sunday).
+ */
+export function addBusinessDays(from: Date, days: number): Date {
+    const result = new Date(from);
+    let added = 0;
+    while (added < days) {
+        result.setUTCDate(result.getUTCDate() + 1);
+        const dow = result.getUTCDay(); // 0=Sun, 6=Sat
+        if (dow !== 0 && dow !== 6) added++;
+    }
+    return result;
+}
+
+/**
+ * Returns follow-up date options for the popup dropdown.
+ * Each option has a label (e.g. "En 1 día laborable (jueves)") and an ISO date string.
+ */
+export function getFollowUpDateOptions(): { label: string; value: string; date: Date }[] {
+    const now = new Date();
+    const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const monthNames = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+    const configs: { businessDays?: number; calendarDays?: number; label: string }[] = [
+        { businessDays: 1, label: '1 día laborable' },
+        { businessDays: 2, label: '2 días laborables' },
+        { businessDays: 3, label: '3 días laborables' },
+        { calendarDays: 7, label: '1 semana' },
+        { calendarDays: 14, label: '2 semanas' },
+        { calendarDays: 30, label: '1 mes' },
+        { calendarDays: 90, label: '3 meses' },
+    ];
+
+    return configs.map((cfg) => {
+        let targetDate: Date;
+        if (cfg.businessDays != null) {
+            targetDate = addBusinessDays(now, cfg.businessDays);
+        } else {
+            targetDate = new Date(now);
+            targetDate.setUTCDate(targetDate.getUTCDate() + cfg.calendarDays!);
+        }
+
+        const dayName = dayNames[targetDate.getUTCDay()];
+        const dayNum = targetDate.getUTCDate();
+        const monthName = monthNames[targetDate.getUTCMonth()];
+
+        const dateLabel = cfg.calendarDays && cfg.calendarDays >= 7
+            ? `${dayNum} ${monthName}`
+            : dayName;
+
+        return {
+            label: `En ${cfg.label} (${dateLabel})`,
+            value: formatToUTCDateTimeInput(targetDate),
+            date: targetDate,
+        };
+    });
+}

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTasks, completeTask, updateTask, TaskData, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { getTasks, completeTask, updateTask, getTask, TaskData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, CalendarDays, Search, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical, Phone } from 'lucide-react';
 import { formatToArgentineDateTime, isTodayInArgentina, isOverdueExact } from '../../utils/date';
 import TaskFormDrawer from './TaskFormDrawer';
 import PremiumHeader from './PremiumHeader';
+import FollowUpTaskModal from './FollowUpTaskModal';
 import OwnerAvatar from '../common/OwnerAvatar';
 
 export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
@@ -18,6 +19,7 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
     const [assignedToFilter, setAssignedToFilter] = useState<string>('');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<TaskData | null>(null);
+    const [followUpTask, setFollowUpTask] = useState<TaskData | null>(null);
     const navigate = useNavigate();
 
     // Deep-linking effect
@@ -86,6 +88,13 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
         try {
             if (newStatus === 'completed' && task.status !== 'completed') {
                 await completeTask(draggableId);
+                // Fetch full task data for follow-up modal
+                try {
+                    const fullTask = await getTask(draggableId);
+                    setFollowUpTask(fullTask);
+                } catch {
+                    setFollowUpTask(task);
+                }
             } else {
                 await updateTask(draggableId, { status: newStatus });
             }
@@ -113,8 +122,19 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
         e.preventDefault();
         e.stopPropagation();
         try {
+            // Find the task before removing it from the list
+            const taskToComplete = tasks.find(t => t._id === id);
             setTasks(prev => prev.filter(t => t._id !== id));
             await completeTask(id);
+            // Show follow-up modal with full task data
+            if (taskToComplete) {
+                try {
+                    const fullTask = await getTask(id);
+                    setFollowUpTask(fullTask);
+                } catch {
+                    setFollowUpTask(taskToComplete);
+                }
+            }
         } catch (error) {
             console.error("Failed to complete task", error);
             loadData();
@@ -276,8 +296,8 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
                             value={assignedToFilter}
                             onChange={(e) => setAssignedToFilter(e.target.value)}
                             className={`pl-9 pr-3 py-1.5 rounded-[10px] text-[12px] font-bold border transition-all duration-300 appearance-none cursor-pointer bg-white/60 backdrop-blur-sm shadow-inner ${assignedToFilter
-                                    ? 'border-violet-200 text-violet-700 bg-violet-50/50 ring-2 ring-violet-100'
-                                    : 'border-slate-200/60 text-slate-500 hover:border-slate-300'
+                                ? 'border-violet-200 text-violet-700 bg-violet-50/50 ring-2 ring-violet-100'
+                                : 'border-slate-200/60 text-slate-500 hover:border-slate-300'
                                 }`}
                             title="Filtrar por responsable"
                         >
@@ -504,6 +524,14 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
                     if (urlTaskId) navigate('/linkedin/tasks');
                 }}
                 onSaved={loadData}
+                onTaskCompleted={(completedTask) => setFollowUpTask(completedTask)}
+            />
+
+            <FollowUpTaskModal
+                open={!!followUpTask}
+                completedTask={followUpTask!}
+                onClose={() => setFollowUpTask(null)}
+                onCreated={loadData}
             />
         </div>
     );

@@ -12,9 +12,10 @@ interface Props {
     initialDate?: Date;
     onClose: () => void;
     onSaved: () => void;
+    onTaskCompleted?: (completedTask: TaskData) => void;
 }
 
-export default function TaskFormDrawer({ task, open, initialDate, onClose, onSaved }: Props) {
+export default function TaskFormDrawer({ task, open, initialDate, onClose, onSaved, onTaskCompleted }: Props) {
     const { user } = useAuth();
     const [formData, setFormData] = useState<Partial<TaskData>>({
         title: '',
@@ -314,6 +315,12 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                     // Also update other changed fields (excluding status, already handled)
                     const { status, ...otherFields } = payload;
                     await updateTask(task._id, otherFields);
+                    // Trigger follow-up modal
+                    const fullTask = await getTask(task._id);
+                    onSaved();
+                    onClose();
+                    if (onTaskCompleted) onTaskCompleted(fullTask);
+                    return;
                 } else {
                     await updateTask(task._id, payload);
                 }
