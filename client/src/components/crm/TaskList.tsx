@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTasks, completeTask, updateTask, TaskData } from '../../services/crm.service';
+import { getTasks, completeTask, updateTask, TaskData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, CalendarDays, Search, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical, Phone } from 'lucide-react';
 import { formatToArgentineDateTime, isTodayInArgentina, isOverdueExact } from '../../utils/date';
@@ -14,6 +14,8 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<'all' | 'today' | 'overdue'>('all');
     const [viewMode, setViewMode] = useState<'date' | 'kanban'>('date');
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
+    const [assignedToFilter, setAssignedToFilter] = useState<string>('');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<TaskData | null>(null);
     const navigate = useNavigate();
@@ -37,6 +39,7 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
                 params.status = 'pending,in_progress';
                 if (filter === 'overdue') params.overdue = true;
             }
+            if (assignedToFilter) params.assignedTo = assignedToFilter;
 
             const res = await getTasks(params);
             let filteredTasks = res.tasks;
@@ -59,7 +62,12 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
     useEffect(() => {
         const timeout = setTimeout(loadData, 300);
         return () => clearTimeout(timeout);
-    }, [search, filter, viewMode]);
+    }, [search, filter, viewMode, assignedToFilter]);
+
+    // Load team users for filter
+    useEffect(() => {
+        getTeamUsers().then(setTeamUsers).catch(console.error);
+    }, []);
 
     const handleDragEnd = async (result: DropResult) => {
         if (!result.destination) return;
@@ -255,6 +263,31 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
                     addLabel="Nueva Tarea"
                     containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
                 >
+                    {/* Responsable Filter */}
+                    <div className="relative flex items-center">
+                        <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                            <OwnerAvatar
+                                name={teamUsers.find(u => u._id === assignedToFilter)?.name || ''}
+                                profilePhotoUrl={teamUsers.find(u => u._id === assignedToFilter)?.profilePhotoUrl}
+                                size="xs"
+                            />
+                        </div>
+                        <select
+                            value={assignedToFilter}
+                            onChange={(e) => setAssignedToFilter(e.target.value)}
+                            className={`pl-9 pr-3 py-1.5 rounded-[10px] text-[12px] font-bold border transition-all duration-300 appearance-none cursor-pointer bg-white/60 backdrop-blur-sm shadow-inner ${assignedToFilter
+                                    ? 'border-violet-200 text-violet-700 bg-violet-50/50 ring-2 ring-violet-100'
+                                    : 'border-slate-200/60 text-slate-500 hover:border-slate-300'
+                                }`}
+                            title="Filtrar por responsable"
+                        >
+                            <option value="">Todos</option>
+                            {teamUsers.map(u => (
+                                <option key={u._id} value={u._id}>{u.name || u.email}</option>
+                            ))}
+                        </select>
+                    </div>
+
                     <div className="flex bg-white/50 backdrop-blur-sm p-1 rounded-[12px] border border-white/60 shadow-inner">
                         <button
                             onClick={() => setViewMode('date')}
