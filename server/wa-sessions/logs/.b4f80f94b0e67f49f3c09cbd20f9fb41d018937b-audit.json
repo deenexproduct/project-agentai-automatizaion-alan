@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/logs/.b4f80f94b0e67f49f3c09cbd20f9fb41d018937b-audit.json",
+    "files": [
+        {
+            "date": 1772591628849,
+            "name": "/Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/logs/whatsapp-2026-03-03.log",
+            "hash": "21591689c1bc3c8d8f63eea666130169f3b01122f5c950e71c076974b1e91674"
+        },
+        {
+            "date": 1772593206008,
+            "name": "/Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/logs/whatsapp-2026-03-04.log",
+            "hash": "7f8e26ad90f57793ab20c3718392affa57c3732c782f28f055970431ab0da891"
+        }
+    ],
+    "hashType": "sha256"
+}

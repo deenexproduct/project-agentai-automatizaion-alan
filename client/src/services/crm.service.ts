@@ -169,9 +169,9 @@ export type TaskData = {
     status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
     dueDate?: string;
     durationMinutes?: number;
-    contact?: { _id: string; fullName: string; profilePhotoUrl?: string };
+    contact?: { _id: string; fullName: string; profilePhotoUrl?: string; phone?: string; email?: string };
     deal?: { _id: string; title: string };
-    company?: { _id: string; name: string; logo?: string };
+    company?: { _id: string; name: string; logo?: string; localesCount?: number };
     assignedTo?: { _id: string; name: string; email: string; profilePhotoUrl?: string };
     isOverdue?: boolean;
     createdAt: string;

@@ -291,10 +291,23 @@ router.get('/contacts', async (req: Request, res: Response) => {
         if (assignedTo) query.assignedTo = assignedTo;
         if (search) {
             const s = search as string;
+
+            // Buscar empresas que coincidan con el término de búsqueda
+            const matchingCompanies = await Company.find(
+                { name: { $regex: s, $options: 'i' } },
+                { _id: 1 }
+            ).lean();
+            const companyIds = matchingCompanies.map(c => c._id);
+            console.log(`🔍 Contact search: "${s}" → found ${companyIds.length} matching companies`);
+
             query.$or = [
                 { fullName: { $regex: s, $options: 'i' } },
                 { email: { $regex: s, $options: 'i' } },
                 { position: { $regex: s, $options: 'i' } },
+                ...(companyIds.length > 0 ? [
+                    { company: { $in: companyIds } },
+                    { companies: { $in: companyIds } },
+                ] : []),
             ];
         }
 
@@ -914,9 +927,9 @@ router.get('/tasks', async (req: Request, res: Response) => {
 
         const [tasks, total] = await Promise.all([
             Task.find(query)
-                .populate('contact', 'fullName profilePhotoUrl')
+                .populate('contact', 'fullName profilePhotoUrl phone email')
                 .populate('deal', 'title')
-                .populate('company', 'name logo')
+                .populate('company', 'name logo localesCount')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ dueDate: 1, priority: -1 })
                 .skip((pageNum - 1) * limitNum)
@@ -974,9 +987,9 @@ router.post('/tasks', async (req: Request, res: Response) => {
         const task = await Task.create({ ...safeBody, assignedTo: safeBody.assignedTo || userId, userId });
 
         const populated = await Task.findById(task._id)
-            .populate('contact', 'fullName')
+            .populate('contact', 'fullName profilePhotoUrl phone email')
             .populate('deal', 'title')
-            .populate('company', 'name')
+            .populate('company', 'name logo localesCount')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 
@@ -1003,9 +1016,9 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
             { $set: safeBody },
             { new: true, runValidators: true }
         )
-            .populate('contact', 'fullName')
+            .populate('contact', 'fullName profilePhotoUrl phone email')
             .populate('deal', 'title')
-            .populate('company', 'name')
+            .populate('company', 'name logo localesCount')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 
@@ -1042,9 +1055,9 @@ router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
         });
 
         const populated = await Task.findById(task._id)
-            .populate('contact', 'fullName')
+            .populate('contact', 'fullName profilePhotoUrl phone email')
             .populate('deal', 'title')
-            .populate('company', 'name')
+            .populate('company', 'name logo localesCount')
             .lean();
 
         res.json({ success: true, task: populated });

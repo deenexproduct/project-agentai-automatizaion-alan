@@ -1,2 +1,6 @@
-2026/02/26-20:48:54.687 1b53ff Creating DB /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Local Storage/leveldb since it was missing.
-2026/02/26-20:48:54.696 1b53ff Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/03/03-23:33:53.180 60f03 Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/03/03-23:33:53.183 60f03 Recovering log #3
+2026/03/03-23:33:53.184 60f03 Reusing old log /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Local Storage/leveldb/000003.log 
+2026/03/03-23:36:34.582 60f08 Level-0 table #5: started
+2026/03/03-23:36:34.588 60f08 Level-0 table #5: 23339 bytes OK
+2026/03/03-23:36:34.593 60f08 Delete type=0 #3

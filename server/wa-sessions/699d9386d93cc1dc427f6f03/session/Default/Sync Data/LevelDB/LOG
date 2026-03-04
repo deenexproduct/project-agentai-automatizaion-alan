@@ -1,2 +1,3 @@
-2026/02/26-20:48:54.161 1b5388 Creating DB /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Sync Data/LevelDB since it was missing.
-2026/02/26-20:48:54.205 1b5388 Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Sync Data/LevelDB/MANIFEST-000001
+2026/03/03-23:33:53.115 60ea6 Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Sync Data/LevelDB/MANIFEST-000001
+2026/03/03-23:33:53.140 60ea6 Recovering log #3
+2026/03/03-23:33:53.142 60ea6 Reusing old log /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/Sync Data/LevelDB/000003.log 

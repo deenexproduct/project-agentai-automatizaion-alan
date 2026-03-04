@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTasks, completeTask, updateTask, TaskData } from '../../services/crm.service';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, CalendarDays, Search, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, CalendarDays, Search, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical, Phone } from 'lucide-react';
 import { formatToArgentineDateTime, isTodayInArgentina, isOverdueExact } from '../../utils/date';
 import TaskFormDrawer from './TaskFormDrawer';
 import PremiumHeader from './PremiumHeader';
@@ -194,17 +194,33 @@ export default function TaskList({ urlTaskId }: { urlTaskId?: string }) {
                             </span>
                         )}
                         {task.company && (
-                            <div className="flex items-center gap-1.5 text-slate-500 min-w-0 shrink" title={`Empresa: ${task.company.name}`}>
+                            <div className="flex items-center gap-1.5 text-slate-500 min-w-0 shrink" title={`Empresa: ${task.company.name}${task.company.localesCount ? ` (${task.company.localesCount} locales)` : ''}`}>
                                 <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block shrink-0" />
                                 <Building2 size={13} className="text-slate-400 shrink-0" />
                                 <span className="truncate">{task.company.name}</span>
+                                {task.company.localesCount != null && task.company.localesCount > 0 && (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                                        {task.company.localesCount} loc.
+                                    </span>
+                                )}
                             </div>
                         )}
                         {task.contact && (
-                            <div className="flex items-center gap-1.5 text-slate-500 min-w-0 shrink" title={`Contacto: ${task.contact.fullName}`}>
+                            <div className="flex items-center gap-1.5 text-slate-500 min-w-0 shrink" title={`Contacto: ${task.contact.fullName}${task.contact.phone ? ` — ${task.contact.phone}` : ''}`}>
                                 <span className="w-1 h-1 rounded-full bg-slate-200 hidden sm:block shrink-0" />
                                 <Users size={13} className="text-slate-400 shrink-0" />
                                 <span className="truncate">{task.contact.fullName}</span>
+                                {task.contact.phone && (
+                                    <a
+                                        href={`tel:${task.contact.phone}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-colors"
+                                        title={`Llamar: ${task.contact.phone}`}
+                                    >
+                                        <Phone size={9} />
+                                        {task.contact.phone}
+                                    </a>
+                                )}
                             </div>
                         )}
 

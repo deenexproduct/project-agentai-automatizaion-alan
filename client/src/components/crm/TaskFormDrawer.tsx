@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2, Timer } from 'lucide-react';
+import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2, Timer, Phone, Mail, MapPin } from 'lucide-react';
 import { TaskData, createTask, updateTask, deleteTask, getTask, getContacts, getCompanies, getDealsPipeline, getCompany, ContactData, CompanyData, DealData, getTeamUsers, TeamUser, completeTask } from '../../services/crm.service';
 import { formatToUTCDateTimeInput, getDefaultTaskDueDate } from '../../utils/date';
 import AutocompleteInput from '../common/AutocompleteInput';
@@ -563,6 +563,43 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                         onSelect={(opt) => handleSelectDeal(opt.data)}
                         colorTheme="amber"
                     />
+
+                    {/* Client Info Summary — read-only quick reference */}
+                    {(formData.contact?.phone || formData.contact?.email || (formData.company as any)?.localesCount > 0) && (
+                        <div className="bg-gradient-to-br from-slate-50 to-indigo-50/30 rounded-[16px] border border-slate-200/60 p-4 space-y-2.5">
+                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Datos del Cliente</h4>
+                            {formData.contact?.phone && (
+                                <a
+                                    href={`tel:${formData.contact.phone}`}
+                                    className="flex items-center gap-2.5 text-[13px] font-semibold text-slate-700 hover:text-emerald-600 transition-colors group/phone"
+                                >
+                                    <div className="w-7 h-7 rounded-[8px] bg-emerald-50 border border-emerald-100 flex items-center justify-center group-hover/phone:bg-emerald-100 transition-colors">
+                                        <Phone size={13} className="text-emerald-500" />
+                                    </div>
+                                    {formData.contact.phone}
+                                </a>
+                            )}
+                            {formData.contact?.email && (
+                                <a
+                                    href={`mailto:${formData.contact.email}`}
+                                    className="flex items-center gap-2.5 text-[13px] font-semibold text-slate-700 hover:text-blue-600 transition-colors group/email"
+                                >
+                                    <div className="w-7 h-7 rounded-[8px] bg-blue-50 border border-blue-100 flex items-center justify-center group-hover/email:bg-blue-100 transition-colors">
+                                        <Mail size={13} className="text-blue-500" />
+                                    </div>
+                                    {formData.contact.email}
+                                </a>
+                            )}
+                            {(formData.company as any)?.localesCount > 0 && (
+                                <div className="flex items-center gap-2.5 text-[13px] font-semibold text-slate-700">
+                                    <div className="w-7 h-7 rounded-[8px] bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                                        <MapPin size={13} className="text-indigo-500" />
+                                    </div>
+                                    {(formData.company as any).localesCount} {(formData.company as any).localesCount === 1 ? 'local' : 'locales'}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Responsable Selector */}
                     <div className="space-y-2 pt-6 border-t border-slate-200/50">

@@ -1,2 +1,3 @@
-2026/02/26-20:48:54.587 1b5388 Creating DB /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/shared_proto_db since it was missing.
-2026/02/26-20:48:54.589 1b5388 Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/shared_proto_db/MANIFEST-000001
+2026/03/03-23:33:53.743 60e94 Reusing MANIFEST /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/shared_proto_db/MANIFEST-000001
+2026/03/03-23:33:53.743 60e94 Recovering log #3
+2026/03/03-23:33:53.744 60e94 Reusing old log /Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/699d9386d93cc1dc427f6f03/session/Default/shared_proto_db/000003.log 
