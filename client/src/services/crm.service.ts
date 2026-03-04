@@ -108,6 +108,9 @@ export type EventFairData = {
     investmentBreakdown: InvestmentItem[];
     expectedLeads: string[];
     expectedLeadsCount?: number;
+    leadObjective: number;
+    leadsAchieved: number;
+    leadObjectiveMet: boolean;
     notes?: string;
     assignedTo?: { _id: string; name: string; profilePhotoUrl?: string };
     createdAt?: string;

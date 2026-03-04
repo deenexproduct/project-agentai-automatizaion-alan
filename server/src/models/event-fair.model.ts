@@ -19,6 +19,9 @@ export interface IEventFair extends Document {
     currency: string;
     investmentBreakdown: IInvestmentItem[];
     expectedLeads: mongoose.Types.ObjectId[];
+    leadObjective: number;
+    leadsAchieved: number;
+    leadObjectiveMet: boolean;
     notes?: string;
     assignedTo?: mongoose.Types.ObjectId;
     userId: mongoose.Types.ObjectId;
@@ -43,6 +46,9 @@ const EventFairSchema = new Schema({
         amount: { type: Number, required: true },
     }],
     expectedLeads: [{ type: mongoose.Schema.Types.ObjectId, ref: 'CrmContact' }],
+    leadObjective: { type: Number, default: 0 },
+    leadsAchieved: { type: Number, default: 0 },
+    leadObjectiveMet: { type: Boolean, default: false },
     notes: { type: String },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },

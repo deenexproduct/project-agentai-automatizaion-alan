@@ -230,3 +230,164 @@
 [2026-03-04 10:39:28] INFO: [REQUEST] POST /api/event-fairs
 [2026-03-04 10:39:28] INFO: [REQUEST] GET /api/event-fairs
 [2026-03-04 10:39:38] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 10:43:49] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 10:43:49] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 10:47:32] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 10:47:32] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 10:48:16] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 10:48:16] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 10:48:16] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 10:48:16] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 10:48:37] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:18:16] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:18:25] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:19:43] INFO: [REQUEST] GET /api/pos-systems
+[2026-03-04 11:19:43] INFO: [REQUEST] GET /api/pos-systems
+[2026-03-04 11:20:16] INFO: [REQUEST] GET /api/pos-systems
+[2026-03-04 11:20:16] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:20:16] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:20:16] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:20:22] INFO: [REQUEST] GET /api/pos-systems
+[2026-03-04 11:20:22] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:20:22] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:20:22] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:22:49] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:22:49] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:23:35] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:23:40] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:23:40] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:23:40] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:23:40] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:23:41] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:23:57] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:24:00] INFO: [REQUEST] PATCH /api/event-fairs/69a83610836531c155e8686f
+[2026-03-04 11:24:01] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:24:02] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:24:02] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:24:02] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:24:02] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:24:03] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:24:06] INFO: [REQUEST] PATCH /api/event-fairs/69a83610836531c155e8686f
+[2026-03-04 11:24:06] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:25:03] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:26:17] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:26:17] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:27:00] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:27:01] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:27:01] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:27:01] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:29:52] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:29:53] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:29:53] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:29:53] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:30:30] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:34:12] INFO: [REQUEST] PATCH /api/event-fairs/69a83610836531c155e8686f
+[2026-03-04 11:36:49] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:36:49] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 11:36:49] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:36:50] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:36:52] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:36:56] INFO: [REQUEST] PATCH /api/event-fairs/69a83610836531c155e8686f
+[2026-03-04 11:36:56] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:36:58] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:40:20] INFO: 📊 LinkedIn CRM routes mounted at /api/linkedin/crm
+[2026-03-04 11:40:20] INFO: 🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts
+[2026-03-04 11:40:20] INFO: 📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard
+[2026-03-04 11:40:20] INFO: ⚙️ System Config, Partners, Competitors, POS Systems & Event Fairs routes mounted
+[2026-03-04 11:40:21] INFO: ✅ Server running on http://localhost:3000
+[2026-03-04 11:40:21] INFO: 🕐 Server timezone: America/Buenos_Aires | UTC offset: 180min | Now: 2026-03-04T14:40:21.242Z
+[2026-03-04 11:40:21] INFO: 🎙️ Using Whisper for transcription
+[2026-03-04 11:40:21] INFO: 📱 WhatsApp scheduler enabled (runs independently of WA connection)
+[2026-03-04 11:40:21] INFO: 📡 API endpoints available:
+[2026-03-04 11:40:21] INFO:    GET  /api/health
+[2026-03-04 11:40:21] INFO:    GET  /api/history
+[2026-03-04 11:40:21] INFO:    POST /api/transcribe/file
+[2026-03-04 11:40:21] INFO:    POST /api/transcribe/blob
+[2026-03-04 11:40:21] INFO:    GET  /api/settings
+[2026-03-04 11:40:21] INFO:    GET  /api/whatsapp/status
+[2026-03-04 11:40:21] INFO:    GET  /api/whatsapp/qr
+[2026-03-04 11:40:21] INFO:    GET  /api/whatsapp/chats
+[2026-03-04 11:40:21] INFO:    POST /api/whatsapp/schedule
+[2026-03-04 11:40:21] INFO:    GET  /api/whatsapp/scheduled
+[2026-03-04 11:40:21] INFO:    GET  /api/whatsapp/history
+[2026-03-04 11:40:21] INFO:    📊 Resumidor:
+[2026-03-04 11:40:21] INFO:    GET  /api/resumidor/health
+[2026-03-04 11:40:21] INFO:    GET  /api/resumidor/groups
+[2026-03-04 11:40:21] INFO:    POST /api/resumidor/summarize
+[2026-03-04 11:40:21] INFO:    GET  /api/resumidor/models
+[2026-03-04 11:40:21] INFO:    GET  /api/resumidor/history
+[2026-03-04 11:40:21] INFO:    🔗 LinkedIn:
+[2026-03-04 11:40:21] INFO:    GET  /api/linkedin/status
+[2026-03-04 11:40:21] INFO:    POST /api/linkedin/launch
+[2026-03-04 11:40:21] INFO:    POST /api/linkedin/start-prospecting
+[2026-03-04 11:40:21] INFO:    POST /api/linkedin/pause
+[2026-03-04 11:40:21] INFO:    POST /api/linkedin/resume
+[2026-03-04 11:40:21] INFO:    POST /api/linkedin/stop
+[2026-03-04 11:40:21] INFO:    GET  /api/linkedin/progress
+[2026-03-04 11:40:21] INFO:    GET  /api/linkedin/progress/stream
+[2026-03-04 11:40:21] INFO: 🚀 Checking for pending scheduled messages to boot specific users...
+[2026-03-04 11:40:21] INFO: 📡 Found 0 user(s) with pending messages.
+[2026-03-04 11:40:21] INFO: ✅ All 0 tenant(s) initialization started.
+[2026-03-04 11:40:28] INFO: [REQUEST] POST /api/auth/request-otp
+[2026-03-04 11:40:41] INFO: [REQUEST] POST /api/auth/verify-otp
+[2026-03-04 11:40:41] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:40:41] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:40:44] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:40:47] INFO: [REQUEST] PATCH /api/event-fairs/69a83610836531c155e8686f
+[2026-03-04 11:40:48] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 11:40:50] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:40:58] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:44:15] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:45:56] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 11:48:46] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:07:08] INFO: 📊 LinkedIn CRM routes mounted at /api/linkedin/crm
+[2026-03-04 12:07:08] INFO: 🔑 LinkedIn Accounts routes mounted at /api/linkedin/accounts
+[2026-03-04 12:07:08] INFO: 📋 CRM & Dashboard routes mounted at /api/crm and /api/dashboard
+[2026-03-04 12:07:08] INFO: ⚙️ System Config, Partners, Competitors, POS Systems & Event Fairs routes mounted
+[2026-03-04 12:07:09] INFO: ✅ Server running on http://localhost:3000
+[2026-03-04 12:07:09] INFO: 🕐 Server timezone: America/Buenos_Aires | UTC offset: 180min | Now: 2026-03-04T15:07:09.261Z
+[2026-03-04 12:07:09] INFO: 🎙️ Using Whisper for transcription
+[2026-03-04 12:07:09] INFO: 📱 WhatsApp scheduler enabled (runs independently of WA connection)
+[2026-03-04 12:07:09] INFO: 📡 API endpoints available:
+[2026-03-04 12:07:09] INFO:    GET  /api/health
+[2026-03-04 12:07:09] INFO:    GET  /api/history
+[2026-03-04 12:07:09] INFO:    POST /api/transcribe/file
+[2026-03-04 12:07:09] INFO:    POST /api/transcribe/blob
+[2026-03-04 12:07:09] INFO:    GET  /api/settings
+[2026-03-04 12:07:09] INFO:    GET  /api/whatsapp/status
+[2026-03-04 12:07:09] INFO:    GET  /api/whatsapp/qr
+[2026-03-04 12:07:09] INFO:    GET  /api/whatsapp/chats
+[2026-03-04 12:07:09] INFO:    POST /api/whatsapp/schedule
+[2026-03-04 12:07:09] INFO:    GET  /api/whatsapp/scheduled
+[2026-03-04 12:07:09] INFO:    GET  /api/whatsapp/history
+[2026-03-04 12:07:09] INFO:    📊 Resumidor:
+[2026-03-04 12:07:09] INFO:    GET  /api/resumidor/health
+[2026-03-04 12:07:09] INFO:    GET  /api/resumidor/groups
+[2026-03-04 12:07:09] INFO:    POST /api/resumidor/summarize
+[2026-03-04 12:07:09] INFO:    GET  /api/resumidor/models
+[2026-03-04 12:07:09] INFO:    GET  /api/resumidor/history
+[2026-03-04 12:07:09] INFO:    🔗 LinkedIn:
+[2026-03-04 12:07:09] INFO:    GET  /api/linkedin/status
+[2026-03-04 12:07:09] INFO:    POST /api/linkedin/launch
+[2026-03-04 12:07:09] INFO:    POST /api/linkedin/start-prospecting
+[2026-03-04 12:07:09] INFO:    POST /api/linkedin/pause
+[2026-03-04 12:07:09] INFO:    POST /api/linkedin/resume
+[2026-03-04 12:07:09] INFO:    POST /api/linkedin/stop
+[2026-03-04 12:07:09] INFO:    GET  /api/linkedin/progress
+[2026-03-04 12:07:09] INFO:    GET  /api/linkedin/progress/stream
+[2026-03-04 12:07:09] INFO: 🚀 Checking for pending scheduled messages to boot specific users...
+[2026-03-04 12:07:10] INFO: 📡 Found 0 user(s) with pending messages.
+[2026-03-04 12:07:10] INFO: ✅ All 0 tenant(s) initialization started.
+[2026-03-04 12:07:36] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 12:07:37] INFO: [REQUEST] GET /api/auth/me
+[2026-03-04 12:07:37] INFO: [REQUEST] GET /api/competitors
+[2026-03-04 12:07:37] INFO: [REQUEST] GET /api/competitors
+[2026-03-04 12:07:39] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:07:39] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:07:42] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:09:50] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:09:50] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:10:17] INFO: [REQUEST] GET /api/event-fairs
+[2026-03-04 12:11:57] INFO: [REQUEST] GET /api/auth/users
+[2026-03-04 12:12:40] INFO: [REQUEST] PATCH /api/event-fairs/69a83610836531c155e8686f
+[2026-03-04 12:12:40] INFO: [REQUEST] GET /api/event-fairs

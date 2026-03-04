@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Save, Calendar, MapPin, Globe, FileText, DollarSign, Ticket, Users, Plus, Trash2, AlertTriangle, Search, Activity } from 'lucide-react';
+import { X, Save, Calendar, MapPin, Globe, FileText, DollarSign, Ticket, Users, Plus, Trash2, AlertTriangle, Search, Activity, Target, CheckCircle2 } from 'lucide-react';
 import { EventFairData, InvestmentItem, createEventFair, updateEventFair, getTeamUsers, TeamUser, ContactData, getContacts } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
@@ -33,7 +33,8 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
         startDate: '', endDate: '', status: 'upcoming',
         ticketStatus: 'none', ticketCount: 0,
         investment: 0, currency: 'ARS',
-        investmentBreakdown: [], expectedLeads: [], notes: ''
+        investmentBreakdown: [], expectedLeads: [], notes: '',
+        leadObjective: 0, leadsAchieved: 0, leadObjectiveMet: false,
     });
 
     const [saving, setSaving] = useState(false);
@@ -67,6 +68,9 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                 expectedLeads: event.expectedLeads || [],
                 notes: event.notes || '',
                 assignedTo: (event as any).assignedTo,
+                leadObjective: event.leadObjective || 0,
+                leadsAchieved: event.leadsAchieved || 0,
+                leadObjectiveMet: event.leadObjectiveMet || false,
             });
             setBreakdown(event.investmentBreakdown || []);
             setSelectedLeads([]);
@@ -78,6 +82,7 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                 investment: 0, currency: 'ARS',
                 investmentBreakdown: [], expectedLeads: [], notes: '',
                 assignedTo: (user?._id || (user as any)?.id) as any,
+                leadObjective: 0, leadsAchieved: 0, leadObjectiveMet: false,
             });
             setBreakdown([]);
             setSelectedLeads([]);
@@ -423,6 +428,68 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                             </p>
                         )}
                         {loadingLeads && <p className="text-[12px] text-slate-400 text-center py-2">Buscando...</p>}
+
+                        {/* Lead Objective */}
+                        <div className="mt-2 pt-3 border-t border-dashed border-slate-200/60">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide mb-2">
+                                <Target size={15} className="text-amber-500" />
+                                Objetivo de Leads
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <input type="number" min="0" value={formData.leadObjective || ''}
+                                    onChange={(e) => { setFormData({ ...formData, leadObjective: Number(e.target.value) || 0 }); setIsDirty(true); }}
+                                    placeholder="Ej. 10 leads esperados"
+                                    className="flex-1 px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[12px] focus:outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-300 transition-all text-[14px] font-bold text-slate-700 placeholder:text-slate-400 placeholder:font-medium shadow-inner" />
+                                <span className="text-[12px] text-slate-400 font-medium shrink-0">leads</span>
+                            </div>
+
+                            {/* Leads Achieved — when completed/attending with objective */}
+                            {(formData.status === 'completed' || formData.status === 'attending') && (formData.leadObjective || 0) > 0 && (
+                                <div className="mt-3 space-y-3">
+                                    <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                        <CheckCircle2 size={15} className="text-emerald-500" />
+                                        Leads Conseguidos
+                                    </label>
+                                    <div className="flex items-center gap-3">
+                                        <input type="number" min="0" value={formData.leadsAchieved || ''}
+                                            onChange={(e) => {
+                                                const achieved = Number(e.target.value) || 0;
+                                                const objective = formData.leadObjective || 0;
+                                                setFormData({
+                                                    ...formData,
+                                                    leadsAchieved: achieved,
+                                                    leadObjectiveMet: achieved >= objective && objective > 0,
+                                                });
+                                                setIsDirty(true);
+                                            }}
+                                            placeholder="Cantidad de leads conseguidos"
+                                            className="flex-1 px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[12px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-300 transition-all text-[14px] font-bold text-slate-700 placeholder:text-slate-400 placeholder:font-medium shadow-inner" />
+                                        <span className="text-[12px] text-slate-400 font-medium shrink-0">de {formData.leadObjective}</span>
+                                    </div>
+
+                                    {/* Smart Status */}
+                                    {(formData.leadsAchieved || 0) > 0 && (() => {
+                                        const achieved = formData.leadsAchieved || 0;
+                                        const objective = formData.leadObjective || 0;
+                                        const diff = achieved - objective;
+                                        const met = achieved >= objective;
+                                        return (
+                                            <div className={`w-full flex items-center gap-3 px-4 py-3 rounded-[12px] border transition-all ${met ? 'bg-emerald-50 border-emerald-300' : 'bg-red-50/60 border-red-200'}`}>
+                                                <CheckCircle2 size={20} className={met ? 'text-emerald-500' : 'text-red-400'} />
+                                                <div className="flex-1">
+                                                    <p className={`text-[13px] font-bold ${met ? 'text-emerald-700' : 'text-red-600'}`}>
+                                                        {met ? (diff > 0 ? `Superaste el objetivo por +${diff} leads!` : 'Cumpliste el objetivo de leads') : `Faltaron ${Math.abs(diff)} leads para el objetivo`}
+                                                    </p>
+                                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                                        {achieved} conseguidos de {objective} proyectados
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Responsable */}

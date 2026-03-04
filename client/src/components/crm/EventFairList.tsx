@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Edit2, Trash2, Calendar, MapPin, DollarSign, Ticket, Users, ExternalLink, Plus } from 'lucide-react';
-import { EventFairData, getEventFairs, deleteEventFair } from '../../services/crm.service';
+import { Edit2, Trash2, Calendar, MapPin, DollarSign, Ticket, Users, ExternalLink, Plus, Target, CheckCircle2, Trophy, X } from 'lucide-react';
+import { EventFairData, getEventFairs, deleteEventFair, updateEventFair } from '../../services/crm.service';
 import EventFairFormDrawer from './EventFairFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
@@ -29,6 +29,11 @@ export default function EventFairList() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<EventFairData | null>(null);
 
+    // Objective completion
+    const [completingEventId, setCompletingEventId] = useState<string | null>(null);
+    const [completionLeads, setCompletionLeads] = useState<number>(0);
+    const [savingCompletion, setSavingCompletion] = useState(false);
+
     const loadEvents = async () => {
         try {
             setLoading(true);
@@ -45,6 +50,32 @@ export default function EventFairList() {
 
     const openCreateDrawer = () => { setEditingEvent(null); setIsDrawerOpen(true); };
     const openEditDrawer = (ev: EventFairData) => { setEditingEvent(ev); setIsDrawerOpen(true); };
+
+    const openCompletionModal = (ev: EventFairData) => {
+        setCompletingEventId(ev._id);
+        setCompletionLeads(ev.leadsAchieved || 0);
+    };
+
+    const handleCompleteObjective = async () => {
+        if (!completingEventId) return;
+        const ev = events.find(e => e._id === completingEventId);
+        if (!ev) return;
+        const objective = ev.leadObjective || 0;
+        setSavingCompletion(true);
+        try {
+            await updateEventFair(completingEventId, {
+                leadsAchieved: completionLeads,
+                leadObjectiveMet: completionLeads >= objective && objective > 0,
+            });
+            setCompletingEventId(null);
+            loadEvents();
+        } catch (error) {
+            console.error('Error completing objective:', error);
+            alert('Error al guardar el objetivo');
+        } finally {
+            setSavingCompletion(false);
+        }
+    };
 
     const handleDelete = async (id: string) => {
         if (!confirm('¿Estás seguro de que deseas eliminar este evento?')) return;
@@ -73,6 +104,13 @@ export default function EventFairList() {
     const completedCount = events.filter(e => e.status === 'completed' || e.status === 'cancelled').length;
     const hasData = events.length > 0;
 
+    // Lead objective KPIs
+    const eventsWithObjective = events.filter(e => (e.leadObjective || 0) > 0);
+    const objectivesMet = eventsWithObjective.filter(e => e.leadObjectiveMet).length;
+    const objectivesTotal = eventsWithObjective.length;
+    const upcomingEvents = events.filter(e => e.status === 'upcoming' || e.status === 'attending');
+    const projectedLeads = upcomingEvents.reduce((sum, e) => sum + (e.leadObjective || 0), 0);
+
     const formatDate = (dateStr: string) => {
         if (!dateStr) return '';
         const d = new Date(dateStr);
@@ -100,50 +138,80 @@ export default function EventFairList() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-3 gap-3 mb-4 shrink-0">
-                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-5 py-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-1.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
-                            <DollarSign size={16} className="text-white" />
+            <div className="grid grid-cols-5 gap-3 mb-4 shrink-0">
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
+                            <DollarSign size={14} className="text-white" />
                         </div>
-                        <span className="text-[12px] font-bold text-slate-400 uppercase tracking-wide">Inversión Total</span>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Inversión</span>
                     </div>
-                    <p className="text-[22px] font-black text-slate-800 tracking-tight">
+                    <p className="text-[19px] font-black text-slate-800 tracking-tight">
                         {hasData && totalInvestment > 0
                             ? `${mainCurrency} ${totalInvestment.toLocaleString()}`
                             : <span className="text-slate-300">—</span>
                         }
                     </p>
-                    <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                        {hasData ? `Acumulado de ${events.length} evento${events.length !== 1 ? 's' : ''}` : 'Sin eventos registrados'}
+                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                        {hasData ? `${events.length} evento${events.length !== 1 ? 's' : ''}` : 'Sin eventos'}
                     </p>
                 </div>
-                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-5 py-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-1.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-sm">
-                            <Calendar size={16} className="text-white" />
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-sm">
+                            <Calendar size={14} className="text-white" />
                         </div>
-                        <span className="text-[12px] font-bold text-slate-400 uppercase tracking-wide">Próximos</span>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Próximos</span>
                     </div>
-                    <p className="text-[22px] font-black text-slate-800 tracking-tight">
+                    <p className="text-[19px] font-black text-slate-800 tracking-tight">
                         {upcomingCount > 0 ? upcomingCount : <span className="text-slate-300">—</span>}
                     </p>
-                    <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                        {upcomingCount > 0 ? 'Eventos por asistir' : 'Ningún evento próximo'}
+                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                        {upcomingCount > 0 ? 'Por asistir' : 'Sin próximos'}
                     </p>
                 </div>
-                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-5 py-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-1.5">
-                        <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center shadow-sm">
-                            <Users size={16} className="text-white" />
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center shadow-sm">
+                            <Users size={14} className="text-white" />
                         </div>
-                        <span className="text-[12px] font-bold text-slate-400 uppercase tracking-wide">Leads Potenciales</span>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Leads</span>
                     </div>
-                    <p className="text-[22px] font-black text-slate-800 tracking-tight">
+                    <p className="text-[19px] font-black text-slate-800 tracking-tight">
                         {totalLeads > 0 ? totalLeads : <span className="text-slate-300">—</span>}
                     </p>
-                    <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                        {totalLeads > 0 ? 'Contactos vinculados a eventos' : 'Sin leads asignados'}
+                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                        {totalLeads > 0 ? 'Vinculados' : 'Sin leads'}
+                    </p>
+                </div>
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-sm">
+                            <CheckCircle2 size={14} className="text-white" />
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Obj. Cumplidos</span>
+                    </div>
+                    <p className="text-[19px] font-black text-slate-800 tracking-tight">
+                        {objectivesTotal > 0 ? (
+                            <><span className="text-emerald-600">{objectivesMet}</span><span className="text-slate-300 text-[15px]">/{objectivesTotal}</span></>
+                        ) : <span className="text-slate-300">—</span>}
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                        {objectivesTotal > 0 ? `${Math.round((objectivesMet / objectivesTotal) * 100)}% cumplimiento` : 'Sin objetivos'}
+                    </p>
+                </div>
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-4 py-3.5 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center shadow-sm">
+                            <Target size={14} className="text-white" />
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Proyección</span>
+                    </div>
+                    <p className="text-[19px] font-black text-slate-800 tracking-tight">
+                        {projectedLeads > 0 ? projectedLeads : <span className="text-slate-300">—</span>}
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                        {projectedLeads > 0 ? `Leads de ${upcomingEvents.filter(e => (e.leadObjective || 0) > 0).length} eventos` : 'Sin proyección'}
                     </p>
                 </div>
             </div>
@@ -197,7 +265,7 @@ export default function EventFairList() {
                                     <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Estado</th>
                                     <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Entradas</th>
                                     <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Inversión</th>
-                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Leads</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Objetivo Leads</th>
                                     <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest w-[120px] text-right">Acciones</th>
                                 </tr>
                             </thead>
@@ -272,10 +340,45 @@ export default function EventFairList() {
                                             </td>
 
                                             <td className="px-6 py-5">
-                                                <div className="flex items-center gap-1.5 bg-blue-50/80 px-2.5 py-1.5 rounded-[8px] border border-blue-200/60 text-blue-700 text-[12px] font-bold shadow-sm w-fit">
-                                                    <Users size={13} className="text-blue-500" /> {ev.expectedLeadsCount || ev.expectedLeads?.length || 0}
-                                                    <span className="text-blue-400 font-medium text-[11px] ml-0.5">leads</span>
-                                                </div>
+                                                {(ev.leadObjective || 0) > 0 ? (() => {
+                                                    const achieved = ev.leadsAchieved || 0;
+                                                    const objective = ev.leadObjective || 0;
+                                                    const hasResult = achieved > 0;
+                                                    const met = achieved >= objective;
+                                                    const diff = achieved - objective;
+                                                    return (
+                                                        <div className="space-y-1.5">
+                                                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] text-[11px] font-bold border w-fit ${hasResult && met ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                                                                : hasResult && !met ? 'bg-red-50 text-red-600 border-red-200/60'
+                                                                    : 'bg-amber-50 text-amber-700 border-amber-200/60'
+                                                                }`}>
+                                                                {hasResult && met ? <CheckCircle2 size={12} /> : <Target size={12} />}
+                                                                {hasResult ? `${achieved}/${objective}` : `${objective} leads`}
+                                                            </div>
+                                                            {hasResult && met && (
+                                                                <p className="text-[10px] text-emerald-500 font-bold">
+                                                                    {diff > 0 ? `+${diff} por encima` : 'Cumplido'}
+                                                                </p>
+                                                            )}
+                                                            {hasResult && !met && (
+                                                                <p className="text-[10px] text-red-500 font-bold">
+                                                                    Faltaron {Math.abs(diff)}
+                                                                </p>
+                                                            )}
+                                                            {!hasResult && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); openCompletionModal(ev); }}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-[8px] text-[11px] font-bold hover:shadow-[0_4px_12px_rgba(245,158,11,0.35)] hover:-translate-y-0.5 transition-all shadow-sm"
+                                                                >
+                                                                    <Trophy size={12} />
+                                                                    Cumplí con el objetivo
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })() : (
+                                                    <span className="text-[12px] text-slate-400 bg-slate-50 px-3 py-1.5 rounded-[8px] border border-slate-100">—</span>
+                                                )}
                                             </td>
 
                                             <td className="px-6 py-5 text-right">
@@ -306,7 +409,107 @@ export default function EventFairList() {
                 onSaved={loadEvents}
             />
 
+            {/* Objective Completion Modal */}
+            {completingEventId && (() => {
+                const ev = events.find(e => e._id === completingEventId);
+                if (!ev) return null;
+                const objective = ev.leadObjective || 0;
+                const met = completionLeads >= objective && objective > 0;
+                const diff = completionLeads - objective;
+                return (
+                    <div
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                        style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)', animation: 'fadeIn 0.2s ease-out' }}
+                        onClick={() => setCompletingEventId(null)}
+                    >
+                        <div
+                            className="bg-white rounded-[24px] p-6 max-w-md w-full shadow-[0_20px_60px_rgba(0,0,0,0.12)] border border-slate-100"
+                            onClick={e => e.stopPropagation()}
+                            style={{ animation: 'scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                        >
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+                                        <Trophy size={22} className="text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-[18px] font-bold text-slate-800 tracking-tight">Registrar resultado</h3>
+                                        <p className="text-[12px] text-slate-400 font-medium">{ev.name}</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setCompletingEventId(null)}
+                                    className="w-8 h-8 rounded-[10px] flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600">
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            {/* Objective reference */}
+                            <div className="flex items-center gap-2 px-4 py-3 bg-amber-50/80 rounded-[12px] border border-amber-200/60 mb-4">
+                                <Target size={16} className="text-amber-600" />
+                                <span className="text-[13px] font-bold text-amber-700">Objetivo proyectado:</span>
+                                <span className="text-[15px] font-black text-amber-800">{objective} leads</span>
+                            </div>
+
+                            {/* Input */}
+                            <div className="space-y-2 mb-4">
+                                <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                    <CheckCircle2 size={15} className="text-emerald-500" />
+                                    ¿Cuántos leads conseguiste?
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    autoFocus
+                                    value={completionLeads || ''}
+                                    onChange={(e) => setCompletionLeads(Number(e.target.value) || 0)}
+                                    placeholder="Ej. 12"
+                                    className="w-full px-4 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-300 transition-all text-[16px] font-bold text-slate-700 placeholder:text-slate-400 shadow-inner"
+                                />
+                            </div>
+
+                            {/* Live comparison */}
+                            {completionLeads > 0 && (
+                                <div className={`flex items-center gap-3 px-4 py-3 rounded-[12px] border mb-5 transition-all ${met ? 'bg-emerald-50 border-emerald-300' : 'bg-red-50/60 border-red-200'}`}>
+                                    {met ? <CheckCircle2 size={20} className="text-emerald-500" /> : <Target size={20} className="text-red-400" />}
+                                    <div className="flex-1">
+                                        <p className={`text-[13px] font-bold ${met ? 'text-emerald-700' : 'text-red-600'}`}>
+                                            {met
+                                                ? (diff > 0 ? `¡Superaste el objetivo por +${diff} leads!` : '¡Cumpliste el objetivo de leads!')
+                                                : `Faltan ${Math.abs(diff)} leads para el objetivo`
+                                            }
+                                        </p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">
+                                            {completionLeads} conseguidos de {objective} proyectados
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setCompletingEventId(null)}
+                                    className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleCompleteObjective}
+                                    disabled={savingCompletion || completionLeads <= 0}
+                                    className="flex-1 py-3 px-4 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold rounded-[14px] hover:shadow-[0_8px_24px_rgba(245,158,11,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none shadow-[0_4px_16px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2 text-[14px]"
+                                >
+                                    {savingCompletion ? 'Guardando...' : <><Trophy size={16} /> Confirmar</>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
             <style>{`
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.2); border-radius: 10px; }
