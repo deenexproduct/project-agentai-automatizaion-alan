@@ -1,0 +1,317 @@
+import { useState, useEffect } from 'react';
+import { Edit2, Trash2, Calendar, MapPin, DollarSign, Ticket, Users, ExternalLink, Plus } from 'lucide-react';
+import { EventFairData, getEventFairs, deleteEventFair } from '../../services/crm.service';
+import EventFairFormDrawer from './EventFairFormDrawer';
+import PremiumHeader from './PremiumHeader';
+import OwnerAvatar from '../common/OwnerAvatar';
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    upcoming: { label: 'Próximo', color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200/60' },
+    attending: { label: 'Asistiendo', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200/60' },
+    completed: { label: 'Completado', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200/60' },
+    cancelled: { label: 'Cancelado', color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200/60' },
+};
+
+const TICKET_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    none: { label: 'Sin Entrada', color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-200/60' },
+    pending: { label: 'Pendiente', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200/60' },
+    purchased: { label: 'Compradas', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200/60' },
+};
+
+type FilterTab = 'all' | 'upcoming' | 'completed';
+
+export default function EventFairList() {
+    const [events, setEvents] = useState<EventFairData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [filter, setFilter] = useState<FilterTab>('all');
+
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [editingEvent, setEditingEvent] = useState<EventFairData | null>(null);
+
+    const loadEvents = async () => {
+        try {
+            setLoading(true);
+            const res = await getEventFairs();
+            setEvents(res.events);
+        } catch (error) {
+            console.error('Error loading event fairs', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { loadEvents(); }, []);
+
+    const openCreateDrawer = () => { setEditingEvent(null); setIsDrawerOpen(true); };
+    const openEditDrawer = (ev: EventFairData) => { setEditingEvent(ev); setIsDrawerOpen(true); };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('¿Estás seguro de que deseas eliminar este evento?')) return;
+        try {
+            await deleteEventFair(id);
+            loadEvents();
+        } catch (error) {
+            console.error('Error deleting event fair', error);
+            alert('Error al eliminar');
+        }
+    };
+
+    const filteredEvents = events.filter(ev => {
+        const matchesSearch = ev.name.toLowerCase().includes(search.toLowerCase()) ||
+            (ev.location || '').toLowerCase().includes(search.toLowerCase());
+        if (filter === 'upcoming') return matchesSearch && (ev.status === 'upcoming' || ev.status === 'attending');
+        if (filter === 'completed') return matchesSearch && (ev.status === 'completed' || ev.status === 'cancelled');
+        return matchesSearch;
+    });
+
+    // KPIs
+    const totalInvestment = events.reduce((sum, ev) => sum + (ev.investment || 0), 0);
+    const upcomingCount = events.filter(ev => ev.status === 'upcoming' || ev.status === 'attending').length;
+    const totalLeads = events.reduce((sum, ev) => sum + (ev.expectedLeadsCount || ev.expectedLeads?.length || 0), 0);
+    const mainCurrency = events.find(e => e.investment > 0)?.currency || 'ARS';
+    const completedCount = events.filter(e => e.status === 'completed' || e.status === 'cancelled').length;
+    const hasData = events.length > 0;
+
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    const filterTabs: { key: FilterTab; label: string; count: number }[] = [
+        { key: 'all', label: 'Todos', count: events.length },
+        { key: 'upcoming', label: 'Próximos', count: upcomingCount },
+        { key: 'completed', label: 'Finalizados', count: completedCount },
+    ];
+
+    return (
+        <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
+            {/* Premium Header */}
+            <div className="shrink-0 z-10 bg-white/40 backdrop-blur-2xl rounded-[24px] overflow-hidden mb-4 border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
+                <PremiumHeader
+                    search={search}
+                    onSearchChange={setSearch}
+                    searchPlaceholder="Buscar evento por nombre o ubicación..."
+                    onAdd={openCreateDrawer}
+                    addLabel="Nuevo Evento"
+                    containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
+                />
+            </div>
+
+            {/* KPI Cards */}
+            <div className="grid grid-cols-3 gap-3 mb-4 shrink-0">
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-5 py-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
+                            <DollarSign size={16} className="text-white" />
+                        </div>
+                        <span className="text-[12px] font-bold text-slate-400 uppercase tracking-wide">Inversión Total</span>
+                    </div>
+                    <p className="text-[22px] font-black text-slate-800 tracking-tight">
+                        {hasData && totalInvestment > 0
+                            ? `${mainCurrency} ${totalInvestment.toLocaleString()}`
+                            : <span className="text-slate-300">—</span>
+                        }
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-400 mt-0.5">
+                        {hasData ? `Acumulado de ${events.length} evento${events.length !== 1 ? 's' : ''}` : 'Sin eventos registrados'}
+                    </p>
+                </div>
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-5 py-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-sm">
+                            <Calendar size={16} className="text-white" />
+                        </div>
+                        <span className="text-[12px] font-bold text-slate-400 uppercase tracking-wide">Próximos</span>
+                    </div>
+                    <p className="text-[22px] font-black text-slate-800 tracking-tight">
+                        {upcomingCount > 0 ? upcomingCount : <span className="text-slate-300">—</span>}
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-400 mt-0.5">
+                        {upcomingCount > 0 ? 'Eventos por asistir' : 'Ningún evento próximo'}
+                    </p>
+                </div>
+                <div className="bg-white/70 backdrop-blur-xl rounded-[18px] border border-slate-200/50 px-5 py-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                        <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center shadow-sm">
+                            <Users size={16} className="text-white" />
+                        </div>
+                        <span className="text-[12px] font-bold text-slate-400 uppercase tracking-wide">Leads Potenciales</span>
+                    </div>
+                    <p className="text-[22px] font-black text-slate-800 tracking-tight">
+                        {totalLeads > 0 ? totalLeads : <span className="text-slate-300">—</span>}
+                    </p>
+                    <p className="text-[11px] font-medium text-slate-400 mt-0.5">
+                        {totalLeads > 0 ? 'Contactos vinculados a eventos' : 'Sin leads asignados'}
+                    </p>
+                </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 mb-4 shrink-0">
+                {filterTabs.map(tab => (
+                    <button key={tab.key} onClick={() => setFilter(tab.key)}
+                        className={`px-4 py-2 rounded-[12px] text-[13px] font-bold transition-all border ${filter === tab.key
+                            ? 'bg-orange-50 text-orange-700 border-orange-200/60 shadow-sm'
+                            : 'bg-white/60 text-slate-500 border-slate-200/50 hover:bg-slate-50'
+                            }`}>
+                        {tab.label} <span className={`text-[11px] ml-1 ${filter === tab.key ? 'text-orange-500' : 'opacity-50'}`}>({tab.count})</span>
+                    </button>
+                ))}
+            </div>
+
+            {loading ? (
+                <div className="flex-1 flex items-center justify-center bg-white/30 backdrop-blur-xl rounded-[24px] border border-slate-100 shadow-sm">
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-orange-500/20 rounded-full blur-xl animate-pulse" />
+                        <div className="animate-spin w-10 h-10 border-4 border-orange-200 border-t-orange-600 rounded-full relative z-10" />
+                    </div>
+                </div>
+            ) : filteredEvents.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-20 bg-white/40 backdrop-blur-xl rounded-[24px] border border-slate-100 shadow-sm">
+                    <div className="w-20 h-20 bg-orange-50 rounded-[20px] flex items-center justify-center mb-4 border border-orange-100 shadow-sm">
+                        <Calendar size={32} className="text-orange-500" />
+                    </div>
+                    <h3 className="text-[17px] font-bold text-slate-700">{events.length === 0 ? 'Aún no hay Eventos' : 'Sin resultados'}</h3>
+                    <p className="text-[15px] font-medium text-slate-500 mt-1 text-center max-w-sm">
+                        {events.length === 0
+                            ? 'Registrá eventos, ferias y conferencias para controlar tu inversión y detectar leads.'
+                            : 'No se encontraron eventos con los filtros seleccionados.'}
+                    </p>
+                    {events.length === 0 && (
+                        <button onClick={openCreateDrawer}
+                            className="mt-5 flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-[12px] text-[14px] font-bold hover:shadow-[0_8px_24px_rgba(245,158,11,0.35)] hover:-translate-y-0.5 transition-all shadow-[0_4px_16px_rgba(245,158,11,0.25)]">
+                            <Plus size={18} /> Crear primer evento
+                        </button>
+                    )}
+                </div>
+            ) : (
+                <div className="bg-white/70 backdrop-blur-2xl rounded-[24px] border border-slate-200/50 shadow-[0_8px_32px_rgba(30,27,75,0.02)] overflow-hidden flex-1 flex flex-col relative pb-4">
+                    <div className="overflow-x-auto overflow-y-auto custom-scrollbar flex-1 relative rounded-[24px]">
+                        <table className="w-full text-left border-collapse min-w-[900px]">
+                            <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-xl shadow-sm border-b border-slate-200/60">
+                                <tr>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Evento</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Fecha</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Estado</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Entradas</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Inversión</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest">Leads</th>
+                                    <th className="px-6 py-4 text-[12px] font-bold text-slate-400 uppercase tracking-widest w-[120px] text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100/60">
+                                {filteredEvents.map(ev => {
+                                    const statusCfg = STATUS_CONFIG[ev.status] || STATUS_CONFIG.upcoming;
+                                    const ticketCfg = TICKET_CONFIG[ev.ticketStatus] || TICKET_CONFIG.none;
+                                    return (
+                                        <tr key={ev._id} className="hover:bg-orange-50/30 transition-colors duration-200">
+                                            <td className="px-6 py-5">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-11 h-11 rounded-[12px] bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center border border-orange-200/50 shadow-sm shrink-0">
+                                                        <Calendar size={18} className="text-orange-600" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="font-extrabold text-[15px] text-slate-800 tracking-tight truncate max-w-[220px]">{ev.name}</div>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            {ev.location && (
+                                                                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                                                    <MapPin size={11} /> {ev.location}
+                                                                </span>
+                                                            )}
+                                                            {ev.website && (
+                                                                <a href={ev.website} target="_blank" rel="noreferrer"
+                                                                    className="text-[11px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 transition-colors">
+                                                                    <ExternalLink size={10} /> Web
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {ev.assignedTo && (
+                                                        <OwnerAvatar name={ev.assignedTo.name} profilePhotoUrl={ev.assignedTo.profilePhotoUrl} size="xs" />
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            <td className="px-6 py-5">
+                                                <div className="text-[13px] font-bold text-slate-700">
+                                                    {formatDate(ev.startDate)}
+                                                </div>
+                                                {ev.endDate && ev.endDate !== ev.startDate && (
+                                                    <div className="text-[11px] text-slate-400 mt-0.5">
+                                                        → {formatDate(ev.endDate)}
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            <td className="px-6 py-5">
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-bold ${statusCfg.bg} ${statusCfg.color} ${statusCfg.border} border w-fit`}>
+                                                    {statusCfg.label}
+                                                </span>
+                                            </td>
+
+                                            <td className="px-6 py-5">
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-bold ${ticketCfg.bg} ${ticketCfg.color} ${ticketCfg.border} border w-fit`}>
+                                                    <Ticket size={11} />
+                                                    {ticketCfg.label}{ev.ticketStatus === 'purchased' && ev.ticketCount > 0 ? ` ×${ev.ticketCount}` : ''}
+                                                </span>
+                                            </td>
+
+                                            <td className="px-6 py-5">
+                                                {ev.investment > 0 ? (
+                                                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-emerald-50/80 border border-emerald-200/60 shadow-sm">
+                                                        <DollarSign size={13} className="text-emerald-500" />
+                                                        <span className="font-black text-emerald-700 text-[13px]">
+                                                            {ev.currency} {ev.investment.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[12px] font-medium text-slate-400 bg-slate-50 px-3 py-1.5 rounded-[10px] border border-slate-100">—</span>
+                                                )}
+                                            </td>
+
+                                            <td className="px-6 py-5">
+                                                <div className="flex items-center gap-1.5 bg-blue-50/80 px-2.5 py-1.5 rounded-[8px] border border-blue-200/60 text-blue-700 text-[12px] font-bold shadow-sm w-fit">
+                                                    <Users size={13} className="text-blue-500" /> {ev.expectedLeadsCount || ev.expectedLeads?.length || 0}
+                                                    <span className="text-blue-400 font-medium text-[11px] ml-0.5">leads</span>
+                                                </div>
+                                            </td>
+
+                                            <td className="px-6 py-5 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button onClick={() => openEditDrawer(ev)}
+                                                        className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-orange-600 bg-white hover:bg-orange-50 rounded-[10px] border border-slate-200 hover:border-orange-200 transition-all shadow-sm">
+                                                        <Edit2 size={15} />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(ev._id)}
+                                                        className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-red-500 bg-white hover:bg-red-50 rounded-[10px] border border-slate-200 hover:border-red-200 transition-all shadow-sm">
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            <EventFairFormDrawer
+                open={isDrawerOpen}
+                event={editingEvent}
+                onClose={() => setIsDrawerOpen(false)}
+                onSaved={loadEvents}
+            />
+
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.2); border-radius: 10px; }
+                .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.4); }
+            `}</style>
+        </div>
+    );
+}

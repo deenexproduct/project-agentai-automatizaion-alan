@@ -87,6 +87,32 @@ export type PosSystemData = {
     linkedLocalesCount?: number;
 };
 
+export interface InvestmentItem {
+    concept: string;
+    amount: number;
+}
+
+export type EventFairData = {
+    _id: string;
+    name: string;
+    description?: string;
+    location?: string;
+    website?: string;
+    startDate: string;
+    endDate?: string;
+    status: 'upcoming' | 'attending' | 'completed' | 'cancelled';
+    ticketStatus: 'none' | 'pending' | 'purchased';
+    ticketCount: number;
+    investment: number;
+    currency: string;
+    investmentBreakdown: InvestmentItem[];
+    expectedLeads: string[];
+    expectedLeadsCount?: number;
+    notes?: string;
+    assignedTo?: { _id: string; name: string; profilePhotoUrl?: string };
+    createdAt?: string;
+};
+
 export type CompanyData = {
     _id: string;
     name: string;
@@ -318,6 +344,13 @@ export const getPosSystemCompanies = async (id: string) => (await api.get<{ comp
 export const createPosSystem = async (data: Partial<PosSystemData>) => (await api.post<PosSystemData>('/pos-systems', data)).data;
 export const updatePosSystem = async (id: string, data: Partial<PosSystemData>) => (await api.patch<PosSystemData>(`/pos-systems/${id}`, data)).data;
 export const deletePosSystem = async (id: string) => (await api.delete(`/pos-systems/${id}`)).data;
+
+// Event Fairs
+export const getEventFairs = async () => (await api.get<{ events: EventFairData[] }>('/event-fairs')).data;
+export const getEventFairLeads = async (id: string) => (await api.get<{ contacts: ContactData[] }>(`/event-fairs/${id}/leads`)).data;
+export const createEventFair = async (data: Partial<EventFairData>) => (await api.post<EventFairData>('/event-fairs', data)).data;
+export const updateEventFair = async (id: string, data: Partial<EventFairData>) => (await api.patch<EventFairData>(`/event-fairs/${id}`, data)).data;
+export const deleteEventFair = async (id: string) => (await api.delete(`/event-fairs/${id}`)).data;
 
 // Dashboard
 export const getDashboardStats = async () => (await api.get<DashboardStats>('/dashboard/metrics')).data;
