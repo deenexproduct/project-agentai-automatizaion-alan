@@ -395,7 +395,7 @@ export default function OpsGoals() {
                             Crear Primera Meta
                         </button>
                     </div>
-                ) : (
+                ) : viewMode === 'list' ? (
                     <div className="space-y-3">
                         {filteredGoals.map(goal => {
                             const catCfg = CATEGORY_CONFIG[goal.category] || CATEGORY_CONFIG.custom;
@@ -559,6 +559,113 @@ export default function OpsGoals() {
                             );
                         })}
                     </div>
+                ) : (
+                    /* ── TIMELINE VIEW ── */
+                    (() => {
+                        const now = new Date();
+                        const goalsWithDates = filteredGoals.map(g => ({
+                            ...g,
+                            start: new Date(g.createdAt),
+                            end: g.deadline ? new Date(g.deadline) : new Date(new Date(g.createdAt).getTime() + 30 * 24 * 60 * 60 * 1000),
+                        }));
+
+                        const minDate = new Date(Math.min(...goalsWithDates.map(g => g.start.getTime()), now.getTime()));
+                        const maxDate = new Date(Math.max(...goalsWithDates.map(g => g.end.getTime()), now.getTime() + 7 * 24 * 60 * 60 * 1000));
+                        minDate.setDate(minDate.getDate() - 3);
+                        maxDate.setDate(maxDate.getDate() + 3);
+                        const totalSpan = maxDate.getTime() - minDate.getTime();
+                        const todayPct = ((now.getTime() - minDate.getTime()) / totalSpan) * 100;
+
+                        // Generate month labels
+                        const monthLabels: { label: string; left: number }[] = [];
+                        const cursor = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+                        while (cursor <= maxDate) {
+                            const pct = ((cursor.getTime() - minDate.getTime()) / totalSpan) * 100;
+                            if (pct >= 0 && pct <= 100) {
+                                monthLabels.push({ label: cursor.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }), left: pct });
+                            }
+                            cursor.setMonth(cursor.getMonth() + 1);
+                        }
+
+                        return (
+                            <div className="space-y-1">
+                                {/* Month headers */}
+                                <div className="relative h-6 mb-2">
+                                    {monthLabels.map((m, i) => (
+                                        <span key={i} className="absolute text-[10px] font-bold text-slate-400 uppercase" style={{ left: `${m.left}%` }}>
+                                            {m.label}
+                                        </span>
+                                    ))}
+                                </div>
+
+                                {/* Timeline rows */}
+                                <div className="relative">
+                                    {/* Today indicator */}
+                                    <div className="absolute top-0 bottom-0 w-px bg-violet-400 z-10" style={{ left: `${todayPct}%` }}>
+                                        <div className="absolute -top-5 -translate-x-1/2 text-[9px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-full border border-violet-200 whitespace-nowrap">
+                                            Hoy
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        {goalsWithDates.map(goal => {
+                                            const catCfg = CATEGORY_CONFIG[goal.category] || CATEGORY_CONFIG.custom;
+                                            const totalTasks = goal.taskCount || 0;
+                                            const completedTasks = goal.completedTaskCount || 0;
+                                            const progress = totalTasks > 0 ? Math.min(Math.round((completedTasks / totalTasks) * 100), 100) : 0;
+                                            const isComplete = goal.status === 'completed';
+                                            const isOverdue = !isComplete && goal.deadline && new Date(goal.deadline) < now;
+
+                                            const leftPct = Math.max(((goal.start.getTime() - minDate.getTime()) / totalSpan) * 100, 0);
+                                            const widthPct = Math.max(((goal.end.getTime() - goal.start.getTime()) / totalSpan) * 100, 3);
+                                            const barColor = isComplete ? '#22c55e' : isOverdue ? '#ef4444' : catCfg.color;
+
+                                            return (
+                                                <div key={goal._id} className="flex items-center gap-3 group cursor-pointer" onClick={() => setDetailGoal(goal)}>
+                                                    {/* Label */}
+                                                    <div className="w-[140px] shrink-0 text-right pr-2">
+                                                        <p className={`text-[12px] font-bold text-slate-700 truncate group-hover:text-violet-600 transition-colors ${isComplete ? 'line-through' : ''}`}>
+                                                            {goal.title}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400">{catCfg.label}</p>
+                                                    </div>
+
+                                                    {/* Bar area */}
+                                                    <div className="flex-1 relative h-10 bg-slate-50/50 rounded-lg border border-slate-100/50">
+                                                        {/* Background bar */}
+                                                        <div
+                                                            className="absolute top-1 bottom-1 rounded-md transition-all group-hover:brightness-110"
+                                                            style={{
+                                                                left: `${leftPct}%`,
+                                                                width: `${widthPct}%`,
+                                                                background: `${barColor}20`,
+                                                                border: `1px solid ${barColor}30`,
+                                                            }}
+                                                        >
+                                                            {/* Progress fill */}
+                                                            <div
+                                                                className="absolute inset-y-0 left-0 rounded-md transition-all"
+                                                                style={{
+                                                                    width: `${progress}%`,
+                                                                    background: `${barColor}50`,
+                                                                }}
+                                                            />
+                                                            {/* Text inside bar */}
+                                                            <div className="absolute inset-0 flex items-center px-2 overflow-hidden">
+                                                                <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: barColor }}>
+                                                                    {progress}% · {completedTasks}/{totalTasks}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()
                 )}
             </div>
 

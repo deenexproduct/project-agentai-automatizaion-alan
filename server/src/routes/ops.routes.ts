@@ -1231,7 +1231,12 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
         weekEnd.setDate(weekStart.getDate() + 6);
         weekEnd.setHours(23, 59, 59, 999);
 
-        const weekLabel = `Semana del ${weekStart.getDate()} al ${weekEnd.getDate()} de ${weekEnd.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}`;
+        // Smart weekLabel that handles month-crossing
+        const startMonth = weekStart.toLocaleDateString('es-AR', { month: 'long' });
+        const endMonth = weekEnd.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+        const weekLabel = startMonth === endMonth.split(' ')[0]
+            ? `Semana del ${weekStart.getDate()} al ${weekEnd.getDate()} de ${endMonth}`
+            : `Semana del ${weekStart.getDate()} de ${startMonth} al ${weekEnd.getDate()} de ${endMonth}`;
 
         // ── 1. TASKS ──────────────────────────────────
         const allOpsTasks = await Task.find({ platform: 'operaciones' })
@@ -1250,13 +1255,16 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
             status: t.status,
             type: t.type,
             completedAt: t.completedAt,
+            dueDate: t.dueDate,
             company: t.company ? { _id: t.company._id, name: t.company.name } : undefined,
             contact: t.contact ? { _id: t.contact._id, fullName: t.contact.fullName } : undefined,
             assignedTo: t.assignedTo ? { _id: t.assignedTo._id, name: t.assignedTo.name } : undefined,
         });
 
-        const totalActive = allOpsTasks.filter((t: any) => new Date(t.createdAt) < weekEnd).length;
-        const completionRate = totalActive > 0 ? Math.round((tasksCompletedThisWeek.length / totalActive) * 100) : 0;
+        // Bug #2 fix: completionRate based on this week's tasks only
+        const completionRate = (tasksCompletedThisWeek.length + pendingTasks.length) > 0
+            ? Math.round((tasksCompletedThisWeek.length / (tasksCompletedThisWeek.length + pendingTasks.length)) * 100)
+            : 0;
 
         // ── 2. DAILY PRODUCTIVITY ─────────────────────
         const dailyProductivity: any[] = [];
@@ -1287,7 +1295,8 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
         const mostProductive = dailyProductivity.reduce((best, d) => d.tasksCompleted > best.tasksCompleted ? d : best, dailyProductivity[0]);
 
         // ── 3. GOALS ──────────────────────────────────
-        const goals = await Goal.find({})
+        // Bug #5 fix: exclude archived goals from snapshot
+        const goals = await Goal.find({ status: { $ne: 'archived' } })
             .populate('company', 'name')
             .lean();
 
@@ -1352,9 +1361,13 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
         });
 
         const goalsCompletedThisWeek = goals.filter((g: any) => g.status === 'completed' && g.completedAt && new Date(g.completedAt) >= weekStart && new Date(g.completedAt) <= weekEnd).length;
+        // Bug #1 fix: avgGoalProgress using task-based calculation
         const activeGoals = goals.filter((g: any) => g.status === 'active');
         const avgGoalProgress = activeGoals.length > 0
-            ? Math.round(activeGoals.reduce((acc: number, g: any) => acc + (g.target > 0 ? Math.min((g.current / g.target) * 100, 100) : 0), 0) / activeGoals.length)
+            ? Math.round(activeGoals.reduce((acc: number, g: any) => {
+                const tc = taskCountMap[g._id.toString()] || { totalTasks: 0, completedTasks: 0, tasksCompletedThisWeek: 0 };
+                return acc + (tc.totalTasks > 0 ? Math.min((tc.completedTasks / tc.totalTasks) * 100, 100) : 0);
+            }, 0) / activeGoals.length)
             : 0;
 
         // ── 4. PIPELINE ───────────────────────────────
@@ -1382,18 +1395,84 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
         const productivityScore = Math.min(tasksCompletedThisWeek.length * 10, 100);
         const overallScore = Math.round(taskScore * 0.4 + goalScore * 0.3 + productivityScore * 0.3);
 
-        // ── 6. SAVE ───────────────────────────────────
+        // ── 6. EXECUTIVE SUMMARY ──────────────────────
+        const summaryParts: string[] = [];
+        summaryParts.push(`Durante la ${weekLabel.toLowerCase()}, el equipo operativo`);
+        if (tasksCompletedThisWeek.length > 0) {
+            summaryParts.push(`completó ${tasksCompletedThisWeek.length} tarea${tasksCompletedThisWeek.length !== 1 ? 's' : ''}`);
+        } else {
+            summaryParts.push('no registró tareas completadas');
+        }
+        if (tasksCreatedThisWeek.length > 0) {
+            summaryParts.push(`y se crearon ${tasksCreatedThisWeek.length} nueva${tasksCreatedThisWeek.length !== 1 ? 's' : ''}`);
+        }
+        summaryParts[summaryParts.length - 1] += '.';
+        if (goalsCompletedThisWeek > 0) {
+            summaryParts.push(`Se cumplieron ${goalsCompletedThisWeek} meta${goalsCompletedThisWeek !== 1 ? 's' : ''} estratégica${goalsCompletedThisWeek !== 1 ? 's' : ''}.`);
+        }
+        if (activeGoals.length > 0) {
+            summaryParts.push(`Actualmente hay ${activeGoals.length} meta${activeGoals.length !== 1 ? 's' : ''} activa${activeGoals.length !== 1 ? 's' : ''} con un progreso promedio del ${avgGoalProgress}%.`);
+        }
+        const scoreLabel = overallScore >= 75 ? 'excelente' : overallScore >= 50 ? 'bueno' : overallScore >= 25 ? 'moderado' : 'bajo';
+        summaryParts.push(`El rendimiento general de la semana fue ${scoreLabel}, con un score de ${overallScore}/100.`);
+        if (pendingTasks.length > 0) {
+            summaryParts.push(`Quedan ${pendingTasks.length} tarea${pendingTasks.length !== 1 ? 's' : ''} pendiente${pendingTasks.length !== 1 ? 's' : ''} que requieren atención.`);
+        }
+        const executiveSummary = summaryParts.join(' ');
+
+        // ── 7. NEXT WEEK GOALS ────────────────────────
+        const nextWeekStart = new Date(weekEnd);
+        nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+        nextWeekStart.setHours(0, 0, 0, 0);
+        const nextWeekEnd = new Date(nextWeekStart);
+        nextWeekEnd.setDate(nextWeekStart.getDate() + 6);
+        nextWeekEnd.setHours(23, 59, 59, 999);
+
+        const upcomingGoals = goals.filter((g: any) =>
+            g.status === 'active' && g.deadline &&
+            new Date(g.deadline) >= weekStart && new Date(g.deadline) <= nextWeekEnd
+        );
+        const nextWeekGoals = upcomingGoals.map((g: any) => {
+            const tc = taskCountMap[g._id.toString()] || { totalTasks: 0, completedTasks: 0, tasksCompletedThisWeek: 0 };
+            const progress = tc.totalTasks > 0 ? Math.round((tc.completedTasks / tc.totalTasks) * 100) : 0;
+            return {
+                goalId: g._id,
+                title: g.title,
+                category: g.category,
+                deadline: g.deadline,
+                progress,
+                totalTasks: tc.totalTasks,
+                completedTasks: tc.completedTasks,
+                company: g.company ? { _id: g.company._id, name: g.company.name } : undefined,
+            };
+        });
+
+        // ── 8. WEEK COMPARISON ────────────────────────
+        const previousReport = await WeeklyReport.findOne({ weekStart: { $lt: weekStart } })
+            .sort({ weekStart: -1 })
+            .lean();
+
+        const weekComparison = previousReport ? {
+            tasksCompletedDelta: tasksCompletedThisWeek.length - (previousReport.totalTasksCompleted || 0),
+            tasksCreatedDelta: tasksCreatedThisWeek.length - (previousReport.totalTasksCreated || 0),
+            completionRateDelta: completionRate - (previousReport.completionRate || 0),
+            scoreDelta: overallScore - (previousReport.overallScore || 0),
+            goalsCompletedDelta: goalsCompletedThisWeek - (previousReport.goalsCompletedThisWeek || 0),
+            previousWeekScore: previousReport.overallScore || 0,
+        } : undefined;
+
+        // ── 9. SAVE ───────────────────────────────────
         const report = await WeeklyReport.create({
             weekStart,
             weekEnd,
             weekLabel,
             generatedBy: userId,
-            totalTasksAtStart: totalActive - tasksCreatedThisWeek.length,
+            totalTasksAtStart: (tasksCompletedThisWeek.length + pendingTasks.length) - tasksCreatedThisWeek.length,
             totalTasksCreated: tasksCreatedThisWeek.length,
             totalTasksCompleted: tasksCompletedThisWeek.length,
             completionRate,
             completedTasks: tasksCompletedThisWeek.map(mapTask),
-            pendingTasks: pendingTasks.slice(0, 20).map(mapTask),
+            pendingTasks: pendingTasks.map(mapTask),
             goalsSnapshot,
             goalsCompletedThisWeek,
             avgGoalProgress,
@@ -1404,12 +1483,15 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
             dealsByStatus,
             highlights,
             overallScore,
+            executiveSummary,
+            nextWeekGoals,
+            weekComparison,
             userId,
         });
 
         // Log activity for report creation
         await Activity.create({
-            type: 'other',
+            type: 'note',
             description: `Se generó el informe semanal: ${weekLabel} (Score: ${overallScore})`,
             createdBy: userId,
             userId,
@@ -1417,7 +1499,7 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
 
         return res.status(201).json(report);
     } catch (error) {
-        console.error(`[OPS] Error generating weekly report: ${(error as Error).message}`);
+        console.error(`[OPS] Error generating weekly report:`, (error as Error).message);
         return res.status(500).json({ error: 'Error al generar el informe semanal' });
     }
 });
@@ -1470,7 +1552,7 @@ router.delete('/reports/:id', async (req: Request, res: Response) => {
 
         // Log activity
         await Activity.create({
-            type: 'other',
+            type: 'note',
             description: `Se eliminó el informe semanal: ${report.weekLabel}`,
             createdBy: userId,
             userId,
@@ -1479,6 +1561,24 @@ router.delete('/reports/:id', async (req: Request, res: Response) => {
         return res.json({ success: true });
     } catch (error) {
         console.error(`[OPS] Error deleting report: ${(error as Error).message}`);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/ops/reports/public/:token — Get a report publicly (no auth required)
+ * NOTE: This route needs to be registered in the main app without auth middleware
+ */
+router.get('/reports/public/:token', async (req: Request, res: Response) => {
+    try {
+        const report = await WeeklyReport.findOne({ publicToken: req.params.token })
+            .populate('generatedBy', 'name profilePhotoUrl')
+            .lean();
+
+        if (!report) return res.status(404).json({ error: 'Reporte no encontrado' });
+        return res.json(report);
+    } catch (error) {
+        console.error(`[OPS] Error getting public report: ${(error as Error).message}`);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });

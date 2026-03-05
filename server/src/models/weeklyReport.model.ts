@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import crypto from 'crypto';
 
 // ── Interfaces ────────────────────────────────────────────────
 
@@ -27,6 +28,26 @@ export interface IGoalSnapshot {
     tasksCompletedThisWeek: number;
     status: string;
     company?: { _id: mongoose.Types.ObjectId; name: string };
+}
+
+export interface INextWeekGoal {
+    goalId: mongoose.Types.ObjectId;
+    title: string;
+    category: string;
+    deadline: Date;
+    progress: number; // current percentage
+    totalTasks: number;
+    completedTasks: number;
+    company?: { _id: mongoose.Types.ObjectId; name: string };
+}
+
+export interface IWeekComparison {
+    tasksCompletedDelta: number; // +5 means 5 more than last week
+    tasksCreatedDelta: number;
+    completionRateDelta: number;
+    scoreDelta: number;
+    goalsCompletedDelta: number;
+    previousWeekScore: number;
 }
 
 export interface IDayProductivity {
@@ -68,6 +89,16 @@ export interface IWeeklyReport extends Document {
     // ── Summary ──
     highlights: string[];
     overallScore: number; // 0-100
+    executiveSummary: string; // professional narrative paragraph
+
+    // ── Next Week ──
+    nextWeekGoals: INextWeekGoal[];
+
+    // ── Week Comparison ──
+    weekComparison?: IWeekComparison;
+
+    // ── Public Sharing ──
+    publicToken: string;
 
     userId: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -82,6 +113,7 @@ const TaskDetailSchema = new Schema({
     status: String,
     type: String,
     completedAt: Date,
+    dueDate: Date,
     company: {
         _id: Schema.Types.ObjectId,
         name: String,
@@ -113,6 +145,29 @@ const GoalSnapshotSchema = new Schema({
         _id: Schema.Types.ObjectId,
         name: String,
     },
+}, { _id: false });
+
+const NextWeekGoalSchema = new Schema({
+    goalId: { type: Schema.Types.ObjectId, ref: 'Goal' },
+    title: String,
+    category: String,
+    deadline: Date,
+    progress: Number,
+    totalTasks: Number,
+    completedTasks: Number,
+    company: {
+        _id: Schema.Types.ObjectId,
+        name: String,
+    },
+}, { _id: false });
+
+const WeekComparisonSchema = new Schema({
+    tasksCompletedDelta: { type: Number, default: 0 },
+    tasksCreatedDelta: { type: Number, default: 0 },
+    completionRateDelta: { type: Number, default: 0 },
+    scoreDelta: { type: Number, default: 0 },
+    goalsCompletedDelta: { type: Number, default: 0 },
+    previousWeekScore: { type: Number, default: 0 },
 }, { _id: false });
 
 const DayProductivitySchema = new Schema({
@@ -149,6 +204,13 @@ const WeeklyReportSchema = new Schema<IWeeklyReport>({
 
     highlights: [String],
     overallScore: { type: Number, default: 0 },
+    executiveSummary: { type: String, default: '' },
+
+    nextWeekGoals: [NextWeekGoalSchema],
+
+    weekComparison: { type: WeekComparisonSchema, default: undefined },
+
+    publicToken: { type: String, unique: true, sparse: true },
 
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
 }, {
@@ -156,6 +218,15 @@ const WeeklyReportSchema = new Schema<IWeeklyReport>({
     collection: 'ops_weekly_reports',
 });
 
+// Generate public token before save
+WeeklyReportSchema.pre('save', function (next) {
+    if (!this.publicToken) {
+        this.publicToken = crypto.randomBytes(24).toString('hex');
+    }
+    next();
+});
+
 WeeklyReportSchema.index({ weekStart: -1, userId: 1 });
+WeeklyReportSchema.index({ publicToken: 1 });
 
 export const WeeklyReport = mongoose.model<IWeeklyReport>('WeeklyReport', WeeklyReportSchema);

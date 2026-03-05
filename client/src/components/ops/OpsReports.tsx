@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
     Loader2, FileText, TrendingUp, CheckCircle2, Target, Calendar, ChevronRight,
-    ArrowLeft, BarChart3, Clock, Building2, Star, Zap, Award, X, Plus, Trash2, AlertTriangle
+    ArrowLeft, BarChart3, Clock, Building2, Star, Zap, Award, X, Plus, Trash2, AlertTriangle,
+    Share2, ExternalLink, Copy, ArrowUpRight, ArrowDownRight, CalendarRange
 } from 'lucide-react';
 import { getOpsReports, getOpsReport, generateWeeklyReport, deleteOpsReport } from '../../services/ops.service';
 
@@ -23,6 +24,7 @@ interface ReportSummary {
     mostProductiveDayCount: number;
     overallScore: number;
     highlights: string[];
+    publicToken?: string;
 }
 
 interface FullReport extends ReportSummary {
@@ -33,6 +35,9 @@ interface FullReport extends ReportSummary {
     dealsByStatus: Record<string, number>;
     dealsMovedForward: number;
     totalTasksAtStart: number;
+    executiveSummary?: string;
+    nextWeekGoals?: { goalId: string; title: string; category: string; deadline: string; progress: number; totalTasks: number; completedTasks: number; company?: { _id: string; name: string } }[];
+    weekComparison?: { tasksCompletedDelta: number; tasksCreatedDelta: number; completionRateDelta: number; scoreDelta: number; goalsCompletedDelta: number; previousWeekScore: number };
 }
 
 // ── Score Color Helpers ───────────────────────────────────────
@@ -109,11 +114,17 @@ export default function OpsReports() {
             await deleteOpsReport(id);
             setDeleteConfirm(null);
             if (selectedReport?._id === id) setSelectedReport(null);
-            loadReports();
-        } catch (err) {
-            console.error('Error deleting report:', err);
+        } catch (err: any) {
+            // If 404 → report already deleted or never existed, treat as success
+            if (err?.response?.status === 404) {
+                setDeleteConfirm(null);
+                if (selectedReport?._id === id) setSelectedReport(null);
+            } else {
+                console.error('Error deleting report:', err);
+            }
         } finally {
             setDeleting(false);
+            loadReports(); // Always refresh list to clear stale entries
         }
     };
 
@@ -294,6 +305,7 @@ export default function OpsReports() {
 function ReportDetailView({ report, onBack, onDelete }: { report: FullReport; onBack: () => void; onDelete: (id: string) => void }) {
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [copied, setCopied] = useState(false);
     const scoreCfg = getScoreColor(report.overallScore);
     const maxDailyCompleted = Math.max(...(report.dailyProductivity || []).map(d => d.tasksCompleted), 1);
 
@@ -310,6 +322,14 @@ function ReportDetailView({ report, onBack, onDelete }: { report: FullReport; on
         }
     };
 
+    const handleShare = () => {
+        if (!report.publicToken) return;
+        const url = `${window.location.origin}/public/report/${report.publicToken}`;
+        navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+    };
+
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] mt-4 pb-20 md:pb-0">
             {/* Back + Title */}
@@ -323,13 +343,26 @@ function ReportDetailView({ report, onBack, onDelete }: { report: FullReport; on
                         Generado el {new Date(report.generatedAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </p>
                 </div>
-                <button
-                    onClick={() => onDelete(report._id)}
-                    className="w-9 h-9 rounded-xl bg-white/80 border border-slate-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-colors text-slate-400"
-                    title="Eliminar informe"
-                >
-                    <Trash2 size={16} />
-                </button>
+                <div className="flex items-center gap-2">
+                    {report.publicToken && (
+                        <button
+                            onClick={handleShare}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-bold transition-all ${copied
+                                ? 'bg-green-50 text-green-600 border border-green-200'
+                                : 'bg-violet-50 text-violet-600 border border-violet-200 hover:bg-violet-100'
+                                }`}
+                        >
+                            {copied ? <><CheckCircle2 size={14} /> Link Copiado!</> : <><Share2 size={14} /> Compartir</>}
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setDeleteConfirm(report._id)}
+                        className="w-9 h-9 rounded-xl bg-white/80 border border-slate-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 hover:text-red-500 transition-colors text-slate-400"
+                        title="Eliminar informe"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-4">
@@ -362,6 +395,90 @@ function ReportDetailView({ report, onBack, onDelete }: { report: FullReport; on
                         </div>
                     ))}
                 </div>
+
+                {/* ── Executive Summary ── */}
+                {report.executiveSummary && (
+                    <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.05), rgba(219,39,119,0.05))', border: '1px solid rgba(139,92,246,0.12)' }}>
+                        <h3 className="text-[13px] font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <FileText size={14} className="text-violet-500" /> Resumen Ejecutivo
+                        </h3>
+                        <p className="text-[14px] text-slate-600 leading-relaxed">{report.executiveSummary}</p>
+                    </div>
+                )}
+
+                {/* ── Week Comparison ── */}
+                {report.weekComparison && (
+                    <div className="rounded-2xl p-5" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                        <h3 className="text-[13px] font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <TrendingUp size={14} className="text-blue-500" /> Comparación vs. Semana Anterior
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {[
+                                { label: 'Tareas Completadas', delta: report.weekComparison.tasksCompletedDelta },
+                                { label: 'Tareas Creadas', delta: report.weekComparison.tasksCreatedDelta },
+                                { label: 'Tasa Completado', delta: report.weekComparison.completionRateDelta, suffix: '%' },
+                                { label: 'Score', delta: report.weekComparison.scoreDelta },
+                            ].map(item => (
+                                <div key={item.label} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-center">
+                                    <div className={`flex items-center justify-center gap-1 text-lg font-bold ${item.delta > 0 ? 'text-green-600' : item.delta < 0 ? 'text-red-500' : 'text-slate-400'
+                                        }`}>
+                                        {item.delta > 0 ? <ArrowUpRight size={16} /> : item.delta < 0 ? <ArrowDownRight size={16} /> : null}
+                                        {item.delta > 0 ? '+' : ''}{item.delta}{item.suffix || ''}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 font-medium mt-0.5">{item.label}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-3 text-[11px] text-slate-400 text-center">
+                            Score semana anterior: <span className="font-bold">{report.weekComparison.previousWeekScore}/100</span>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Next Week Goals ── */}
+                {report.nextWeekGoals && report.nextWeekGoals.length > 0 && (
+                    <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.05), rgba(6,182,212,0.05))', border: '1px solid rgba(59,130,246,0.12)' }}>
+                        <h3 className="text-[13px] font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <CalendarRange size={14} className="text-blue-500" /> Foco Para la Próxima Semana ({report.nextWeekGoals.length})
+                        </h3>
+                        <div className="space-y-2.5">
+                            {report.nextWeekGoals.map(goal => {
+                                const emoji = CATEGORY_EMOJIS[goal.category] || '📌';
+                                const daysUntil = Math.ceil((new Date(goal.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                return (
+                                    <div key={goal.goalId} className="p-3 rounded-xl bg-white/80 border border-blue-100/50">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm">{emoji}</span>
+                                                <span className="text-[13px] font-bold text-slate-700">{goal.title}</span>
+                                                {goal.company && (
+                                                    <span className="text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full border border-blue-100 flex items-center gap-0.5">
+                                                        <Building2 size={9} /> {goal.company.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${daysUntil <= 0 ? 'bg-red-50 text-red-600 border border-red-100' :
+                                                daysUntil <= 3 ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                                    'bg-blue-50 text-blue-600 border border-blue-100'
+                                                }`}>
+                                                <Clock size={10} className="inline mr-0.5" />
+                                                {daysUntil <= 0 ? 'Vencida' : daysUntil === 1 ? 'Mañana' : `${daysUntil} días`}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1 h-2 rounded-full bg-slate-200 overflow-hidden">
+                                                <div className="h-full rounded-full transition-all" style={{ width: `${goal.progress}%`, background: '#3b82f6' }} />
+                                            </div>
+                                            <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                                                {goal.completedTasks}/{goal.totalTasks} tareas ({goal.progress}%)
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Highlights ── */}
                 {report.highlights && report.highlights.length > 0 && (
@@ -418,8 +535,31 @@ function ReportDetailView({ report, onBack, onDelete }: { report: FullReport; on
                         </div>
                     </div>
                 )}
+                {/* ── Feature #5: Completed Goals Celebration ── */}
+                {report.goalsSnapshot && report.goalsSnapshot.filter((g: any) => g.status === 'completed').length > 0 && (
+                    <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.05))', border: '1px solid rgba(34,197,94,0.15)' }}>
+                        <h3 className="text-[13px] font-bold text-green-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            🎉 Metas Cumplidas Esta Semana
+                        </h3>
+                        <div className="space-y-2">
+                            {report.goalsSnapshot.filter((g: any) => g.status === 'completed').map((goal: any) => {
+                                const emoji = CATEGORY_EMOJIS[goal.category] || '📌';
+                                return (
+                                    <div key={goal.goalId} className="flex items-center gap-3 p-3 rounded-xl bg-white/80 border border-green-100">
+                                        <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-lg">✅</div>
+                                        <div className="flex-1">
+                                            <span className="text-[13px] font-bold text-slate-700">{emoji} {goal.title}</span>
+                                            {goal.company && <span className="text-[10px] text-blue-500 ml-2">{goal.company.name}</span>}
+                                        </div>
+                                        <span className="text-[12px] font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-lg border border-green-100">100%</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
-                {/* ── Goals Snapshot ── */}
+                {/* ── Goals Snapshot (active only) ── */}
                 {report.goalsSnapshot && report.goalsSnapshot.length > 0 && (
                     <div className="rounded-2xl p-5" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         <h3 className="text-[13px] font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -513,24 +653,72 @@ function ReportDetailView({ report, onBack, onDelete }: { report: FullReport; on
                     </div>
                 )}
 
-                {/* ── Pending Tasks ── */}
+                {/* ── Feature #6: Productivity by Member ── */}
+                {report.completedTasks && report.completedTasks.length > 0 && (() => {
+                    const memberMap: Record<string, { name: string; count: number }> = {};
+                    report.completedTasks.forEach((t: any) => {
+                        const name = t.assignedTo?.name || 'Sin asignar';
+                        if (!memberMap[name]) memberMap[name] = { name, count: 0 };
+                        memberMap[name].count++;
+                    });
+                    const sorted = Object.values(memberMap).sort((a, b) => b.count - a.count);
+                    if (sorted.length <= 1) return null;
+                    const maxCount = sorted[0]?.count || 1;
+                    return (
+                        <div className="rounded-2xl p-5" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(0,0,0,0.06)' }}>
+                            <h3 className="text-[13px] font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                <Award size={14} className="text-amber-500" /> Productividad por Miembro
+                            </h3>
+                            <div className="space-y-2">
+                                {sorted.map((member, idx) => (
+                                    <div key={member.name} className="flex items-center gap-3">
+                                        <span className="text-[14px] w-6 text-center font-bold">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`}</span>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-[13px] font-medium text-slate-700">{member.name}</span>
+                                                <span className="text-[12px] font-bold text-slate-600">{member.count} tareas</span>
+                                            </div>
+                                            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                <div className="h-full rounded-full transition-all" style={{
+                                                    width: `${(member.count / maxCount) * 100}%`,
+                                                    background: idx === 0 ? 'linear-gradient(90deg, #f59e0b, #f97316)' : '#3b82f6'
+                                                }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
+
+                {/* ── Feature #7: Pending Tasks with Overdue Highlighting ── */}
                 {report.pendingTasks && report.pendingTasks.length > 0 && (
                     <div className="rounded-2xl p-5" style={{ background: 'rgba(255,255,255,0.85)', border: '1px solid rgba(0,0,0,0.06)' }}>
                         <h3 className="text-[13px] font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Clock size={14} className="text-amber-500" /> Tareas Pendientes ({report.pendingTasks.length})
                         </h3>
                         <div className="space-y-2">
-                            {report.pendingTasks.map(task => (
-                                <div key={task.taskId} className="flex items-center gap-3 p-2.5 rounded-xl bg-amber-50/30 border border-amber-100/50">
-                                    <div className="w-5 h-5 rounded-full border-2 border-amber-400 shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-[13px] font-medium text-slate-700 truncate">{task.title}</p>
-                                        {task.company && (
-                                            <span className="text-[10px] text-blue-500">{task.company.name}</span>
-                                        )}
+                            {report.pendingTasks.map((task: any) => {
+                                const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+                                return (
+                                    <div key={task.taskId} className={`flex items-center gap-3 p-2.5 rounded-xl border ${isOverdue ? 'bg-red-50/50 border-red-200' : 'bg-amber-50/30 border-amber-100/50'}`}>
+                                        <div className={`w-5 h-5 rounded-full border-2 shrink-0 ${isOverdue ? 'border-red-400' : 'border-amber-400'}`} />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[13px] font-medium text-slate-700 truncate">{task.title}</p>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                {task.company && <span className="text-[10px] text-blue-500">{task.company.name}</span>}
+                                                {isOverdue && (
+                                                    <span className="text-[10px] font-bold text-red-500 flex items-center gap-0.5">
+                                                        <AlertTriangle size={9} /> Vencida
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {task.assignedTo && <span className="text-[11px] text-slate-400">{task.assignedTo.name}</span>}
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}

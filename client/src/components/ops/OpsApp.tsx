@@ -25,14 +25,13 @@ interface SidebarItem {
 
 const opsGroup: SidebarItem[] = [
     { id: 'dashboard', Icon: BarChart3, label: 'Estadísticas' },
-    { id: 'pipeline', Icon: Columns3, label: 'Pipeline Ops' },
+    { id: 'monitoring', Icon: Monitor, label: 'Monitoreo' },
     { id: 'tasks', Icon: CheckSquare, label: 'Tareas' },
-    { id: 'goals', Icon: Target, label: 'Metas' },
-    { id: 'activity', Icon: Activity, label: 'Actividad' },
+    { id: 'goals', Icon: Target, label: 'Objetivos' },
     { id: 'reports', Icon: FileText, label: 'Informes' },
     { id: 'companies', Icon: Building2, label: 'Empresas' },
     { id: 'contacts', Icon: User, label: 'Contactos' },
-    { id: 'monitoring', Icon: Monitor, label: 'Monitoreo' },
+    { id: 'activity', Icon: Activity, label: 'Actividad Operativa' },
 ];
 
 const bottomGroup: SidebarItem[] = [
@@ -44,7 +43,7 @@ const TAB_TITLES: Record<OpsTab, string> = {
     dashboard: 'Estadísticas Operativas',
     pipeline: 'Pipeline de Operaciones',
     tasks: 'Centro de Tareas',
-    goals: 'Metas y Objetivos',
+    goals: 'Objetivos',
     activity: 'Actividad Operativa',
     reports: 'Informes Semanales',
     companies: 'Empresas en Operaciones',
