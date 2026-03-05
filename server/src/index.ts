@@ -24,9 +24,12 @@ import competitorRoutes from './routes/competitor.routes';
 import posSystemRoutes from './routes/pos-system.routes';
 import eventFairRoutes from './routes/event-fair.routes';
 import calendarRoutes from './routes/calendar.routes';
+import opsRoutes from './routes/ops.routes';
+import deenexMonitoringRoutes from './routes/deenex-monitoring.routes';
 import { authMiddleware } from './middleware/auth.middleware';
 import { whatsappService } from './services/whatsapp.service';
 import { validateEncryptionKey } from './utils/crypto.service';
+import { connectDeenexDB } from './deenex-db';
 
 const execAsync = promisify(exec);
 
@@ -358,7 +361,9 @@ app.use('/api/competitors', authMiddleware, competitorRoutes);
 app.use('/api/pos-systems', authMiddleware, posSystemRoutes);
 app.use('/api/event-fairs', authMiddleware, eventFairRoutes);
 app.use('/api/calendar', calendarRoutes);
-logger.info('⚙️ System Config, Partners, Competitors, POS Systems & Event Fairs routes mounted');
+app.use('/api/ops', opsRoutes);
+app.use('/api/deenex-monitoring', deenexMonitoringRoutes);
+logger.info('⚙️ System Config, Partners, Competitors, POS Systems, Event Fairs, Ops & Deenex Monitoring routes mounted');
 
 // Start server
 async function startServer() {
@@ -367,6 +372,9 @@ async function startServer() {
 
   // Connect to MongoDB
   await connectDB();
+
+  // Connect to Deenex DB (secondary, read-only)
+  await connectDeenexDB();
 
   app.listen(PORT, () => {
     logger.info(`✅ Server running on http://localhost:${PORT}`);

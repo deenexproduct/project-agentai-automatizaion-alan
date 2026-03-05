@@ -2,8 +2,13 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
-export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { token, isLoading } = useAuth();
+interface ProtectedRouteProps {
+    children: React.ReactNode;
+    platform?: 'comercial' | 'operaciones';
+}
+
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, platform }) => {
+    const { token, user, isLoading } = useAuth();
     const location = useLocation();
 
     // Show loading spinner while validating token
@@ -21,6 +26,18 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
     // Only redirect after loading is complete and we confirmed no valid token
     if (!token) {
         return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    // Platform access control
+    if (platform && user) {
+        const userPlatforms = user.platforms || ['comercial'];
+        if (!userPlatforms.includes(platform)) {
+            // Redirect to the platform they DO have access to
+            const defaultRoute = userPlatforms.includes('comercial')
+                ? '/linkedin/dashboard'
+                : '/ops/dashboard';
+            return <Navigate to={defaultRoute} replace />;
+        }
     }
 
     return <>{children}</>;

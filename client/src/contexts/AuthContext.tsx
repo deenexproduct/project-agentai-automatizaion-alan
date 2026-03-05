@@ -8,6 +8,7 @@ export interface User {
     name?: string;
     profilePhotoUrl?: string;
     role?: string;
+    platforms?: ('comercial' | 'operaciones')[];
     createdAt: string;
 }
 

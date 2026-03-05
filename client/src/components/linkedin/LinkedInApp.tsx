@@ -2,7 +2,9 @@ import { useState } from 'react';
 import MobileBottomNav from '../layout/MobileBottomNav';
 import MobileMorePage from '../layout/MobileMorePage';
 import { useNavigate, useParams } from 'react-router-dom';
-import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, Swords, LayoutDashboard, Database, CheckSquare, Columns3, Calendar as CalendarIcon, Monitor, CalendarRange } from 'lucide-react';
+import { BarChart3, Target, MessageSquare, Users, Settings, Sparkles, MessageCircle, Mic, Puzzle, Building2, User, Handshake, Swords, LayoutDashboard, Database, CheckSquare, Columns3, Calendar as CalendarIcon, Monitor, CalendarRange, ArrowLeftRight } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import PlatformSwitcher from '../common/PlatformSwitcher';
 import ProspectingPage from './ProspectingPage';
 import CRMDashboard from '../crm/CRMDashboard';
 import PipelineBoard from '../crm/PipelineBoard';
@@ -76,7 +78,10 @@ const bottomGroup: SidebarItem[] = [
 export default function LinkedInApp() {
     const { tab, id } = useParams<{ tab: string; id?: string }>();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [showMore, setShowMore] = useState(false);
+
+    const hasBothPlatforms = user?.platforms?.includes('comercial') && user?.platforms?.includes('operaciones');
 
     // Default to 'dashboard' if no tab or invalid tab is provided
     const activeTab = (tab as SidebarTab) || 'dashboard';
@@ -139,6 +144,20 @@ export default function LinkedInApp() {
                     {extensionGroup.map((item) => (
                         <SidebarButton key={item.id} {...item} active={activeTab === item.id} onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)} />
                     ))}
+
+                    {/* Platform Switcher */}
+                    {hasBothPlatforms && (
+                        <>
+                            <div className="w-8 my-1 shrink-0" style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
+                            <SidebarButton
+                                Icon={ArrowLeftRight}
+                                label="Ir a Operaciones"
+                                active={false}
+                                onClick={() => navigate('/ops/dashboard')}
+                                accentColor="#0ea5e9"
+                            />
+                        </>
+                    )}
                 </div>
 
                 {/* Bottom: Back button & Config */}
@@ -190,8 +209,11 @@ export default function LinkedInApp() {
 
                     </div>
 
-                    {/* Portal Target for Page-specific Header Actions */}
-                    <div id="header-actions" className="flex items-center gap-4"></div>
+                    <div className="flex items-center gap-3">
+                        <PlatformSwitcher current="comercial" />
+                        {/* Portal Target for Page-specific Header Actions */}
+                        <div id="header-actions" className="flex items-center gap-4"></div>
+                    </div>
                 </header>
 
                 {/* Content Area */}

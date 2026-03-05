@@ -29,6 +29,10 @@ export interface IDeal extends Document {
     statusHistory: IStatusChange[];
     notes: IDealNote[];
     userId: mongoose.Types.ObjectId;
+    // Operations pipeline fields
+    opsStatus?: string;
+    opsAssignedTo?: mongoose.Types.ObjectId;
+    opsStartDate?: Date;
     createdAt: Date;
     updatedAt: Date;
 
@@ -112,6 +116,23 @@ const DealSchema = new Schema<IDeal>({
         ref: 'User',
         required: true,
         index: true,
+    },
+    // ── Operations Pipeline Fields ──
+    opsStatus: {
+        type: String,
+        default: null,
+        trim: true,
+        index: true,
+    },
+    opsAssignedTo: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+        index: true,
+    },
+    opsStartDate: {
+        type: Date,
+        default: null,
     },
 }, {
     timestamps: true,

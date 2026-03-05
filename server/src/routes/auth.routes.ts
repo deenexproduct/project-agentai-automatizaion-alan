@@ -110,7 +110,8 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
                 id: user._id,
                 email: user.email,
                 name: user.name,
-                role: user.role
+                role: user.role,
+                platforms: user.platforms
             }
         });
     } catch (error) {
@@ -143,7 +144,7 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
     try {
         const adminUser = req.user as any;
 
-        const { email, name } = req.body;
+        const { email, name, platforms } = req.body;
 
         if (!email || !email.includes('@')) {
             return res.status(400).json({ error: 'Se requiere un correo electrónico válido.' });
@@ -156,10 +157,17 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Este usuario ya está registrado en la plataforma.' });
         }
 
+        // Validate platforms if provided
+        const validPlatforms = ['comercial', 'operaciones'];
+        const userPlatforms = Array.isArray(platforms) && platforms.length > 0
+            ? platforms.filter((p: string) => validPlatforms.includes(p))
+            : ['comercial'];
+
         const newUser = await UserModel.create({
             email: normalizedEmail,
             name: name?.trim(),
             role: 'user',
+            platforms: userPlatforms,
             invitedBy: adminUser._id
         });
 
@@ -178,7 +186,8 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
                 id: newUser._id,
                 email: newUser.email,
                 name: newUser.name,
-                role: newUser.role
+                role: newUser.role,
+                platforms: newUser.platforms
             }
         });
     } catch (error) {
@@ -197,9 +206,50 @@ router.get('/users', authMiddleware, async (req: Request, res: Response) => {
             .sort({ createdAt: -1 })
             .lean();
 
-        return res.json(users);
+        // Normalize: ensure all users have a platforms array (for pre-existing users)
+        const normalized = users.map(u => ({
+            ...u,
+            platforms: (u as any).platforms?.length ? (u as any).platforms : ['comercial'],
+        }));
+
+        return res.json(normalized);
     } catch (error) {
         console.error(`Error in /users: ${(error as Error).message}`);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * @route   PUT /api/auth/users/:userId/role
+ * @desc    Admin-only endpoint to update a user's role (admin/user)
+ */
+router.put('/users/:userId/role', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const adminUser = req.user as any;
+        if (adminUser.role !== 'admin') {
+            return res.status(403).json({ error: 'Solo administradores pueden cambiar roles.' });
+        }
+
+        const { userId } = req.params;
+        const { role } = req.body;
+
+        if (!['admin', 'user'].includes(role)) {
+            return res.status(400).json({ error: 'Rol inválido. Usa "admin" o "user".' });
+        }
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            { $set: { role } },
+            { new: true, select: '-otpCode -otpExpiresAt' }
+        ).lean();
+
+        if (!updatedUser) {
+            return res.status(404).json({ error: 'Usuario no encontrado.' });
+        }
+
+        return res.json({ user: updatedUser });
+    } catch (error) {
+        console.error(`Error in /users/:userId/role: ${(error as Error).message}`);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -230,6 +280,42 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
         return res.json({ user: updatedUser });
     } catch (error) {
         console.error(`Error in /profile: ${(error as Error).message}`);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * @route   PUT /api/auth/users/:userId/platforms
+ * @desc    Admin-only endpoint to update a user's platform access
+ */
+router.put('/users/:userId/platforms', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const { platforms } = req.body;
+        const { userId } = req.params;
+
+        const validPlatforms = ['comercial', 'operaciones'];
+        if (!Array.isArray(platforms) || platforms.length === 0) {
+            return res.status(400).json({ error: 'Se requiere al menos una plataforma.' });
+        }
+
+        const filtered = platforms.filter((p: string) => validPlatforms.includes(p));
+        if (filtered.length === 0) {
+            return res.status(400).json({ error: 'Plataformas inválidas.' });
+        }
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            { $set: { platforms: filtered } },
+            { new: true, select: '-otpCode -otpExpiresAt' }
+        ).lean();
+
+        if (!updatedUser) {
+            return res.status(404).json({ error: 'Usuario no encontrado.' });
+        }
+
+        return res.json({ user: updatedUser });
+    } catch (error) {
+        console.error(`Error in /users/:userId/platforms: ${(error as Error).message}`);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });

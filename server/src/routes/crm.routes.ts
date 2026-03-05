@@ -844,6 +844,14 @@ router.patch('/deals/:id', async (req: Request, res: Response) => {
             if (targetStage?.isFinal && !deal.closedAt) {
                 deal.closedAt = new Date();
             }
+
+            // Auto-activate in ops pipeline when deal is moved to 'ganado'
+            if (req.body.status === 'ganado' && !deal.opsStatus) {
+                deal.opsStatus = 'anticipo';
+                deal.opsAssignedTo = (req as any).user._id;
+                deal.opsStartDate = new Date();
+                console.log(`[OPS] Deal "${deal.title}" auto-activated in ops pipeline (anticipo)`);
+            }
         }
 
         await deal.save();

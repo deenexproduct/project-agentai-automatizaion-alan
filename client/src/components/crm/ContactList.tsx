@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getContacts, ContactData, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { getOpsContacts } from '../../services/ops.service';
 import { Search, MapPin, Building2, Link2, Plus, Filter, MessageCircle, Mail, Phone, Linkedin } from 'lucide-react';
 import ContactFormDrawer from './ContactFormDrawer';
 import ContactActivityDrawer from './ContactActivityDrawer';
 import OwnerAvatar from '../common/OwnerAvatar';
 import PremiumHeader from './PremiumHeader';
 
-export default function ContactList({ onSelectContact, urlContactId }: { onSelectContact?: (id: string) => void, urlContactId?: string }) {
+export default function ContactList({ onSelectContact, urlContactId, platform }: { onSelectContact?: (id: string) => void, urlContactId?: string, platform?: 'comercial' | 'operaciones' }) {
+    const isOps = platform === 'operaciones';
+    const basePath = isOps ? '/ops/contacts' : '/linkedin/contacts';
     const [contacts, setContacts] = useState<ContactData[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -81,8 +84,13 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
     const loadContacts = async () => {
         setLoading(true);
         try {
-            const res = await getContacts({ search, limit: 100 });
-            setContacts(res.contacts);
+            if (isOps) {
+                const data = await getOpsContacts();
+                setContacts(data);
+            } else {
+                const res = await getContacts({ search, limit: 100 });
+                setContacts(res.contacts);
+            }
         } catch (error) {
             console.error("Failed to load contacts", error);
         } finally {
@@ -103,7 +111,7 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
             onSelectContact(contact._id);
             return;
         }
-        navigate(`/linkedin/contacts/${contact._id}`);
+        navigate(`${basePath}/${contact._id}`);
     };
 
     const handleAdd = () => {
@@ -379,7 +387,7 @@ export default function ContactList({ onSelectContact, urlContactId }: { onSelec
                 open={!!activityContactId}
                 onClose={() => {
                     setActivityContactId(null);
-                    if (urlContactId) navigate('/linkedin/contacts');
+                    if (urlContactId) navigate(basePath);
                 }}
                 onSaved={handleSaved}
             />

@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCompanies, CompanyData, getTeamUsers, TeamUser } from '../../services/crm.service';
+import { getOpsCompanies } from '../../services/ops.service';
 import { Search, MapPin, Globe, Users, Briefcase, Plus, Filter } from 'lucide-react';
 import CompanyFormDrawer from './CompanyFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
 
-export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelectCompany?: (id: string) => void, urlCompanyId?: string }) {
+export default function CompanyList({ onSelectCompany, urlCompanyId, platform }: { onSelectCompany?: (id: string) => void, urlCompanyId?: string, platform?: 'comercial' | 'operaciones' }) {
+    const isOps = platform === 'operaciones';
+    const basePath = isOps ? '/ops/companies' : '/linkedin/companies';
     const [companies, setCompanies] = useState<CompanyData[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -37,8 +40,13 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
     const loadCompanies = async () => {
         setLoading(true);
         try {
-            const res = await getCompanies({ search, limit: 100 });
-            setCompanies(res.companies);
+            if (isOps) {
+                const data = await getOpsCompanies();
+                setCompanies(data);
+            } else {
+                const res = await getCompanies({ search, limit: 100 });
+                setCompanies(res.companies);
+            }
         } catch (error) {
             console.error("Failed to load companies", error);
         } finally {
@@ -60,14 +68,14 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
             onSelectCompany(company._id);
             return;
         }
-        navigate(`/linkedin/companies/${company._id}`);
+        navigate(`${basePath}/${company._id}`);
     };
 
     const handleAdd = () => {
         setEditingCompany(null);
         setIsDrawerOpen(true);
         if (urlCompanyId) {
-            navigate('/linkedin/companies');
+            navigate(basePath);
         }
     };
 
@@ -196,7 +204,7 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
                                         if (onSelectCompany) {
                                             onSelectCompany(company._id);
                                         } else {
-                                            navigate(`/linkedin/companies/${company._id}`);
+                                            navigate(`${basePath}/${company._id}`);
                                         }
                                     }}
                                     className="group bg-white/80 backdrop-blur-xl rounded-[24px] p-5 border border-white/90 shadow-[0_4px_16px_rgba(30,27,75,0.03)] hover:shadow-[0_12px_32px_rgba(139,92,246,0.08)] hover:border-violet-200/50 hover:bg-white/95 transition-all duration-300 text-left flex flex-col items-start gap-4 relative overflow-hidden hover:-translate-y-1"
@@ -285,7 +293,7 @@ export default function CompanyList({ onSelectCompany, urlCompanyId }: { onSelec
                 company={editingCompany}
                 onClose={() => {
                     setIsDrawerOpen(false);
-                    if (urlCompanyId) navigate('/linkedin/companies');
+                    if (urlCompanyId) navigate(basePath);
                 }}
                 onSaved={handleSaved}
             />

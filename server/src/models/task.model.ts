@@ -13,11 +13,15 @@ export type TaskStatus = typeof TASK_STATUSES[number];
 
 // ── Interface ─────────────────────────────────────────────────
 
+export const TASK_PLATFORMS = ['comercial', 'operaciones'] as const;
+export type TaskPlatform = typeof TASK_PLATFORMS[number];
+
 export interface ITask extends Document {
     title: string;
     type: TaskType;
     priority: TaskPriority;
     status: TaskStatus;
+    platform: TaskPlatform;
     description?: string;
     assignedTo?: mongoose.Types.ObjectId;
     contact?: mongoose.Types.ObjectId;
@@ -97,6 +101,18 @@ const TaskSchema = new Schema<ITask>({
         type: Schema.Types.ObjectId,
         ref: 'Company',
         default: null,
+    },
+    goal: {
+        type: Schema.Types.ObjectId,
+        ref: 'Goal',
+        default: null,
+        index: true,
+    },
+    platform: {
+        type: String,
+        enum: TASK_PLATFORMS,
+        default: 'comercial',
+        index: true,
     },
     dueDate: {
         type: Date,

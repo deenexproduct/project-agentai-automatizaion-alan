@@ -15,7 +15,7 @@ interface Props {
     onChangeSearch: (val: string) => void;
     options: AutocompleteOption[];
     onSelect: (option: AutocompleteOption) => void;
-    colorTheme?: 'indigo' | 'emerald' | 'amber';
+    colorTheme?: 'indigo' | 'emerald' | 'amber' | 'fuchsia';
     disabled?: boolean;
 }
 
@@ -52,6 +52,12 @@ export default function AutocompleteInput({
             focusBorder: 'focus:border-amber-300',
             hoverBg: 'hover:bg-amber-50',
             hoverText: 'hover:text-amber-700'
+        },
+        fuchsia: {
+            focusRing: 'focus:ring-fuchsia-500/10',
+            focusBorder: 'focus:border-fuchsia-300',
+            hoverBg: 'hover:bg-fuchsia-50',
+            hoverText: 'hover:text-fuchsia-700'
         }
     };
 

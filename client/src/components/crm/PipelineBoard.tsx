@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { getDealsPipeline, updateDeal, DealData } from '../../services/crm.service';
+import { getOpsDealsGrouped, getOpsPipelineConfig, updateOpsDealStatus } from '../../services/ops.service';
 import { Settings, Plus, DollarSign, Calendar, Clock, CheckSquare, Users, Building2, Columns3, Briefcase, Flame, CircleOff, User } from 'lucide-react';
 import { formatToArgentineDate } from '../../utils/date';
 import DealFormDrawer from './DealFormDrawer';
@@ -28,7 +29,9 @@ interface StageData {
     deals: DealData[];
 }
 
-export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
+export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: string, platform?: 'comercial' | 'operaciones' }) {
+    const isOps = platform === 'operaciones';
+    const basePath = isOps ? '/ops/pipeline' : '/linkedin/pipeline';
     const [stages, setStages] = useState<StageData[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -77,8 +80,23 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
     const loadPipeline = async () => {
         setLoading(true);
         try {
-            const res = await getDealsPipeline();
-            setStages(res.stages);
+            if (isOps) {
+                // Fetch ops pipeline config + grouped deals
+                const [configData, groupedData] = await Promise.all([
+                    getOpsPipelineConfig(),
+                    getOpsDealsGrouped(),
+                ]);
+                const opsStages: StageData[] = (configData.stages || []).map((s: any) => ({
+                    key: s.key,
+                    label: s.label,
+                    color: s.color || '#6366f1',
+                    deals: (groupedData[s.key] || []) as DealData[],
+                }));
+                setStages(opsStages);
+            } else {
+                const res = await getDealsPipeline();
+                setStages(res.stages);
+            }
         } catch (error) {
             console.error("Failed to load pipeline", error);
         } finally {
@@ -134,7 +152,7 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
         // Sync to backend if column changed
         if (fromStageKey !== toStageKey) {
             try {
-                await updateDeal(draggableId, { status: toStageKey });
+                await (isOps ? updateOpsDealStatus(draggableId, toStageKey) : updateDeal(draggableId, { status: toStageKey }));
                 loadPipeline(); // Fetch to get new statusHistory
             } catch (error) {
                 console.error("Failed to update deal status", error);
@@ -146,13 +164,13 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
     const handleAddDeal = (stageKey?: string) => {
         setEditingDeal(stageKey ? { status: stageKey } as DealData : null);
         setIsDrawerOpen(true);
-        if (urlDealId) navigate('/linkedin/pipeline');
+        if (urlDealId) navigate(basePath);
     };
 
     const handleEditDeal = (deal: DealData, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        navigate(`/linkedin/pipeline/${deal._id}`);
+        navigate(`${basePath}/${deal._id}`);
     };
 
     return (
@@ -406,7 +424,7 @@ export default function PipelineBoard({ urlDealId }: { urlDealId?: string }) {
                 stages={stages.map(s => ({ key: s.key, label: s.label }))}
                 onClose={() => {
                     setIsDrawerOpen(false);
-                    if (urlDealId) navigate('/linkedin/pipeline');
+                    if (urlDealId) navigate(basePath);
                 }}
                 onSaved={loadPipeline}
             />

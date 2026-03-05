@@ -1,0 +1,756 @@
+import { useState, useEffect, useRef } from 'react';
+import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2, Timer, Phone, Mail, MapPin, Target } from 'lucide-react';
+import { TaskData, TeamUser, getTeamUsers } from '../../services/crm.service';
+import { getOpsTask, createOpsTask, updateOpsTask, deleteOpsTask, completeOpsTask, getOpsCompanies, getOpsContacts, getOpsDeals, getOpsGoals } from '../../services/ops.service';
+import { formatToUTCDateTimeInput, getDefaultTaskDueDate } from '../../utils/date';
+import AutocompleteInput from '../common/AutocompleteInput';
+import OwnerAvatar from '../common/OwnerAvatar';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface Props {
+    task?: TaskData | null;
+    open: boolean;
+    initialDate?: Date;
+    onClose: () => void;
+    onSaved: () => void;
+    onTaskCompleted?: (completedTask: TaskData) => void;
+}
+
+export default function OpsTaskFormDrawer({ task, open, initialDate, onClose, onSaved, onTaskCompleted }: Props) {
+    const { user } = useAuth();
+    const [formData, setFormData] = useState<Partial<TaskData>>({
+        title: '',
+        type: 'follow_up',
+        priority: 'high',
+        status: 'pending',
+        dueDate: '',
+        durationMinutes: 30,
+        company: undefined,
+        contact: undefined,
+        deal: undefined,
+    });
+
+    const [companies, setCompanies] = useState<any[]>([]);
+    const [contacts, setContacts] = useState<any[]>([]);
+    const [deals, setDeals] = useState<any[]>([]);
+    const [goals, setGoals] = useState<any[]>([]);
+
+    const [companySearch, setCompanySearch] = useState('');
+    const [contactSearch, setContactSearch] = useState('');
+    const [dealSearch, setDealSearch] = useState('');
+    const [goalSearch, setGoalSearch] = useState('');
+    const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
+
+    const [saving, setSaving] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+
+    const drawerRef = useRef<HTMLDivElement>(null);
+
+    // Initial data
+    useEffect(() => {
+        if (open && task) {
+            if (task._id && !task.title && !task.dueDate) {
+                getOpsTask(task._id).then(fullTask => {
+                    setFormData({
+                        title: fullTask.title || '',
+                        type: fullTask.type || 'follow_up',
+                        priority: fullTask.priority || 'medium',
+                        status: fullTask.status || 'pending',
+                        dueDate: fullTask.dueDate ? formatToUTCDateTimeInput(fullTask.dueDate) : '',
+                        durationMinutes: (fullTask as any).durationMinutes || 30,
+                        company: fullTask.company,
+                        contact: fullTask.contact,
+                        deal: fullTask.deal,
+                        assignedTo: (fullTask as any).assignedTo,
+                    });
+                    setCompanySearch(fullTask.company?.name || '');
+                    setContactSearch(fullTask.contact?.fullName || '');
+                    setDealSearch(fullTask.deal?.title || '');
+                    setGoalSearch((fullTask as any).goal?.title || '');
+                }).catch(err => {
+                    console.error("Failed to fetch task details", err);
+                });
+            } else {
+                let defaultDueDate = '';
+                if (initialDate && (initialDate.getHours() !== 0 || initialDate.getMinutes() !== 0)) {
+                    defaultDueDate = formatToUTCDateTimeInput(initialDate);
+                } else {
+                    defaultDueDate = getDefaultTaskDueDate(initialDate);
+                }
+
+                setFormData({
+                    title: task.title || '',
+                    type: task.type || 'follow_up',
+                    priority: task.priority || 'high',
+                    status: task.status || 'pending',
+                    dueDate: task.dueDate ? formatToUTCDateTimeInput(task.dueDate) : defaultDueDate,
+                    durationMinutes: (task as any).durationMinutes || 30,
+                    company: task.company,
+                    contact: task.contact,
+                    deal: task.deal,
+                    assignedTo: (task as any).assignedTo || ((user?._id || (user as any)?.id) as any),
+                });
+                setCompanySearch(task.company?.name || '');
+                setContactSearch(task.contact?.fullName || '');
+                setDealSearch(task.deal?.title || '');
+                setGoalSearch((task as any).goal?.title || '');
+            }
+        } else if (open && !task) {
+            let defaultDueDate = '';
+            if (initialDate && (initialDate.getHours() !== 0 || initialDate.getMinutes() !== 0)) {
+                defaultDueDate = formatToUTCDateTimeInput(initialDate);
+            } else {
+                defaultDueDate = getDefaultTaskDueDate(initialDate);
+            }
+
+            setFormData({
+                title: '',
+                type: 'follow_up',
+                priority: 'high',
+                status: 'pending',
+                dueDate: defaultDueDate,
+                durationMinutes: 30,
+                company: undefined,
+                contact: undefined,
+                deal: undefined,
+                assignedTo: (user?._id || (user as any)?.id) as any,
+            });
+            setCompanySearch('');
+            setContactSearch('');
+            setDealSearch('');
+            setGoalSearch('');
+        }
+        setShowDeleteConfirm(false);
+        setIsDirty(false);
+    }, [open, task, user?._id, (user as any)?.id]);
+
+    // Autocomplete Companies — uses ops companies (only companies with ops deals)
+    useEffect(() => {
+        if (!open) return;
+        if (formData.company && formData.company.name === companySearch) return;
+        const fetchComps = async () => {
+            try {
+                const res = await getOpsCompanies();
+                const filtered = companySearch
+                    ? res.filter((c: any) => c.name.toLowerCase().includes(companySearch.toLowerCase()))
+                    : res;
+                setCompanies(filtered.slice(0, 10));
+            } catch { /* ignore */ }
+        };
+        const timeoutId = setTimeout(fetchComps, 300);
+        return () => clearTimeout(timeoutId);
+    }, [companySearch, open, formData.company]);
+
+    // Autocomplete Contacts — uses ops contacts
+    useEffect(() => {
+        if (!open) return;
+        if (formData.contact && formData.contact.fullName === contactSearch) return;
+        const fetchConts = async () => {
+            try {
+                const res = await getOpsContacts();
+                let filtered = res;
+                if (formData.company?._id) {
+                    filtered = filtered.filter((c: any) =>
+                        c.company?._id === formData.company?._id ||
+                        c.companies?.some((comp: any) => comp._id === formData.company?._id)
+                    );
+                }
+                if (contactSearch) {
+                    filtered = filtered.filter((c: any) => c.fullName.toLowerCase().includes(contactSearch.toLowerCase()));
+                }
+                setContacts(filtered.slice(0, 10));
+            } catch { /* ignore */ }
+        };
+        const timeoutId = setTimeout(fetchConts, 300);
+        return () => clearTimeout(timeoutId);
+    }, [contactSearch, open, formData.contact, formData.company]);
+
+    // Autocomplete Deals — uses ops deals
+    useEffect(() => {
+        if (!open) return;
+        if (formData.deal && formData.deal.title === dealSearch) return;
+        const fetchDeals = async () => {
+            try {
+                const res = await getOpsDeals();
+                const filtered = dealSearch
+                    ? res.filter((d: any) => d.title.toLowerCase().includes(dealSearch.toLowerCase()))
+                    : res.slice(0, 10);
+                setDeals(filtered);
+            } catch { /* ignore */ }
+        };
+        const timeoutId = setTimeout(fetchDeals, 300);
+        return () => clearTimeout(timeoutId);
+    }, [dealSearch, open, formData.deal]);
+
+    // Autocomplete Goals
+    useEffect(() => {
+        if (!open) return;
+        const fetchGoals = async () => {
+            try {
+                const res = await getOpsGoals();
+                const allGoals = res.goals || [];
+                const filtered = goalSearch
+                    ? allGoals.filter((g: any) => g.title.toLowerCase().includes(goalSearch.toLowerCase()))
+                    : allGoals;
+                setGoals(filtered.slice(0, 10));
+            } catch { /* ignore */ }
+        };
+        const timeoutId = setTimeout(fetchGoals, 300);
+        return () => clearTimeout(timeoutId);
+    }, [goalSearch, open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleAttemptClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [open, isDirty]);
+
+    const handleAttemptClose = () => {
+        if (isDirty) {
+            setShowUnsavedConfirm(true);
+        } else {
+            onClose();
+        }
+    };
+
+    // Load team users
+    useEffect(() => {
+        if (!open) return;
+        getTeamUsers().then(setTeamUsers).catch(console.error);
+    }, [open]);
+
+    const handleDeleteTask = async () => {
+        if (!task?._id) return;
+        try {
+            await deleteOpsTask(task._id);
+            onSaved();
+            onClose();
+        } catch (error) {
+            console.error('Error al eliminar tarea:', error);
+        }
+    };
+
+    const handleBackdropClick = (e: React.MouseEvent) => {
+        if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+            handleAttemptClose();
+        }
+    };
+
+    const handleSelectCompany = async (comp: any) => {
+        setFormData(prev => ({ ...prev, company: { _id: comp._id, name: comp.name } as any }));
+        setCompanySearch(comp.name);
+    };
+
+    const handleSelectContact = async (cont: any) => {
+        setFormData(prev => ({ ...prev, contact: { _id: cont._id, fullName: cont.fullName } as any }));
+        setContactSearch(cont.fullName);
+
+        if (!formData.company && cont.company) {
+            setFormData(prev => ({ ...prev, company: cont.company as any }));
+            setCompanySearch(cont.company.name || '');
+        }
+    };
+
+    const handleSelectDeal = async (deal: any) => {
+        setFormData(prev => ({ ...prev, deal: { _id: deal._id, title: deal.title } as any }));
+        setDealSearch(deal.title);
+
+        if (!formData.company && deal.company) {
+            setFormData(prev => ({ ...prev, company: deal.company as any }));
+            setCompanySearch(deal.company.name || '');
+        }
+    };
+
+    const handleSelectGoal = (goal: any) => {
+        setFormData(prev => ({ ...prev, goal: { _id: goal._id, title: goal.title } as any }));
+        setGoalSearch(goal.title);
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            const assignedToRaw = (formData as any).assignedTo;
+            const assignedToId = assignedToRaw
+                ? (typeof assignedToRaw === 'string' ? assignedToRaw : assignedToRaw._id || null)
+                : null;
+
+            const payload: Record<string, any> = {
+                title: formData.title,
+                type: formData.type,
+                priority: formData.priority,
+                status: formData.status,
+                company: formData.company?._id || null,
+                contact: formData.contact?._id || null,
+                deal: formData.deal?._id || null,
+                goal: (formData as any).goal?._id || null,
+                assignedTo: assignedToId,
+            };
+
+            if (formData.dueDate) {
+                const dtLocal = formData.dueDate as string;
+                payload.dueDate = `${dtLocal}:00.000Z`;
+            }
+
+            payload.durationMinutes = (formData as any).durationMinutes || 30;
+
+            if (task?._id) {
+                if (formData.status === 'completed' && task.status !== 'completed') {
+                    await completeOpsTask(task._id);
+                    const { status, ...otherFields } = payload;
+                    await updateOpsTask(task._id, otherFields);
+                    const fullTask = await getOpsTask(task._id);
+                    onSaved();
+                    onClose();
+                    if (onTaskCompleted) onTaskCompleted(fullTask);
+                    return;
+                } else {
+                    await updateOpsTask(task._id, payload);
+                }
+            } else {
+                await createOpsTask(payload);
+            }
+            onSaved();
+            onClose();
+        } catch (error: any) {
+            console.error('Error saving task:', error?.response?.data || error?.message || error);
+            alert(`Error al guardar la tarea: ${error?.response?.data?.error || error?.message || 'Error desconocido'}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!open) return null;
+
+    return (
+        <div
+            onClick={handleBackdropClick}
+            className="fixed inset-0 z-[100] flex justify-end"
+            style={{
+                background: 'rgba(15, 23, 42, 0.4)',
+                backdropFilter: 'blur(8px)',
+                animation: 'fadeIn 0.3s ease-out',
+            }}
+        >
+            <div
+                ref={drawerRef}
+                className="h-full overflow-y-auto w-[460px] max-w-[100vw] bg-white/90 backdrop-blur-2xl border-l border-white/60 flex flex-col shadow-[-20px_0_40px_rgba(30,27,75,0.1)] relative"
+                style={{
+                    animation: 'slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+            >
+                <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-sky-500/50 via-blue-500/50 to-transparent" />
+
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-slate-200/50 bg-white/50 backdrop-blur-md sticky top-0 z-20">
+                    <div>
+                        <h2 className="text-[20px] font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-sm">
+                                <Flag size={16} className="text-white" />
+                            </div>
+                            {task ? 'Editar Tarea' : 'Nueva Tarea'}
+                        </h2>
+                        <p className="text-[13px] font-medium text-slate-500 mt-1 ml-10">
+                            {task ? 'Modifica los datos de la tarea.' : 'Programa una nueva tarea.'}
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleAttemptClose}
+                        className="w-8 h-8 rounded-[10px] flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700 bg-white border border-slate-200 shadow-sm"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                {/* Form */}
+                <form id="ops-task-form" onSubmit={handleSubmit} onChange={() => setIsDirty(true)} className="p-6 flex-1 flex flex-col gap-6">
+
+                    <div className="space-y-2">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                            Título de la Tarea *
+                        </label>
+                        <input
+                            required
+                            type="text"
+                            value={formData.title}
+                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            placeholder="Ej. Llamar para seguimiento"
+                            className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-300 transition-all text-[14px] font-medium text-slate-700 placeholder:text-slate-400 shadow-inner"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-5">
+                        <div className="space-y-2">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                <Tag size={14} className="text-slate-500" />
+                                Tipo
+                            </label>
+                            <select
+                                value={formData.type}
+                                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
+                            >
+                                <option value="call">📞 Llamada</option>
+                                <option value="whatsapp">💬 WhatsApp</option>
+                                <option value="email">✉️ Email</option>
+                                <option value="linkedin_message">🔗 LinkedIn</option>
+                                <option value="meeting">🤝 Reunión</option>
+                                <option value="follow_up">🔄 Seguimiento</option>
+                                <option value="proposal">📋 Propuesta</option>
+                                <option value="research">🔍 Investigación</option>
+                                <option value="other">📌 Otro</option>
+                            </select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                <Flag size={14} className={formData.priority === 'urgent' ? 'text-red-500' : 'text-slate-500'} />
+                                Prioridad
+                            </label>
+                            <select
+                                value={formData.priority}
+                                onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
+                            >
+                                <option value="low">Baja</option>
+                                <option value="medium">Media</option>
+                                <option value="high">Alta</option>
+                                <option value="urgent">Urgente</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Status Selector — only show when editing */}
+                    {task && task._id && (
+                        <div className="space-y-2">
+                            <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                <Clock size={14} className="text-sky-500" />
+                                Estado
+                            </label>
+                            <select
+                                value={formData.status}
+                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                className={`w-full px-4 py-3 bg-white/60 backdrop-blur-sm border rounded-[14px] focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-300 transition-all text-[14px] font-bold shadow-inner appearance-none cursor-pointer ${formData.status === 'pending' ? 'border-slate-300 text-slate-700' :
+                                    formData.status === 'in_progress' ? 'border-blue-300 text-blue-700 bg-blue-50/50' :
+                                        formData.status === 'completed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50/50' :
+                                            'border-red-300 text-red-700 bg-red-50/50'
+                                    }`}
+                            >
+                                <option value="pending">Pendiente</option>
+                                <option value="in_progress">En Progreso</option>
+                                <option value="completed">Completada</option>
+                                <option value="cancelled">Cancelada</option>
+                            </select>
+                        </div>
+                    )}
+
+                    <div className="space-y-2">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                            <Clock size={14} className="text-blue-500" />
+                            Fecha y Hora de Vencimiento
+                        </label>
+                        <div className="relative w-full">
+                            <input
+                                type="datetime-local"
+                                value={formData.dueDate}
+                                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner custom-date-input"
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 bg-white/80 pl-2">
+                                <Clock size={16} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Duration Selector */}
+                    <div className="space-y-2">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                            <Timer size={14} className="text-orange-500" />
+                            Duración
+                        </label>
+                        <div className="flex gap-2 flex-wrap">
+                            {[5, 15, 30, 60].map((mins) => (
+                                <button
+                                    key={mins}
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, durationMinutes: mins } as any)}
+                                    className={`px-3 py-2 rounded-xl text-[13px] font-semibold border transition-all ${(formData as any).durationMinutes === mins
+                                        ? 'bg-sky-100 border-sky-300 text-sky-700 ring-2 ring-sky-200'
+                                        : 'bg-white/60 border-slate-200 text-slate-600 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    {mins < 60 ? `${mins} min` : `${mins / 60}h`}
+                                </button>
+                            ))}
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="480"
+                                    placeholder="Otro"
+                                    value={![5, 15, 30, 60].includes((formData as any).durationMinutes) ? (formData as any).durationMinutes : ''}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        if (val > 0) setFormData({ ...formData, durationMinutes: val } as any);
+                                    }}
+                                    className={`w-[80px] px-3 py-2 rounded-xl text-[13px] font-semibold border transition-all text-center ${![5, 15, 30, 60].includes((formData as any).durationMinutes)
+                                        ? 'bg-sky-100 border-sky-300 text-sky-700 ring-2 ring-sky-200'
+                                        : 'bg-white/60 border-slate-200 text-slate-500 hover:bg-slate-50'
+                                        }`}
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">min</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Company Autocomplete */}
+                    <div className="pt-6 border-t border-slate-200/50">
+                        <AutocompleteInput
+                            label="Empresa"
+                            icon={<Building2 size={14} className="text-indigo-500" />}
+                            placeholder="Asociar a empresa..."
+                            value={companySearch}
+                            onChangeSearch={(val) => {
+                                setCompanySearch(val);
+                                setFormData(prev => ({ ...prev, company: undefined }));
+                            }}
+                            options={companies.map(c => ({ _id: c._id, title: c.name, data: c }))}
+                            onSelect={(opt) => handleSelectCompany(opt.data)}
+                            colorTheme="indigo"
+                        />
+                    </div>
+
+                    {/* Contact Autocomplete */}
+                    <AutocompleteInput
+                        label="Contacto"
+                        icon={<User size={14} className="text-emerald-500" />}
+                        placeholder="Asociar a contacto..."
+                        value={contactSearch}
+                        onChangeSearch={(val) => {
+                            setContactSearch(val);
+                            setFormData(prev => ({ ...prev, contact: undefined }));
+                        }}
+                        options={contacts.map(c => ({ _id: c._id, title: c.fullName, data: c }))}
+                        onSelect={(opt) => handleSelectContact(opt.data)}
+                        colorTheme="emerald"
+                    />
+
+                    {/* Deal Autocomplete */}
+                    <AutocompleteInput
+                        label="Deal (Operación)"
+                        icon={<Briefcase size={14} className="text-amber-500" />}
+                        placeholder="Asociar a un Deal..."
+                        value={dealSearch}
+                        onChangeSearch={(val) => {
+                            setDealSearch(val);
+                            setFormData(prev => ({ ...prev, deal: undefined }));
+                        }}
+                        options={deals.map(d => ({
+                            _id: d._id,
+                            title: d.title,
+                            subtitle: d.value != null ? `$${d.value} ` : undefined,
+                            data: d
+                        }))}
+                        onSelect={(opt) => handleSelectDeal(opt.data)}
+                        colorTheme="amber"
+                    />
+
+                    {/* Goal Autocomplete */}
+                    <AutocompleteInput
+                        label="Meta (Objetivo)"
+                        icon={<Target size={14} className="text-fuchsia-500" />}
+                        placeholder="Asociar a una meta..."
+                        value={goalSearch}
+                        onChangeSearch={(val) => {
+                            setGoalSearch(val);
+                            setFormData(prev => ({ ...prev, goal: undefined } as any));
+                        }}
+                        options={goals.map(g => ({
+                            _id: g._id,
+                            title: g.title,
+                            subtitle: g.category,
+                            data: g
+                        }))}
+                        onSelect={(opt) => handleSelectGoal(opt.data)}
+                        colorTheme="fuchsia"
+                    />
+
+                    {/* Client Info Summary */}
+                    {(formData.contact?.phone || formData.contact?.email || (formData.company as any)?.localesCount > 0) && (
+                        <div className="bg-gradient-to-br from-slate-50 to-sky-50/30 rounded-[16px] border border-slate-200/60 p-4 space-y-2.5">
+                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Datos del Cliente</h4>
+                            {formData.contact?.phone && (
+                                <a
+                                    href={`tel:${formData.contact.phone}`}
+                                    className="flex items-center gap-2.5 text-[13px] font-semibold text-slate-700 hover:text-emerald-600 transition-colors group/phone"
+                                >
+                                    <div className="w-7 h-7 rounded-[8px] bg-emerald-50 border border-emerald-100 flex items-center justify-center group-hover/phone:bg-emerald-100 transition-colors">
+                                        <Phone size={13} className="text-emerald-500" />
+                                    </div>
+                                    {formData.contact.phone}
+                                </a>
+                            )}
+                            {formData.contact?.email && (
+                                <a
+                                    href={`mailto:${formData.contact.email}`}
+                                    className="flex items-center gap-2.5 text-[13px] font-semibold text-slate-700 hover:text-blue-600 transition-colors group/email"
+                                >
+                                    <div className="w-7 h-7 rounded-[8px] bg-blue-50 border border-blue-100 flex items-center justify-center group-hover/email:bg-blue-100 transition-colors">
+                                        <Mail size={13} className="text-blue-500" />
+                                    </div>
+                                    {formData.contact.email}
+                                </a>
+                            )}
+                            {(formData.company as any)?.localesCount > 0 && (
+                                <div className="flex items-center gap-2.5 text-[13px] font-semibold text-slate-700">
+                                    <div className="w-7 h-7 rounded-[8px] bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                                        <MapPin size={13} className="text-indigo-500" />
+                                    </div>
+                                    {(formData.company as any).localesCount} {(formData.company as any).localesCount === 1 ? 'local' : 'locales'}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Responsable Selector */}
+                    <div className="space-y-2 pt-6 border-t border-slate-200/50">
+                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                            <User size={14} className="text-fuchsia-500" />
+                            Responsable
+                        </label>
+                        <div className="relative w-full">
+                            <select
+                                value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
+                                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
+                                className="w-full pl-12 pr-10 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
+                            >
+                                <option value="">Sin asignar</option>
+                                {teamUsers.map(u => (
+                                    <option key={u._id} value={u._id}>{u.name || u.email}</option>
+                                ))}
+                            </select>
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                <OwnerAvatar
+                                    name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}
+                                    profilePhotoUrl={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.profilePhotoUrl}
+                                    size="sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-auto pt-4 border-t border-slate-200/50 flex gap-3 bg-white/50 backdrop-blur-md sticky bottom-0 -mx-6 px-6 pb-4">
+                        {task && task._id && (
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="px-3 py-2 bg-white border border-red-100 text-red-500 rounded-[10px] hover:bg-red-50 hover:border-red-200 transition-all shadow-sm"
+                                title="Eliminar Tarea"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleAttemptClose}
+                            className="flex-1 px-4 py-2 bg-white border border-slate-200/80 text-slate-600 rounded-[10px] text-[13px] font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={saving || !formData.title}
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-sky-600 to-blue-600 text-white rounded-[10px] text-[13px] font-bold hover:shadow-[0_8px_24px_rgba(14,165,233,0.4)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(14,165,233,0.3)]"
+                        >
+                            {saving ? 'Guardando...' : <><Save size={16} /> Guardar Tarea</>}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-slate-100" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 bg-red-50 text-red-500 rounded-[16px] flex items-center justify-center mb-5 border border-red-100 shadow-inner">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Eliminar Tarea?</h3>
+                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                            Estás a punto de eliminar la tarea <strong>{task?.title}</strong>. Esta acción no se puede deshacer.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors text-[14px]"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDeleteTask}
+                                className="flex-1 py-3 px-4 bg-red-500 text-white font-bold rounded-[14px] hover:bg-red-600 transition-colors shadow-sm shadow-red-500/30 text-[14px]"
+                            >
+                                Sí, eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showUnsavedConfirm && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                    <div className="bg-white rounded-[24px] p-6 max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-slate-100" onClick={e => e.stopPropagation()}>
+                        <div className="w-14 h-14 bg-amber-50 text-amber-500 rounded-[16px] flex items-center justify-center mb-5 border border-amber-100 shadow-inner">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Salir sin guardar?</h3>
+                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                            Tenés cambios sin guardar. ¿Querés guardarlos antes de salir?
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => { setShowUnsavedConfirm(false); setIsDirty(false); onClose(); }}
+                                className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors shadow-sm text-[14px]"
+                            >
+                                No, salir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowUnsavedConfirm(false);
+                                    const form = document.getElementById('ops-task-form') as HTMLFormElement;
+                                    if (form) form.requestSubmit();
+                                }}
+                                className="flex-1 py-3 px-4 bg-gradient-to-r from-sky-600 to-blue-600 text-white font-bold rounded-[14px] hover:shadow-md transition-all shadow-sm text-[14px]"
+                            >
+                                Sí, guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+                @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+                .custom-date-input::-webkit-calendar-picker-indicator {
+                    background: transparent;
+                    bottom: 0;
+                    color: transparent;
+                    cursor: pointer;
+                    height: auto;
+                    left: 0;
+                    position: absolute;
+                    right: 0;
+                    top: 0;
+                    width: auto;
+                }
+            `}</style>
+        </div>
+    );
+}

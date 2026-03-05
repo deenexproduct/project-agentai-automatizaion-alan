@@ -1,18 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTasks, completeTask, updateTask, getTask, TaskData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { getOpsTasks, completeOpsTask, updateOpsTask, getOpsTask } from '../../services/ops.service';
+import { TaskData, TeamUser, getTeamUsers } from '../../services/crm.service';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { CheckCircle2, Circle, Clock, Building2, Users, Briefcase, Calendar as CalendarIcon, CalendarDays, Search, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical, Phone } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, Building2, Users, Calendar as CalendarIcon, CalendarDays, Plus, AlertCircle, LayoutList, LayoutGrid, GripVertical, Phone } from 'lucide-react';
 import { formatToArgentineDateTime, isTodayInArgentina, isOverdueExact } from '../../utils/date';
-import TaskFormDrawer from './TaskFormDrawer';
-import PremiumHeader from './PremiumHeader';
-import FollowUpTaskModal from './FollowUpTaskModal';
+import OpsTaskFormDrawer from './OpsTaskFormDrawer';
+import OpsFollowUpTaskModal from './OpsFollowUpTaskModal';
 import OwnerAvatar from '../common/OwnerAvatar';
 
-export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, platform?: 'comercial' | 'operaciones' }) {
-    const isOps = platform === 'operaciones';
-    const basePath = isOps ? '/ops/tasks' : '/linkedin/tasks';
+export default function OpsTaskList({ urlTaskId }: { urlTaskId?: string }) {
     const [tasks, setTasks] = useState<TaskData[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -46,14 +43,14 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
             }
             if (assignedToFilter) params.assignedTo = assignedToFilter;
 
-            const res = isOps ? await getOpsTasks(params) : await getTasks(params);
+            const res = await getOpsTasks(params);
             let filteredTasks = res.tasks;
 
             if (viewMode === 'date' && filter === 'today') {
-                filteredTasks = filteredTasks.filter(t => t.dueDate && isTodayInArgentina(t.dueDate));
+                filteredTasks = filteredTasks.filter((t: TaskData) => t.dueDate && isTodayInArgentina(t.dueDate));
             }
             if (search) {
-                filteredTasks = filteredTasks.filter(t => t.title.toLowerCase().includes(search.toLowerCase()));
+                filteredTasks = filteredTasks.filter((t: TaskData) => t.title.toLowerCase().includes(search.toLowerCase()));
             }
 
             setTasks(filteredTasks);
@@ -69,7 +66,6 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
         return () => clearTimeout(timeout);
     }, [search, filter, viewMode, assignedToFilter]);
 
-    // Load team users for filter
     useEffect(() => {
         getTeamUsers().then(setTeamUsers).catch(console.error);
     }, []);
@@ -85,52 +81,49 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
 
         const newStatus = destination.droppableId as TaskData['status'];
 
-        // Optimistic update
         setTasks(prev => prev.map(t => t._id === draggableId ? { ...t, status: newStatus } : t));
 
         try {
             if (newStatus === 'completed' && task.status !== 'completed') {
-                isOps ? await completeOpsTask(draggableId) : await completeTask(draggableId);
+                await completeOpsTask(draggableId);
                 try {
-                    const fullTask = isOps ? await getOpsTask(draggableId) : await getTask(draggableId);
+                    const fullTask = await getOpsTask(draggableId);
                     setFollowUpTask(fullTask);
                 } catch {
                     setFollowUpTask(task);
                 }
             } else {
-                isOps ? await updateOpsTask(draggableId, { status: newStatus }) : await updateTask(draggableId, { status: newStatus });
+                await updateOpsTask(draggableId, { status: newStatus });
             }
-            // Reload to stay in sync with backend
             loadData();
         } catch (error) {
             console.error("Failed to move task", error);
-            loadData(); // revert
+            loadData();
         }
     };
 
     const handleEdit = (task: TaskData, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        navigate(`${basePath}/${task._id}`);
+        navigate(`/ops/tasks/${task._id}`);
     };
 
     const handleAdd = () => {
         setEditingTask(null);
         setIsDrawerOpen(true);
-        if (urlTaskId) navigate(basePath);
+        if (urlTaskId) navigate('/ops/tasks');
     };
 
     const handleComplete = async (id: string, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         try {
-            // Find the task before removing it from the list
             const taskToComplete = tasks.find(t => t._id === id);
             setTasks(prev => prev.filter(t => t._id !== id));
-            await (isOps ? completeOpsTask(id) : completeTask(id));
+            await completeOpsTask(id);
             if (taskToComplete) {
                 try {
-                    const fullTask = isOps ? await getOpsTask(id) : await getTask(id);
+                    const fullTask = await getOpsTask(id);
                     setFollowUpTask(fullTask);
                 } catch {
                     setFollowUpTask(taskToComplete);
@@ -182,10 +175,9 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
             <div
                 key={task._id}
                 onClick={(e) => handleEdit(task, e)}
-                className={`group bg-white rounded-[16px] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(139,92,246,0.08)] transition-all duration-300 flex items-start gap-3.5 cursor-pointer relative overflow-hidden border ${isCompleted ? 'border-slate-200/60 opacity-60 hover:opacity-100' : isOverdue ? 'border-red-100 hover:border-red-300' : 'border-slate-200/60 hover:border-violet-300'} w-full`}
+                className={`group bg-white rounded-[16px] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(14,165,233,0.08)] transition-all duration-300 flex items-start gap-3.5 cursor-pointer relative overflow-hidden border ${isCompleted ? 'border-slate-200/60 opacity-60 hover:opacity-100' : isOverdue ? 'border-red-100 hover:border-red-300' : 'border-slate-200/60 hover:border-sky-300'} w-full`}
             >
-                {/* Subtle left indicator line */}
-                <div className={`absolute top-0 left-0 bottom-0 w-1 transition-colors duration-300 ${isOverdue ? 'bg-red-400' : isCompleted ? 'bg-emerald-400' : 'bg-transparent group-hover:bg-violet-400'}`} />
+                <div className={`absolute top-0 left-0 bottom-0 w-1 transition-colors duration-300 ${isOverdue ? 'bg-red-400' : isCompleted ? 'bg-emerald-400' : 'bg-transparent group-hover:bg-sky-400'}`} />
 
                 <button
                     onClick={(e) => handleComplete(task._id, e)}
@@ -205,7 +197,7 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
 
                 <div className="flex-1 min-w-0 flex flex-col">
                     <div className="flex items-start justify-between gap-2 mb-1.5 pr-5">
-                        <h3 className={`font-semibold text-[15px] leading-snug transition-colors line-clamp-2 ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-violet-700'}`}>
+                        <h3 className={`font-semibold text-[15px] leading-snug transition-colors line-clamp-2 ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-800 group-hover:text-sky-700'}`}>
                             {task.title}
                         </h3>
                     </div>
@@ -272,20 +264,33 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
         <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
             {/* Atmospheric Background */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[32px] -z-10">
-                <div className="absolute top-0 -right-20 w-[600px] h-[600px] bg-violet-400/20 rounded-full blur-3xl opacity-50 animate-[pulse_10s_ease-in-out_infinite]" />
-                <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-fuchsia-400/20 rounded-full blur-3xl opacity-40 animate-[pulse_12s_ease-in-out_infinite_reverse]" />
+                <div className="absolute top-0 -right-20 w-[600px] h-[600px] bg-sky-400/20 rounded-full blur-3xl opacity-50 animate-[pulse_10s_ease-in-out_infinite]" />
+                <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-400/20 rounded-full blur-3xl opacity-40 animate-[pulse_12s_ease-in-out_infinite_reverse]" />
             </div>
 
-            {/* Premium Header Reutilizable */}
+            {/* Header */}
             <div className="shrink-0 z-10 bg-white/40 backdrop-blur-2xl rounded-[24px] overflow-hidden mb-4 border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
-                <PremiumHeader
-                    search={search}
-                    onSearchChange={setSearch}
-                    searchPlaceholder="Buscar tarea por título, empresa..."
-                    onAdd={handleAdd}
-                    addLabel="Nueva Tarea"
-                    containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
-                >
+                <div className="flex items-center gap-3 px-5 py-2.5 flex-wrap">
+                    {/* Search */}
+                    <div className="relative flex-1 min-w-[200px]">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Buscar tarea por título, empresa..."
+                            className="w-full pl-4 pr-4 py-2 bg-white/60 backdrop-blur-sm border border-slate-200/60 rounded-[12px] text-[13px] font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300/50 focus:border-sky-300 transition-all"
+                        />
+                    </div>
+
+                    {/* Add Button */}
+                    <button
+                        onClick={handleAdd}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-sky-600 to-blue-600 text-white rounded-[10px] text-[12px] font-bold shadow-[0_4px_12px_rgba(14,165,233,0.3)] hover:shadow-[0_6px_20px_rgba(14,165,233,0.4)] hover:-translate-y-0.5 transition-all"
+                    >
+                        <Plus size={14} />
+                        Nueva Tarea
+                    </button>
+
                     {/* Responsable Filter */}
                     <div className="relative flex items-center">
                         <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
@@ -299,7 +304,7 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
                             value={assignedToFilter}
                             onChange={(e) => setAssignedToFilter(e.target.value)}
                             className={`pl-9 pr-3 py-1.5 rounded-[10px] text-[12px] font-bold border transition-all duration-300 appearance-none cursor-pointer bg-white/60 backdrop-blur-sm shadow-inner ${assignedToFilter
-                                ? 'border-violet-200 text-violet-700 bg-violet-50/50 ring-2 ring-violet-100'
+                                ? 'border-sky-200 text-sky-700 bg-sky-50/50 ring-2 ring-sky-100'
                                 : 'border-slate-200/60 text-slate-500 hover:border-slate-300'
                                 }`}
                             title="Filtrar por responsable"
@@ -314,7 +319,7 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
                     <div className="flex bg-white/50 backdrop-blur-sm p-1 rounded-[12px] border border-white/60 shadow-inner">
                         <button
                             onClick={() => setViewMode('date')}
-                            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'date' ? 'bg-white shadow-sm text-violet-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
+                            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'date' ? 'bg-white shadow-sm text-sky-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
                             title="Vista por Fecha"
                         >
                             <CalendarDays size={14} />
@@ -322,22 +327,22 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
                         </button>
                         <button
                             onClick={() => setViewMode('kanban')}
-                            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'kanban' ? 'bg-white shadow-sm text-violet-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
+                            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-[8px] text-[12px] font-bold transition-all duration-300 ${viewMode === 'kanban' ? 'bg-white shadow-sm text-sky-600 border border-slate-100' : 'text-slate-500 hover:text-slate-700 hover:bg-white/40 border border-transparent'}`}
                             title="Vista Kanban"
                         >
                             <LayoutGrid size={14} />
                             <span className="hidden md:inline">Kanban</span>
                         </button>
                     </div>
-                </PremiumHeader>
+                </div>
             </div>
 
             {/* Task Board / List Area */}
             {loading ? (
                 <div className="flex-1 flex items-center justify-center bg-white/30 backdrop-blur-xl rounded-[32px] border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
                     <div className="relative">
-                        <div className="absolute inset-0 bg-violet-500/20 rounded-full blur-xl animate-pulse" />
-                        <div className="animate-spin w-10 h-10 border-4 border-violet-200 border-t-violet-600 rounded-full relative z-10" />
+                        <div className="absolute inset-0 bg-sky-500/20 rounded-full blur-xl animate-pulse" />
+                        <div className="animate-spin w-10 h-10 border-4 border-sky-200 border-t-sky-600 rounded-full relative z-10" />
                     </div>
                 </div>
             ) : tasks.length === 0 && !search ? (
@@ -346,8 +351,8 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
                         <CheckCircle2 size={40} className="text-emerald-500" />
                     </div>
                     <h3 className="text-[20px] font-black text-slate-700">¡Todo al día!</h3>
-                    <p className="text-[15px] font-medium text-slate-500 mt-2">No tienes tareas pendientes generadas.</p>
-                    <button onClick={handleAdd} className="mt-6 text-violet-600 font-bold hover:text-violet-700 hover:underline">Crear primera tarea</button>
+                    <p className="text-[15px] font-medium text-slate-500 mt-2">No tienes tareas pendientes de operaciones.</p>
+                    <button onClick={handleAdd} className="mt-6 text-sky-600 font-bold hover:text-sky-700 hover:underline">Crear primera tarea</button>
                 </div>
             ) : (
                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6">
@@ -408,7 +413,7 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
                                         <div
                                             ref={provided.innerRef}
                                             {...provided.droppableProps}
-                                            className={`flex flex-col gap-4 bg-slate-50/50 p-4 rounded-3xl min-h-[500px] border transition-colors ${snapshot.isDraggingOver ? 'border-violet-300 bg-violet-50/30' : 'border-transparent'}`}
+                                            className={`flex flex-col gap-4 bg-slate-50/50 p-4 rounded-3xl min-h-[500px] border transition-colors ${snapshot.isDraggingOver ? 'border-sky-300 bg-sky-50/30' : 'border-transparent'}`}
                                         >
                                             <h3 className="flex items-center gap-2 font-black text-[16px] text-slate-800 bg-white/40 backdrop-blur-md px-4 py-3 rounded-[16px] border border-white/60 shadow-sm border-t-2 border-t-slate-400">
                                                 <Circle size={18} className="text-slate-400" />
@@ -515,22 +520,22 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
             <style>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.2); border-radius: 10px; }
-                .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.4); }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(14, 165, 233, 0.2); border-radius: 10px; }
+                .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(14, 165, 233, 0.4); }
             `}</style>
 
-            <TaskFormDrawer
+            <OpsTaskFormDrawer
                 open={isDrawerOpen}
                 task={editingTask}
                 onClose={() => {
                     setIsDrawerOpen(false);
-                    if (urlTaskId) navigate(basePath);
+                    if (urlTaskId) navigate('/ops/tasks');
                 }}
                 onSaved={loadData}
                 onTaskCompleted={(completedTask) => setFollowUpTask(completedTask)}
             />
 
-            <FollowUpTaskModal
+            <OpsFollowUpTaskModal
                 open={!!followUpTask}
                 completedTask={followUpTask!}
                 onClose={() => setFollowUpTask(null)}

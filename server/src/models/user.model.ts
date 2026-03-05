@@ -5,6 +5,7 @@ export interface IUser extends Document {
     name?: string;
     profilePhotoUrl?: string;
     role: 'admin' | 'user';
+    platforms: ('comercial' | 'operaciones')[];
     invitedBy?: mongoose.Types.ObjectId;
     otpCode?: string;
     otpExpiresAt?: Date;
@@ -31,6 +32,11 @@ const UserSchema = new Schema<IUser>({
         type: String,
         enum: ['admin', 'user'],
         default: 'user',
+    },
+    platforms: {
+        type: [String],
+        enum: ['comercial', 'operaciones'],
+        default: ['comercial'],
     },
     invitedBy: {
         type: Schema.Types.ObjectId,
