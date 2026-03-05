@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Save, Clock, Building2, User, Briefcase, Tag, Flag, AlertTriangle, Trash2, Timer, Phone, Mail, MapPin } from 'lucide-react';
 import { TaskData, createTask, updateTask, deleteTask, getTask, getContacts, getCompanies, getDealsPipeline, getCompany, ContactData, CompanyData, DealData, getTeamUsers, TeamUser, completeTask } from '../../services/crm.service';
 import { formatToUTCDateTimeInput, getDefaultTaskDueDate } from '../../utils/date';
+import SearchableSelect from '../common/SearchableSelect';
 import AutocompleteInput from '../common/AutocompleteInput';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
@@ -403,21 +404,22 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                                 <Tag size={14} className="text-slate-500" />
                                 Tipo
                             </label>
-                            <select
-                                value={formData.type}
-                                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
-                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
-                            >
-                                <option value="call">📞 Llamada</option>
-                                <option value="whatsapp">💬 WhatsApp</option>
-                                <option value="email">✉️ Email</option>
-                                <option value="linkedin_message">🔗 LinkedIn</option>
-                                <option value="meeting">🤝 Reunión</option>
-                                <option value="follow_up">🔄 Seguimiento</option>
-                                <option value="proposal">📋 Propuesta</option>
-                                <option value="research">🔍 Investigación</option>
-                                <option value="other">📌 Otro</option>
-                            </select>
+                            <SearchableSelect
+                                value={formData.type || ''}
+                                onChange={(val) => setFormData({ ...formData, type: val as any })}
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                options={[
+                                    { value: "call", label: "📞 Llamada" },
+                                    { value: "whatsapp", label: "💬 WhatsApp" },
+                                    { value: "email", label: "✉️ Email" },
+                                    { value: "linkedin_message", label: "🔗 LinkedIn" },
+                                    { value: "meeting", label: "🤝 Reunión" },
+                                    { value: "follow_up", label: "🔄 Seguimiento" },
+                                    { value: "proposal", label: "📋 Propuesta" },
+                                    { value: "research", label: "🔍 Investigación" },
+                                    { value: "other", label: "📌 Otro" }
+                                ]}
+                            />
                         </div>
 
                         <div className="space-y-2">
@@ -425,16 +427,17 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                                 <Flag size={14} className={formData.priority === 'urgent' ? 'text-red-500' : 'text-slate-500'} />
                                 Prioridad
                             </label>
-                            <select
-                                value={formData.priority}
-                                onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
-                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
-                            >
-                                <option value="low">Baja</option>
-                                <option value="medium">Media</option>
-                                <option value="high">Alta</option>
-                                <option value="urgent">Urgente</option>
-                            </select>
+                            <SearchableSelect
+                                value={formData.priority || ''}
+                                onChange={(val) => setFormData({ ...formData, priority: val as any })}
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                options={[
+                                    { value: "low", label: "Baja" },
+                                    { value: "medium", label: "Media" },
+                                    { value: "high", label: "Alta" },
+                                    { value: "urgent", label: "Urgente" }
+                                ]}
+                            />
                         </div>
                     </div>
 
@@ -445,20 +448,21 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                                 <Clock size={14} className="text-violet-500" />
                                 Estado
                             </label>
-                            <select
-                                value={formData.status}
-                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                                className={`w-full px-4 py-3 bg-white/60 backdrop-blur-sm border rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold shadow-inner appearance-none cursor-pointer ${formData.status === 'pending' ? 'border-slate-300 text-slate-700' :
+                            <SearchableSelect
+                                value={formData.status || ''}
+                                onChange={(val) => setFormData({ ...formData, status: val as any })}
+                                className={`w-full px-4 py-3 bg-white/60 backdrop-blur-sm border rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold shadow-inner cursor-pointer text-left flex items-center justify-between ${formData.status === 'pending' ? 'border-slate-300 text-slate-700' :
                                     formData.status === 'in_progress' ? 'border-blue-300 text-blue-700 bg-blue-50/50' :
                                         formData.status === 'completed' ? 'border-emerald-300 text-emerald-700 bg-emerald-50/50' :
                                             'border-red-300 text-red-700 bg-red-50/50'
                                     }`}
-                            >
-                                <option value="pending">Pendiente</option>
-                                <option value="in_progress">En Progreso</option>
-                                <option value="completed">Completada</option>
-                                <option value="cancelled">Cancelada</option>
-                            </select>
+                                options={[
+                                    { value: "pending", label: "Pendiente" },
+                                    { value: "in_progress", label: "En Progreso" },
+                                    { value: "completed", label: "Completada" },
+                                    { value: "cancelled", label: "Cancelada" }
+                                ]}
+                            />
                         </div>
                     )}
 
@@ -617,16 +621,16 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
                             Responsable
                         </label>
                         <div className="relative w-full">
-                            <select
+                            <SearchableSelect
                                 value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
-                                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
-                                className="w-full pl-12 pr-10 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
-                            >
-                                <option value="">Sin asignar</option>
-                                {teamUsers.map(u => (
-                                    <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                                ))}
-                            </select>
+                                onChange={(val) => setFormData({ ...formData, assignedTo: val as any })}
+                                placeholder="Sin asignar"
+                                className="w-full pl-12 pr-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                options={[
+                                    { value: "", label: "Sin asignar" },
+                                    ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                                ]}
+                            />
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
                                 <OwnerAvatar
                                     name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}

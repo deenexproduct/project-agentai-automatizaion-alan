@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Building2, MapPin, Globe, Users, DollarSign, Calendar, Upload, Loader2, Phone, Mail, FileText, CheckCircle2, ChevronRight, Hash, Building, Briefcase, ChevronDown, User, Network, MessageSquare, Linkedin, Trash2, ShieldCheck, Swords, Search, AlignLeft, AlertTriangle, GitBranch, Clock, ImagePlus, TrendingUp, History, Camera, CheckSquare, Save, Monitor } from 'lucide-react';
 import { CompanyData, createCompany, updateCompany, deleteCompany, getSystemConfig, getPartners, getCompetitors, getPosSystems, SystemConfig, PartnerData, CompetitorData, PosSystemData, addCompanyCategory, getContacts, ContactData, extractLogo, getCompany, DealData, PipelineStage, getPipelineConfig, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { useAuth } from '../../contexts/AuthContext';
+import SearchableSelect from '../common/SearchableSelect';
 import OwnerAvatar from '../common/OwnerAvatar';
 import CountrySelect from '../common/CountrySelect';
 import CategorySelect from '../common/CategorySelect';
@@ -631,16 +632,16 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                     Responsable
                                 </label>
                                 <div className="relative w-full">
-                                    <select
+                                    <SearchableSelect
                                         value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
-                                        onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
-                                        className="w-full pl-12 pr-10 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
-                                    >
-                                        <option value="">Sin asignar</option>
-                                        {teamUsers.map(u => (
-                                            <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                                        ))}
-                                    </select>
+                                        onChange={(val) => setFormData({ ...formData, assignedTo: val as any })}
+                                        placeholder="Sin asignar"
+                                        className="w-full pl-12 pr-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                        options={[
+                                            { value: "", label: "Sin asignar" },
+                                            ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                                        ]}
+                                    />
                                     <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
                                         <OwnerAvatar
                                             name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}
@@ -750,16 +751,16 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
                                     <Briefcase size={14} className="text-fuchsia-500" />
                                     Partner (Origen)
                                 </label>
-                                <select
+                                <SearchableSelect
                                     value={(formData.partner as any)?._id || formData.partner || ''}
-                                    onChange={(e) => setFormData({ ...formData, partner: e.target.value as any })}
-                                    className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
-                                >
-                                    <option value="">Ninguno (Venta directa)</option>
-                                    {partners.map(p => (
-                                        <option key={p._id} value={p._id}>{p.name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => setFormData({ ...formData, partner: val as any })}
+                                    placeholder="Ninguno (Venta directa)"
+                                    className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                    options={[
+                                        { value: "", label: "Ninguno (Venta directa)" },
+                                        ...partners.map(p => ({ value: p._id, label: p.name }))
+                                    ]}
+                                />
                             </div>
 
                             <div className="space-y-2 mt-2 pt-6 border-t border-slate-200/50">

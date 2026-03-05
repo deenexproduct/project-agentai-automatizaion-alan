@@ -40,8 +40,8 @@ RUN npm install --legacy-peer-deps
 COPY tsconfig.json ./
 COPY src/ ./src/
 
-# Build TypeScript
-RUN npx tsc
+# Build TypeScript using SWC instead of tsc
+RUN npm run build
 
 # Remove devDependencies to slim the image
 RUN npm prune --omit=dev
