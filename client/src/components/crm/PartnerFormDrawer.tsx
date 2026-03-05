@@ -3,6 +3,7 @@ import { X, Save, User, Mail, Phone, Percent, FileText, Handshake, AlertTriangle
 import { PartnerData, createPartner, updatePartner, getTeamUsers, TeamUser } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
+import SearchableSelect from '../common/SearchableSelect';
 interface Props {
     partner?: PartnerData | null;
     open: boolean;
@@ -217,16 +218,16 @@ export default function PartnerFormDrawer({ partner, open, onClose, onSaved }: P
                                 Responsable
                             </label>
                             <div className="relative w-full">
-                                <select
+                                <SearchableSelect
                                     value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
-                                    onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
-                                    className="w-full pl-12 pr-10 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
-                                >
-                                    <option value="">Sin asignar</option>
-                                    {teamUsers.map(u => (
-                                        <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => setFormData({ ...formData, assignedTo: val as any })}
+                                    options={[
+                                        { value: '', label: 'Sin asignar' },
+                                        ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                                    ]}
+                                    placeholder="Sin asignar"
+                                    className="w-full pl-12 pr-3 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700"
+                                />
                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
                                     <OwnerAvatar
                                         name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}

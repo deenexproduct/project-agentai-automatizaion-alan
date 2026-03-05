@@ -7,6 +7,7 @@ import ContactFormDrawer from './ContactFormDrawer';
 import ContactActivityDrawer from './ContactActivityDrawer';
 import OwnerAvatar from '../common/OwnerAvatar';
 import PremiumHeader from './PremiumHeader';
+import SearchableSelect from '../common/SearchableSelect';
 
 export default function ContactList({ onSelectContact, urlContactId, platform }: { onSelectContact?: (id: string) => void, urlContactId?: string, platform?: 'comercial' | 'operaciones' }) {
     const isOps = platform === 'operaciones';
@@ -173,57 +174,65 @@ export default function ContactList({ onSelectContact, urlContactId, platform }:
                         <div className="flex bg-white/50 backdrop-blur-md rounded-[10px] p-1 shadow-sm border border-slate-200/60 divide-x divide-slate-200">
                             <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Responsable:</span>
-                                <select
+                                <SearchableSelect
                                     value={assignedToFilter}
-                                    onChange={(e) => setAssignedToFilter(e.target.value)}
-                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer"
-                                >
-                                    <option value="">Todos</option>
-                                    {teamUsers.map(user => (
-                                        <option key={user._id} value={user._id}>{user.name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val: string) => setAssignedToFilter(val)}
+                                    options={[
+                                        { value: '', label: 'Todos' },
+                                        ...teamUsers.map(user => ({ value: user._id, label: user.name || user.email }))
+                                    ]}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer flex items-center justify-between gap-1 w-full"
+                                    containerClassName="min-w-[100px]"
+                                    placeholder="Todos"
+                                />
                             </div>
                             <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Rol:</span>
-                                <select
+                                <SearchableSelect
                                     value={roleFilter}
-                                    onChange={(e) => setRoleFilter(e.target.value)}
-                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer"
-                                >
-                                    <option value="">Todos</option>
-                                    <option value="decision_maker">Decisor</option>
-                                    <option value="influencer">Influenciador</option>
-                                    <option value="evaluator">Evaluador</option>
-                                    <option value="user">Usuario</option>
-                                </select>
+                                    onChange={(val: string) => setRoleFilter(val)}
+                                    options={[
+                                        { value: '', label: 'Todos' },
+                                        { value: 'decision_maker', label: 'Decisor' },
+                                        { value: 'influencer', label: 'Influenciador' },
+                                        { value: 'evaluator', label: 'Evaluador' },
+                                        { value: 'user', label: 'Usuario' }
+                                    ]}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer flex items-center justify-between gap-1 w-full"
+                                    containerClassName="min-w-[100px]"
+                                    placeholder="Todos"
+                                />
                             </div>
                             <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Empresa:</span>
-                                <select
+                                <SearchableSelect
                                     value={companyFilter}
-                                    onChange={(e) => setCompanyFilter(e.target.value)}
-                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 w-32 focus:outline-none cursor-pointer"
-                                >
-                                    <option value="">Todas</option>
-                                    {uniqueCompanies.map(name => (
-                                        <option key={name} value={name}>{name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val: string) => setCompanyFilter(val)}
+                                    options={[
+                                        { value: '', label: 'Todas' },
+                                        ...uniqueCompanies.map(name => ({ value: name, label: name }))
+                                    ]}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer flex items-center justify-between gap-1 w-full"
+                                    containerClassName="w-32"
+                                    placeholder="Todas"
+                                />
                             </div>
                             <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Locales:</span>
-                                <select
+                                <SearchableSelect
                                     value={localesFilter}
-                                    onChange={(e) => setLocalesFilter(e.target.value)}
-                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 w-32 focus:outline-none cursor-pointer"
-                                >
-                                    <option value="">Todos</option>
-                                    <option value="0-10">0 a 10</option>
-                                    <option value="11-50">11 a 50</option>
-                                    <option value="51-100">51 a 100</option>
-                                    <option value="100+">Más de 100</option>
-                                </select>
+                                    onChange={(val: string) => setLocalesFilter(val)}
+                                    options={[
+                                        { value: '', label: 'Todos' },
+                                        { value: '0-10', label: '0 a 10' },
+                                        { value: '11-50', label: '11 a 50' },
+                                        { value: '51-100', label: '51 a 100' },
+                                        { value: '100+', label: 'Más de 100' }
+                                    ]}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer flex items-center justify-between gap-1 w-full"
+                                    containerClassName="w-32"
+                                    placeholder="Todos"
+                                />
                             </div>
                         </div>
                         {(roleFilter || companyFilter || assignedToFilter || localesFilter) && (

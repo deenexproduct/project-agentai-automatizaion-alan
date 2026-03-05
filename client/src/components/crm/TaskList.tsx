@@ -9,6 +9,7 @@ import TaskFormDrawer from './TaskFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import FollowUpTaskModal from './FollowUpTaskModal';
 import OwnerAvatar from '../common/OwnerAvatar';
+import SearchableSelect from '../common/SearchableSelect';
 
 export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, platform?: 'comercial' | 'operaciones' }) {
     const isOps = platform === 'operaciones';
@@ -47,13 +48,13 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
             if (assignedToFilter) params.assignedTo = assignedToFilter;
 
             const res = isOps ? await getOpsTasks(params) : await getTasks(params);
-            let filteredTasks = res.tasks;
+            let filteredTasks: TaskData[] = res.tasks;
 
             if (viewMode === 'date' && filter === 'today') {
-                filteredTasks = filteredTasks.filter(t => t.dueDate && isTodayInArgentina(t.dueDate));
+                filteredTasks = filteredTasks.filter((t: TaskData) => t.dueDate && isTodayInArgentina(t.dueDate));
             }
             if (search) {
-                filteredTasks = filteredTasks.filter(t => t.title.toLowerCase().includes(search.toLowerCase()));
+                filteredTasks = filteredTasks.filter((t: TaskData) => t.title.toLowerCase().includes(search.toLowerCase()));
             }
 
             setTasks(filteredTasks);
@@ -295,20 +296,20 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
                                 size="xs"
                             />
                         </div>
-                        <select
+                        <SearchableSelect
                             value={assignedToFilter}
-                            onChange={(e) => setAssignedToFilter(e.target.value)}
-                            className={`pl-9 pr-3 py-1.5 rounded-[10px] text-[12px] font-bold border transition-all duration-300 appearance-none cursor-pointer bg-white/60 backdrop-blur-sm shadow-inner ${assignedToFilter
+                            onChange={(val: string) => setAssignedToFilter(val)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                            ]}
+                            containerClassName="min-w-[120px]"
+                            className={`pl-9 pr-3 py-1.5 rounded-[10px] text-[12px] font-bold border transition-all duration-300 cursor-pointer bg-white/60 backdrop-blur-sm shadow-inner flex flex-row items-center justify-between gap-2 w-full ${assignedToFilter
                                 ? 'border-violet-200 text-violet-700 bg-violet-50/50 ring-2 ring-violet-100'
                                 : 'border-slate-200/60 text-slate-500 hover:border-slate-300'
                                 }`}
-                            title="Filtrar por responsable"
-                        >
-                            <option value="">Todos</option>
-                            {teamUsers.map(u => (
-                                <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                            ))}
-                        </select>
+                            placeholder="Todos"
+                        />
                     </div>
 
                     <div className="flex bg-white/50 backdrop-blur-sm p-1 rounded-[12px] border border-white/60 shadow-inner">

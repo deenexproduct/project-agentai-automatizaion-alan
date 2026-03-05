@@ -37,7 +37,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --legacy-peer-deps
 
 # Copy source code
-COPY tsconfig.json ./
+COPY tsconfig.json .swcrc ./
 COPY src/ ./src/
 
 # Build TypeScript using SWC instead of tsc

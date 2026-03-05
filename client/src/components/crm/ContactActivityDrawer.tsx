@@ -24,6 +24,7 @@ import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
 import TaskFormDrawer from './TaskFormDrawer';
 import { getDefaultTaskDueDate } from '../../utils/date';
+import SearchableSelect from '../common/SearchableSelect';
 
 // ── Activity Type Config ─────────────────────────────────────────
 
@@ -844,18 +845,20 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                         </div>
                                         <div className="space-y-1.5">
                                             <label className="text-[12px] font-bold text-slate-700 uppercase tracking-wide">Canal de Origen</label>
-                                            <select
+                                            <SearchableSelect
                                                 value={formData.channel || 'linkedin'}
-                                                onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
-                                                className="w-full px-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[13px] font-medium text-slate-700 appearance-none cursor-pointer"
-                                            >
-                                                <option value="linkedin">LinkedIn</option>
-                                                <option value="whatsapp">WhatsApp</option>
-                                                <option value="email">Email</option>
-                                                <option value="phone">Teléfono</option>
-                                                <option value="partners">Partners</option>
-                                                <option value="other">Otro</option>
-                                            </select>
+                                                onChange={(val) => setFormData({ ...formData, channel: val })}
+                                                options={[
+                                                    { value: 'linkedin', label: 'LinkedIn' },
+                                                    { value: 'whatsapp', label: 'WhatsApp' },
+                                                    { value: 'email', label: 'Email' },
+                                                    { value: 'phone', label: 'Teléfono' },
+                                                    { value: 'partners', label: 'Partners' },
+                                                    { value: 'other', label: 'Otro' }
+                                                ]}
+                                                placeholder="Seleccionar..."
+                                                className="w-full px-3 py-2 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[13px] font-medium text-slate-700"
+                                            />
                                         </div>
                                     </div>
 
@@ -865,16 +868,16 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                             <label className="text-[12px] font-bold text-emerald-800 flex items-center gap-1.5 uppercase tracking-wide">
                                                 <Building2 size={13} /> Seleccionar Partner
                                             </label>
-                                            <select
+                                            <SearchableSelect
                                                 value={(formData.partner as any)?._id || formData.partner || ''}
-                                                onChange={(e) => setFormData({ ...formData, partner: e.target.value as any })}
-                                                className="w-full px-3 py-2.5 bg-white/60 border border-emerald-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-emerald-500/10 text-[13px] font-medium text-slate-700 appearance-none cursor-pointer"
-                                            >
-                                                <option value="">Seleccione...</option>
-                                                {partners.map(p => (
-                                                    <option key={p._id} value={p._id}>{p.name}</option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setFormData({ ...formData, partner: val as any })}
+                                                options={[
+                                                    { value: '', label: 'Seleccione...' },
+                                                    ...partners.map(p => ({ value: p._id, label: p.name }))
+                                                ]}
+                                                placeholder="Seleccione..."
+                                                className="w-full px-3 py-2 bg-white/60 border border-emerald-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-emerald-500/10 text-[13px] font-medium text-slate-700"
+                                            />
                                         </div>
                                     )}
 
@@ -884,16 +887,16 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                             <User size={13} className="text-fuchsia-500" /> Responsable
                                         </label>
                                         <div className="relative">
-                                            <select
+                                            <SearchableSelect
                                                 value={(formData.assignedTo as any)?._id || formData.assignedTo || ''}
-                                                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
-                                                className="w-full pl-10 pr-3 py-2.5 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[13px] font-medium text-slate-700 appearance-none cursor-pointer"
-                                            >
-                                                <option value="">Sin asignar</option>
-                                                {teamUsers.map(u => (
-                                                    <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setFormData({ ...formData, assignedTo: val as any })}
+                                                options={[
+                                                    { value: '', label: 'Sin asignar' },
+                                                    ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                                                ]}
+                                                placeholder="Sin asignar"
+                                                className="w-full pl-10 pr-3 py-2 bg-white/60 border border-slate-200 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[13px] font-medium text-slate-700"
+                                            />
                                             {/* Avatar preview inline */}
                                             <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
                                                 <OwnerAvatar
@@ -1278,16 +1281,16 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                             <div>
                                                 <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mb-1.5">Responsable</p>
                                                 <div className="relative w-full">
-                                                    <select
+                                                    <SearchableSelect
                                                         value={taskAssignedTo}
-                                                        onChange={e => setTaskAssignedTo(e.target.value)}
-                                                        className="w-full pl-10 pr-3 py-2 rounded-xl border border-amber-200 bg-white text-[13px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all shadow-sm appearance-none cursor-pointer"
-                                                    >
-                                                        <option value="">Sin asignar</option>
-                                                        {teamUsers.map(u => (
-                                                            <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                                                        ))}
-                                                    </select>
+                                                        onChange={(val) => setTaskAssignedTo(val)}
+                                                        options={[
+                                                            { value: '', label: 'Sin asignar' },
+                                                            ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                                                        ]}
+                                                        placeholder="Sin asignar"
+                                                        className="w-full pl-10 pr-3 py-1.5 rounded-xl border border-amber-200 bg-white text-[13px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 transition-all shadow-sm"
+                                                    />
                                                     <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
                                                         <OwnerAvatar
                                                             name={teamUsers.find(u => u._id === taskAssignedTo)?.name || ''}

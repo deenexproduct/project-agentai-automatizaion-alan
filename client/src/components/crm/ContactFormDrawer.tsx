@@ -6,6 +6,7 @@ import AutocompleteInput from '../common/AutocompleteInput';
 import CreatableAutocompleteInput from '../common/CreatableAutocompleteInput';
 import CountrySelect from '../common/CountrySelect';
 import PositionSelect from '../common/PositionSelect';
+import SearchableSelect from '../common/SearchableSelect';
 
 interface Props {
     contact?: ContactData | null;
@@ -574,18 +575,19 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                             <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
                                 Canal de Origen
                             </label>
-                            <select
-                                value={formData.channel}
-                                onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
-                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
-                            >
-                                <option value="linkedin">LinkedIn</option>
-                                <option value="whatsapp">WhatsApp</option>
-                                <option value="email">Email</option>
-                                <option value="phone">Teléfono</option>
-                                <option value="partners">Partners</option>
-                                <option value="other">Otro</option>
-                            </select>
+                            <SearchableSelect
+                                value={formData.channel || ''}
+                                onChange={(val) => setFormData({ ...formData, channel: val })}
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                options={[
+                                    { value: "linkedin", label: "LinkedIn" },
+                                    { value: "whatsapp", label: "WhatsApp" },
+                                    { value: "email", label: "Email" },
+                                    { value: "phone", label: "Teléfono" },
+                                    { value: "partners", label: "Partners" },
+                                    { value: "other", label: "Otro" }
+                                ]}
+                            />
                         </div>
                     </div>
 
@@ -595,16 +597,16 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
                                 <Building2 size={14} />
                                 Seleccionar Partner
                             </label>
-                            <select
+                            <SearchableSelect
                                 value={(formData.partner as any)?._id || formData.partner || ''}
-                                onChange={(e) => setFormData({ ...formData, partner: e.target.value as any })}
-                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-emerald-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner appearance-none cursor-pointer"
-                            >
-                                <option value="">Seleccione un Partner...</option>
-                                {partners.map(p => (
-                                    <option key={p._id} value={p._id}>{p.name}</option>
-                                ))}
-                            </select>
+                                onChange={(val) => setFormData({ ...formData, partner: val as any })}
+                                placeholder="Seleccione un Partner..."
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-emerald-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                options={[
+                                    { value: "", label: "Seleccione un Partner..." },
+                                    ...partners.map(p => ({ value: p._id, label: p.name }))
+                                ]}
+                            />
                         </div>
                     )}
 

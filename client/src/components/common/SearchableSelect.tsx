@@ -12,6 +12,7 @@ interface SearchableSelectProps {
     onChange: (value: string) => void;
     placeholder?: string;
     className?: string; // For overriding the trigger button styles
+    containerClassName?: string; // For overriding the wrapper div styles
     disabled?: boolean;
 }
 
@@ -21,6 +22,7 @@ export default function SearchableSelect({
     onChange,
     placeholder = 'Seleccionar...',
     className = '',
+    containerClassName = '',
     disabled = false
 }: SearchableSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
@@ -56,7 +58,7 @@ export default function SearchableSelect({
     };
 
     return (
-        <div className="relative w-full" ref={wrapperRef}>
+        <div className={containerClassName || "relative w-full"} ref={wrapperRef}>
             <button
                 type="button"
                 onClick={() => !disabled && setIsOpen(!isOpen)}
@@ -93,8 +95,8 @@ export default function SearchableSelect({
                                     type="button"
                                     onClick={() => handleSelectOption(opt.value)}
                                     className={`w-full text-left px-4 py-2.5 text-[13px] rounded-[10px] transition-colors ${value === opt.value
-                                            ? 'bg-violet-50 text-violet-700 font-bold'
-                                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                                        ? 'bg-violet-50 text-violet-700 font-bold'
+                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium'
                                         }`}
                                 >
                                     {opt.label}

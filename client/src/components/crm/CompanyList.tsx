@@ -6,6 +6,7 @@ import { Search, MapPin, Globe, Users, Briefcase, Plus, Filter } from 'lucide-re
 import CompanyFormDrawer from './CompanyFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
+import SearchableSelect from '../common/SearchableSelect';
 
 export default function CompanyList({ onSelectCompany, urlCompanyId, platform }: { onSelectCompany?: (id: string) => void, urlCompanyId?: string, platform?: 'comercial' | 'operaciones' }) {
     const isOps = platform === 'operaciones';
@@ -129,30 +130,34 @@ export default function CompanyList({ onSelectCompany, urlCompanyId, platform }:
                         <div className="flex bg-white/50 backdrop-blur-md rounded-[10px] p-1 shadow-sm border border-slate-200/60 divide-x divide-slate-200">
                             <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Responsable:</span>
-                                <select
+                                <SearchableSelect
                                     value={assignedToFilter}
-                                    onChange={(e) => setAssignedToFilter(e.target.value)}
-                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer"
-                                >
-                                    <option value="">Todos</option>
-                                    {teamUsers.map(user => (
-                                        <option key={user._id} value={user._id}>{user.name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val: string) => setAssignedToFilter(val)}
+                                    options={[
+                                        { value: '', label: 'Todos' },
+                                        ...teamUsers.map(user => ({ value: user._id, label: user.name || user.email }))
+                                    ]}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer flex items-center justify-between gap-1 w-full"
+                                    containerClassName="min-w-[100px]"
+                                    placeholder="Todos"
+                                />
                             </div>
                             <div className="flex items-center gap-2 px-3">
                                 <span className="text-[12px] font-bold text-slate-500 uppercase tracking-wider">Locales:</span>
-                                <select
+                                <SearchableSelect
                                     value={localesFilter}
-                                    onChange={(e) => setLocalesFilter(e.target.value)}
-                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 w-32 focus:outline-none cursor-pointer"
-                                >
-                                    <option value="">Todos</option>
-                                    <option value="0-10">0 a 10</option>
-                                    <option value="11-50">11 a 50</option>
-                                    <option value="51-100">51 a 100</option>
-                                    <option value="100+">Más de 100</option>
-                                </select>
+                                    onChange={(val: string) => setLocalesFilter(val)}
+                                    options={[
+                                        { value: '', label: 'Todos' },
+                                        { value: '0-10', label: '0 a 10' },
+                                        { value: '11-50', label: '11 a 50' },
+                                        { value: '51-100', label: '51 a 100' },
+                                        { value: '100+', label: 'Más de 100' }
+                                    ]}
+                                    className="text-[13px] font-medium text-slate-700 bg-transparent py-1.5 focus:outline-none cursor-pointer flex items-center justify-between gap-1 w-full"
+                                    containerClassName="w-32"
+                                    placeholder="Todos"
+                                />
                             </div>
                         </div>
                         {(assignedToFilter || localesFilter) && (

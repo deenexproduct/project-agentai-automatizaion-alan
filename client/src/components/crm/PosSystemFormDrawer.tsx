@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Save, Monitor, Globe, User, Hash, FileText, AlertTriangle, Camera, ImagePlus, Loader2, Trash2, Plus, TrendingUp, TrendingDown, Building2, ExternalLink, Calendar } from 'lucide-react';
 import { PosSystemData, createPosSystem, updatePosSystem, extractLogo, getPosSystemCompanies, CompanyData } from '../../services/crm.service';
 import MultiCountrySelect from '../common/MultiCountrySelect';
+import SearchableSelect from '../common/SearchableSelect';
 
 interface Props {
     posSystem?: PosSystemData | null;
@@ -478,15 +479,13 @@ export default function PosSystemFormDrawer({ posSystem, open, onClose, onSaved 
                                     <Monitor size={15} className="text-violet-500" />
                                     Nivel de Presencia
                                 </label>
-                                <select
+                                <SearchableSelect
                                     value={formData.strength || 'moderada'}
-                                    onChange={(e) => setFormData({ ...formData, strength: e.target.value as any })}
-                                    className="w-full px-4 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
-                                >
-                                    {STRENGTH_OPTIONS.map(opt => (
-                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val: string) => setFormData({ ...formData, strength: val as any })}
+                                    options={STRENGTH_OPTIONS.map(opt => ({ value: opt.value, label: opt.label }))}
+                                    placeholder="Seleccionar..."
+                                    className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700"
+                                />
                             </div>
                         </div>
 

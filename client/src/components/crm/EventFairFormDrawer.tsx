@@ -3,6 +3,7 @@ import { X, Save, Calendar, MapPin, Globe, FileText, DollarSign, Ticket, Users, 
 import { EventFairData, InvestmentItem, createEventFair, updateEventFair, getTeamUsers, TeamUser, ContactData, getContacts } from '../../services/crm.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
+import SearchableSelect from '../common/SearchableSelect';
 
 interface Props {
     event?: EventFairData | null;
@@ -320,11 +321,13 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                                 <Activity size={15} className="text-violet-500" />
                                 Estado
                             </label>
-                            <select value={formData.status}
-                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                                className="w-full px-4 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer">
-                                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
+                            <SearchableSelect
+                                value={formData.status || ''}
+                                onChange={(val) => setFormData({ ...formData, status: val as any })}
+                                options={STATUS_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                                placeholder="Seleccionar"
+                                className="w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700"
+                            />
                         </div>
                         <div className="space-y-2">
                             <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
@@ -332,11 +335,13 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                                 Entradas
                             </label>
                             <div className="flex gap-2">
-                                <select value={formData.ticketStatus}
-                                    onChange={(e) => setFormData({ ...formData, ticketStatus: e.target.value as any })}
-                                    className={`${formData.ticketStatus !== 'none' ? 'flex-1' : 'w-full'} px-4 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer`}>
-                                    {TICKET_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
+                                <SearchableSelect
+                                    value={formData.ticketStatus || ''}
+                                    onChange={(val) => setFormData({ ...formData, ticketStatus: val as any })}
+                                    options={TICKET_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                                    placeholder="Seleccionar"
+                                    className={`${formData.ticketStatus !== 'none' ? 'flex-1' : 'w-full'} px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700`}
+                                />
                                 {formData.ticketStatus !== 'none' && (
                                     <input type="number" min="0" value={formData.ticketCount || ''}
                                         onChange={(e) => setFormData({ ...formData, ticketCount: Number(e.target.value) || 0 })}
@@ -355,11 +360,13 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                                 Inversión
                             </label>
                             <div className="flex items-center gap-2">
-                                <select value={formData.currency}
-                                    onChange={(e) => { setFormData({ ...formData, currency: e.target.value }); setIsDirty(true); }}
-                                    className="px-3 py-1.5 bg-white/60 border border-slate-200 rounded-lg text-[12px] font-bold text-slate-600 appearance-none cursor-pointer">
-                                    {CURRENCY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                <SearchableSelect
+                                    value={formData.currency || ''}
+                                    onChange={(val) => { setFormData({ ...formData, currency: val as any }); setIsDirty(true); }}
+                                    options={CURRENCY_OPTIONS.map(c => ({ value: c, label: c }))}
+                                    placeholder="Moneda"
+                                    className="w-[100px] px-3 py-1.5 bg-white/60 border border-slate-200 rounded-lg text-[12px] font-bold text-slate-600"
+                                />
                                 <button type="button" onClick={addBreakdownItem}
                                     className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[12px] font-bold hover:bg-emerald-100 transition-colors border border-emerald-200/60">
                                     <Plus size={14} /> Detallar
@@ -528,13 +535,16 @@ export default function EventFairFormDrawer({ event, open, onClose, onSaved }: P
                             Responsable
                         </label>
                         <div className="relative w-full">
-                            <select
+                            <SearchableSelect
                                 value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
-                                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
-                                className="w-full pl-12 pr-10 py-3.5 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer">
-                                <option value="">Sin asignar</option>
-                                {teamUsers.map(u => <option key={u._id} value={u._id}>{u.name || u.email}</option>)}
-                            </select>
+                                onChange={(val) => setFormData({ ...formData, assignedTo: val as any })}
+                                options={[
+                                    { value: '', label: 'Sin asignar' },
+                                    ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                                ]}
+                                placeholder="Sin asignar"
+                                className="w-full pl-12 pr-3 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700"
+                            />
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
                                 <OwnerAvatar
                                     name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}

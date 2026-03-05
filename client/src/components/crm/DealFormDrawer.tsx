@@ -4,6 +4,7 @@ import { DealData, getDeal, createDeal, updateDeal, getCompanies, getContacts, C
 import { formatToArgentineDateTime, formatToArgentineDate } from '../../utils/date';
 import OwnerAvatar from '../common/OwnerAvatar';
 import { useAuth } from '../../contexts/AuthContext';
+import SearchableSelect from '../common/SearchableSelect';
 import ContactFormDrawer from './ContactFormDrawer';
 import TaskFormDrawer from './TaskFormDrawer';
 import ActivityTimeline from './ActivityTimeline';
@@ -746,15 +747,12 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                             Etapa Pipeline
                                         </label>
                                         <div className="relative w-full">
-                                            <select
-                                                value={formData.status}
-                                                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                                className="w-full pl-4 pr-10 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
-                                            >
-                                                {stages.map(s => (
-                                                    <option key={s.key} value={s.key}>{s.label}</option>
-                                                ))}
-                                            </select>
+                                            <SearchableSelect
+                                                value={formData.status || ''}
+                                                onChange={(val) => setFormData({ ...formData, status: val })}
+                                                className="w-full pl-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                                options={stages.map(s => ({ value: s.key, label: s.label }))}
+                                            />
                                             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-violet-500">
                                                 <div className="w-2.5 h-2.5 rounded-full bg-violet-500"></div>
                                             </div>
@@ -769,16 +767,16 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                         Responsable
                                     </label>
                                     <div className="relative w-full">
-                                        <select
+                                        <SearchableSelect
                                             value={(formData as any).assignedTo?._id || (formData as any).assignedTo || ''}
-                                            onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value as any })}
-                                            className="w-full pl-12 pr-10 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner appearance-none cursor-pointer"
-                                        >
-                                            <option value="">Sin asignar</option>
-                                            {teamUsers.map(u => (
-                                                <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                                            ))}
-                                        </select>
+                                            onChange={(val) => setFormData({ ...formData, assignedTo: val as any })}
+                                            placeholder="Sin asignar"
+                                            className="w-full pl-12 pr-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-fuchsia-500/10 focus:border-fuchsia-300 transition-all text-[14px] font-bold text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between"
+                                            options={[
+                                                { value: "", label: "Sin asignar" },
+                                                ...teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))
+                                            ]}
+                                        />
                                         <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
                                             <OwnerAvatar
                                                 name={teamUsers.find(u => u._id === ((formData as any).assignedTo?._id || (formData as any).assignedTo))?.name || ''}
