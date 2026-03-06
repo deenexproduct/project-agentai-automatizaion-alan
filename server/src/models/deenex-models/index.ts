@@ -85,8 +85,8 @@ export function getDeenexClienteModel() {
 // ══════════════════════════════════════════════════════════════
 const orderSchema = new Schema({
     idOrder: Number,
-    idCliente: { type: Schema.Types.ObjectId, ref: 'DeenexCliente' },
-    idLocal: { type: Schema.Types.ObjectId, ref: 'DeenexLocal' },
+    idCliente: Schema.Types.Mixed,  // stored as string in pagos collection
+    idLocal: Schema.Types.Mixed,     // stored as string in pagos collection
     type: String,
     orderStatus: String,
     estadoDeOrden: String,

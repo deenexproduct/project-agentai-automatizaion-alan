@@ -30,11 +30,23 @@ function requireDeenexDB(req: Request, res: Response, next: Function) {
 
 router.use(authMiddleware, requireDeenexDB);
 
+import mongoose from 'mongoose';
+
 // ── Helper: build date/brand/local filters ───────────────────
 function buildFilters(query: any) {
     const filters: any = {};
-    if (query.brandId) filters.idMarca = query.brandId;
-    if (query.localId) filters.idLocal = query.localId;
+    if (query.brandId && mongoose.Types.ObjectId.isValid(query.brandId)) {
+        filters.idMarca = new mongoose.Types.ObjectId(query.brandId);
+    } else if (query.brandId) {
+        filters.idMarca = query.brandId;
+    }
+
+    if (query.localId && mongoose.Types.ObjectId.isValid(query.localId)) {
+        filters.idLocal = new mongoose.Types.ObjectId(query.localId);
+    } else if (query.localId) {
+        filters.idLocal = query.localId;
+    }
+
     if (query.dateFrom || query.dateTo) {
         filters.createdAt = {};
         if (query.dateFrom) filters.createdAt.$gte = new Date(query.dateFrom);
@@ -123,8 +135,6 @@ router.get('/overview', async (req: Request, res: Response) => {
             ? Math.round((registeredUsers / totalUsers) * 1000) / 10
             : 0;
 
-        console.log('[DEENEX-DEBUG] registeredUsers:', registeredUsers, 'guestUsers:', guestUsers, 'totalUsers:', totalUsers, 'tasaDeRegistro:', tasaDeRegistro);
-
         return res.json({
             localesActivosConVentas: localesConVentas,
             totalPedidos: totalOrders,
@@ -173,16 +183,27 @@ router.get('/brands', async (req: Request, res: Response) => {
 router.get('/clients/stats', async (req: Request, res: Response) => {
     try {
         const Cliente = getDeenexClienteModel();
+        const Order = getDeenexOrderModel();
         const filters: any = {};
-        if (req.query.brandId) filters.idMarca = req.query.brandId;
+        const orderFilters: any = {};
+        if (req.query.brandId) {
+            const brandId = req.query.brandId as string;
+            if (mongoose.Types.ObjectId.isValid(brandId)) {
+                filters.idMarca = new mongoose.Types.ObjectId(brandId);
+                orderFilters.idMarca = new mongoose.Types.ObjectId(brandId);
+            } else {
+                filters.idMarca = brandId;
+                orderFilters.idMarca = brandId;
+            }
+        }
 
         const [
             total,
             registrationMethods,
             genderDist,
-            purchaseBehavior,
             healthAnalysis,
-            clvData,
+            // CLV + purchase behavior computed from pagos collection
+            orderBehavior,
         ] = await Promise.all([
             Cliente.countDocuments(filters),
 
@@ -199,21 +220,7 @@ router.get('/clients/stats', async (req: Request, res: Response) => {
                 { $group: { _id: '$sexo', count: { $sum: 1 } } },
             ]),
 
-            // Purchase behavior
-            Cliente.aggregate([
-                { $match: { ...filters, totalCompras: { $gt: 0 } } },
-                {
-                    $group: {
-                        _id: null,
-                        totalBuyers: { $sum: 1 },
-                        avgPurchases: { $avg: '$totalCompras' },
-                        avgSpent: { $avg: '$totalDineroGastado' },
-                        totalSpent: { $sum: '$totalDineroGastado' },
-                    },
-                },
-            ]),
-
-            // Health analysis (active / at risk / dormant)
+            // Health analysis (active / at risk / dormant) based on order dates
             (async () => {
                 const now = new Date();
                 const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -227,38 +234,60 @@ router.get('/clients/stats', async (req: Request, res: Response) => {
                 return { active, atRisk, dormant };
             })(),
 
-            // CLV data
-            Cliente.aggregate([
-                { $match: { ...filters, totalDineroGastado: { $gt: 0 } } },
+            // CLV + purchase data computed from pagos (orders) collection
+            // because totalDineroGastado/totalCompras don't exist in usuariosregistrados
+            // NOTE: idCliente is stored as STRING in pagos, so we cast to string for grouping
+            Order.aggregate([
+                {
+                    $match: {
+                        ...orderFilters,
+                        idCliente: { $exists: true, $nin: [null, '', 0] }
+                    }
+                },
+                {
+                    $addFields: {
+                        _revenue: { $ifNull: ['$totalFacturado', { $ifNull: ['$total', 0] }] },
+                        _clientId: { $toString: '$idCliente' }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$_clientId',
+                        totalSpent: { $sum: '$_revenue' },
+                        orderCount: { $sum: 1 },
+                    },
+                },
                 {
                     $group: {
                         _id: null,
-                        avgCLV: { $avg: '$totalDineroGastado' },
-                        maxCLV: { $max: '$totalDineroGastado' },
-                        totalRevenue: { $sum: '$totalDineroGastado' },
+                        totalBuyers: { $sum: 1 },
+                        avgCLV: { $avg: '$totalSpent' },
+                        maxCLV: { $max: '$totalSpent' },
+                        totalRevenue: { $sum: '$totalSpent' },
+                        avgPurchases: { $avg: '$orderCount' },
+                        avgSpent: { $avg: '$totalSpent' },
                     },
                 },
             ]),
         ]);
 
-        const purchase = purchaseBehavior[0] || { totalBuyers: 0, avgPurchases: 0, avgSpent: 0, totalSpent: 0 };
-        const clv = clvData[0] || { avgCLV: 0, maxCLV: 0, totalRevenue: 0 };
+        const ob = orderBehavior[0] || { totalBuyers: 0, avgCLV: 0, maxCLV: 0, totalRevenue: 0, avgPurchases: 0, avgSpent: 0 };
 
         return res.json({
             total,
             registrationMethods: registrationMethods.map((r: any) => ({ method: r._id || 'desconocido', count: r.count })),
             genderDistribution: genderDist.map((g: any) => ({ gender: g._id || 'no_especificado', count: g.count })),
             purchaseBehavior: {
-                totalBuyers: purchase.totalBuyers,
-                avgPurchases: Math.round(purchase.avgPurchases * 10) / 10,
-                avgSpent: Math.round(purchase.avgSpent),
-                conversionRate: total > 0 ? Math.round((purchase.totalBuyers / total) * 1000) / 10 : 0,
+                totalBuyers: ob.totalBuyers,
+                avgPurchases: Math.round(ob.avgPurchases * 10) / 10,
+                avgSpent: Math.round(ob.avgSpent),
+                conversionRate: total > 0 ? Math.round((ob.totalBuyers / total) * 1000) / 10 : 0,
             },
             health: healthAnalysis,
             clv: {
-                average: Math.round(clv.avgCLV),
-                max: Math.round(clv.maxCLV),
-                totalRevenue: Math.round(clv.totalRevenue),
+                average: Math.round(ob.avgCLV),
+                max: Math.round(ob.maxCLV),
+                totalRevenue: Math.round(ob.totalRevenue),
             },
         });
     } catch (error: any) {
@@ -382,7 +411,10 @@ router.get('/points/stats', async (req: Request, res: Response) => {
     try {
         const Points = getDeenexPointsModel();
         const filters: any = {};
-        if (req.query.brandId) filters.idMarca = req.query.brandId;
+        if (req.query.brandId) {
+            const brandId = req.query.brandId as string;
+            filters.idMarca = mongoose.Types.ObjectId.isValid(brandId) ? new mongoose.Types.ObjectId(brandId) : brandId;
+        }
 
         const [byReason, statusDist] = await Promise.all([
             Points.aggregate([
@@ -438,7 +470,10 @@ router.get('/products/top', async (req: Request, res: Response) => {
     try {
         const Menu = getDeenexMenuModel();
         const filters: any = {};
-        if (req.query.brandId) filters.idMarca = req.query.brandId;
+        if (req.query.brandId) {
+            const brandId = req.query.brandId as string;
+            filters.idMarca = mongoose.Types.ObjectId.isValid(brandId) ? new mongoose.Types.ObjectId(brandId) : brandId;
+        }
 
         const [totalProducts, activeProducts, byCategory] = await Promise.all([
             Menu.countDocuments(filters),
@@ -483,7 +518,10 @@ router.get('/engagement/stats', async (req: Request, res: Response) => {
         const Campania = getDeenexCampaniaModel();
         const Coupon = getDeenexCouponModel();
         const filters: any = {};
-        if (req.query.brandId) filters.idMarca = req.query.brandId;
+        if (req.query.brandId) {
+            const brandId = req.query.brandId as string;
+            filters.idMarca = mongoose.Types.ObjectId.isValid(brandId) ? new mongoose.Types.ObjectId(brandId) : brandId;
+        }
 
         const [
             totalStories,
@@ -535,18 +573,25 @@ router.get('/locations/leaderboard', async (req: Request, res: Response) => {
         const Order = getDeenexOrderModel();
         const Points = getDeenexPointsModel();
         const filters: any = {};
-        if (req.query.brandId) filters.idMarca = req.query.brandId;
+        if (req.query.brandId) {
+            const brandId = req.query.brandId as string;
+            filters.idMarca = mongoose.Types.ObjectId.isValid(brandId) ? new mongoose.Types.ObjectId(brandId) : brandId;
+        }
 
         const locals = await Local.find(filters.idMarca ? { idMarca: filters.idMarca } : {})
             .select('nameLocal addressLocal statusLocal storeId idMarca')
             .lean();
 
         const orderFilters: any = {};
+        if (filters.idMarca) orderFilters.idMarca = filters.idMarca;
         if (req.query.dateFrom || req.query.dateTo) {
             orderFilters.createdAt = {};
             if (req.query.dateFrom) orderFilters.createdAt.$gte = new Date(req.query.dateFrom as string);
             if (req.query.dateTo) orderFilters.createdAt.$lte = new Date(req.query.dateTo as string);
         }
+
+        const pointsFilter: any = {};
+        if (filters.idMarca) pointsFilter.idMarca = filters.idMarca;
 
         const [ordersByLocal, pointsByLocal] = await Promise.all([
             Order.aggregate([
@@ -564,7 +609,7 @@ router.get('/locations/leaderboard', async (req: Request, res: Response) => {
                 },
             ]),
             Points.aggregate([
-                { $match: {} },
+                { $match: pointsFilter },
                 {
                     $group: {
                         _id: '$localId',

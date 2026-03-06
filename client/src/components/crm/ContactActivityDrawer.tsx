@@ -574,12 +574,21 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                 </div>
                             </div>
                         </div>
-                        <button
-                            onClick={onClose}
-                            className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-700 shadow-sm border border-slate-200/60 hover:rotate-90 hover:scale-105"
-                        >
-                            <X size={15} strokeWidth={2.5} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-white hover:bg-red-50 text-slate-400 hover:text-red-500 shadow-sm border border-slate-200/60 hover:border-red-200 hover:scale-105"
+                                title="Eliminar Contacto"
+                            >
+                                <Trash2 size={14} strokeWidth={2.5} />
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-700 shadow-sm border border-slate-200/60 hover:rotate-90 hover:scale-105"
+                            >
+                                <X size={15} strokeWidth={2.5} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Tabs */}
