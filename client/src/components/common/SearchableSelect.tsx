@@ -14,6 +14,7 @@ interface SearchableSelectProps {
     className?: string; // For overriding the trigger button styles
     containerClassName?: string; // For overriding the wrapper div styles
     disabled?: boolean;
+    style?: React.CSSProperties;
 }
 
 export default function SearchableSelect({
@@ -23,7 +24,8 @@ export default function SearchableSelect({
     placeholder = 'Seleccionar...',
     className = '',
     containerClassName = '',
-    disabled = false
+    disabled = false,
+    style = {}
 }: SearchableSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -47,9 +49,10 @@ export default function SearchableSelect({
 
     const selectedOption = options.find(opt => opt.value === value);
 
-    const defaultClass = "w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner cursor-pointer text-left flex items-center justify-between";
+    const defaultStyleClass = "w-full px-4 py-3 bg-white/60 backdrop-blur-sm border border-slate-200 rounded-[14px] focus:outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-300 transition-all text-[14px] font-medium text-slate-700 shadow-inner cursor-pointer";
+    const baseLayoutClass = "flex items-center justify-between text-left";
 
-    const finalClassName = className ? className : defaultClass;
+    const finalClassName = className ? `${className} ${baseLayoutClass}` : `${defaultStyleClass} ${baseLayoutClass}`;
 
     const handleSelectOption = (val: string) => {
         onChange(val);
@@ -58,7 +61,7 @@ export default function SearchableSelect({
     };
 
     return (
-        <div className={containerClassName || "relative w-full"} ref={wrapperRef}>
+        <div className={`relative ${containerClassName || "w-full"}`} ref={wrapperRef}>
             <button
                 type="button"
                 onClick={() => !disabled && setIsOpen(!isOpen)}

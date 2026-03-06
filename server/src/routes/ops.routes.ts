@@ -216,21 +216,25 @@ router.put('/deals/:dealId/status', async (req: Request, res: Response) => {
             return res.status(400).json({ error: `Estado "${opsStatus}" no es válido.` });
         }
 
-        const deal = await Deal.findOneAndUpdate(
-            { _id: dealId, opsStatus: { $ne: null } },
-            { opsStatus },
-            { new: true }
-        )
-            .populate('company', 'name logo sector')
-            .populate('primaryContact', 'fullName position profilePhotoUrl')
-            .populate('opsAssignedTo', 'name email profilePhotoUrl')
-            .lean();
+        const deal = await Deal.findOne({ _id: dealId, opsStatus: { $ne: null } });
 
         if (!deal) {
             return res.status(404).json({ error: 'Deal no encontrado en el pipeline de operaciones.' });
         }
 
-        return res.json(deal);
+        // Set previous opsStatus so the pre-save hook can record history
+        (deal as any)._previousOpsStatus = deal.opsStatus;
+        (deal as any)._opsChangedBy = userId;
+        deal.opsStatus = opsStatus;
+        await deal.save();
+
+        const populated = await Deal.findById(deal._id)
+            .populate('company', 'name logo sector')
+            .populate('primaryContact', 'fullName position profilePhotoUrl')
+            .populate('opsAssignedTo', 'name email profilePhotoUrl')
+            .lean();
+
+        return res.json(populated);
     } catch (error) {
         console.error(`[OPS] Error updating ops status: ${(error as Error).message}`);
         return res.status(500).json({ error: 'Internal server error' });
@@ -243,33 +247,301 @@ router.put('/deals/:dealId/status', async (req: Request, res: Response) => {
 
 /**
  * @route   GET /api/ops/stats
- * @desc    Get operations dashboard statistics
+ * @desc    Get operations dashboard statistics (V2 — advanced metrics)
  */
 router.get('/stats', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
+        const now = new Date();
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-        const [opsDeals, opsTasks, overdueTasks] = await Promise.all([
-            Deal.find({ opsStatus: { $ne: null } }).lean(),
-            Task.find({ userId, status: { $in: ['pending', 'in_progress'] } }).lean(),
-            Task.findOverdue(userId),
+        // Get pipeline config to know final stages
+        const config = await OpsPipelineConfig.getOrCreate(userId.toString());
+        const finalStageKeys = config.stages.filter(s => s.isFinal).map(s => s.key);
+
+        const [
+            opsDeals,
+            // Tasks — filtered by platform 'operaciones'
+            pendingOpsTasks,
+            overdueOpsTasks,
+            completedOpsTasksThisWeek,
+            totalOpsTasksThisWeek,
+            tasksByType,
+            tasksByPriority,
+            // Upcoming deadlines (tasks due in next 7 days)
+            upcomingTasks,
+            // Recently completed tasks
+            recentCompletedTasks,
+            // Goals
+            activeGoals,
+            completedGoals,
+            overdueGoals,
+            // Goals by category
+            goalsByCategory,
+            // Active goal docs (for progress)
+            activeGoalDocs,
+            // Latest 2 weekly reports (for comparison)
+            latestReports,
+        ] = await Promise.all([
+            // Ops deals with company data
+            Deal.find({ opsStatus: { $ne: null } })
+                .populate('company', 'name logo localesCount franchiseCount ownedCount costPerLocation sector')
+                .lean(),
+
+            // Tasks — only operaciones platform
+            Task.countDocuments({ platform: 'operaciones', status: { $in: ['pending', 'in_progress'] } }),
+            Task.countDocuments({ platform: 'operaciones', dueDate: { $lt: now }, status: { $in: ['pending', 'in_progress'] } }),
+            Task.countDocuments({ platform: 'operaciones', status: 'completed', completedAt: { $gte: weekAgo } }),
+            Task.countDocuments({
+                platform: 'operaciones',
+                $or: [
+                    { createdAt: { $gte: weekAgo } },
+                    { dueDate: { $gte: weekAgo, $lte: now } },
+                ],
+            }),
+            // Tasks by type — completed this week
+            Task.aggregate([
+                { $match: { platform: 'operaciones', status: 'completed', completedAt: { $gte: weekAgo } } },
+                { $group: { _id: '$type', count: { $sum: 1 } } },
+            ]),
+            // Tasks by priority — pending/in_progress
+            Task.aggregate([
+                { $match: { platform: 'operaciones', status: { $in: ['pending', 'in_progress'] } } },
+                { $group: { _id: '$priority', count: { $sum: 1 } } },
+            ]),
+
+            // Upcoming deadlines (next 7 days)
+            Task.find({
+                platform: 'operaciones',
+                status: { $in: ['pending', 'in_progress'] },
+                dueDate: { $gte: now, $lte: in7Days },
+            })
+                .sort({ dueDate: 1 })
+                .limit(8)
+                .select('title type priority dueDate status company')
+                .populate('company', 'name')
+                .lean(),
+
+            // Recently completed tasks (last 5)
+            Task.find({
+                platform: 'operaciones',
+                status: 'completed',
+            })
+                .sort({ completedAt: -1 })
+                .limit(5)
+                .select('title type completedAt company')
+                .populate('company', 'name')
+                .lean(),
+
+            // Goals
+            Goal.countDocuments({ status: 'active' }),
+            Goal.countDocuments({ status: 'completed' }),
+            Goal.countDocuments({ status: 'active', deadline: { $lt: now } }),
+            // Goals by category
+            Goal.aggregate([
+                { $match: { status: 'active' } },
+                { $group: { _id: '$category', count: { $sum: 1 } } },
+            ]),
+            // Active goal docs
+            Goal.find({ status: 'active' }).select('title category deadline').lean(),
+
+            // Latest 2 weekly reports
+            WeeklyReport.find({ userId })
+                .sort({ weekStart: -1 })
+                .limit(2)
+                .select('overallScore weekComparison dailyProductivity mostProductiveDay mostProductiveDayCount totalTasksCompleted completionRate dealsMovedForward weekLabel')
+                .lean(),
         ]);
 
-        // Group deals by ops status
+        // ── Pipeline metrics ──────────────────────────────────
         const byStatus: Record<string, number> = {};
         let totalValue = 0;
+        const valueByCurrency: Record<string, number> = {};
+        let localesInProgress = 0;
+        let localesCompleted = 0;
+        let revenueProjection = 0;
+        const daysPerStage: Record<string, number[]> = {};
+        let totalDaysSinceStart = 0;
+        let dealsWithStartDate = 0;
+
+        // Top companies data
+        const companyMap: Record<string, { name: string; logo?: string; sector?: string; deals: number; value: number; locales: number; stage: string }> = {};
+
         for (const deal of opsDeals) {
-            const status = (deal as any).opsStatus;
+            const d = deal as any;
+            const status = d.opsStatus;
             byStatus[status] = (byStatus[status] || 0) + 1;
-            totalValue += (deal as any).value || 0;
+            totalValue += d.value || 0;
+
+            const cur = d.currency || 'USD';
+            valueByCurrency[cur] = (valueByCurrency[cur] || 0) + (d.value || 0);
+
+            const companyLocales = d.company?.localesCount || 0;
+            const costPerLocation = d.company?.costPerLocation || 0;
+            if (finalStageKeys.includes(status)) {
+                localesCompleted += companyLocales;
+            } else {
+                localesInProgress += companyLocales;
+            }
+
+            // Revenue projection
+            if (costPerLocation > 0 && companyLocales > 0) {
+                revenueProjection += costPerLocation * companyLocales;
+            }
+
+            // Days in current ops stage
+            let enteredCurrentStage: Date;
+            if (d.opsStatusHistory && d.opsStatusHistory.length > 0) {
+                const lastChange = d.opsStatusHistory[d.opsStatusHistory.length - 1];
+                enteredCurrentStage = new Date(lastChange.changedAt);
+            } else {
+                enteredCurrentStage = d.opsStartDate ? new Date(d.opsStartDate) : new Date(d.createdAt);
+            }
+            const daysInStage = Math.floor((now.getTime() - enteredCurrentStage.getTime()) / (1000 * 60 * 60 * 24));
+            if (!daysPerStage[status]) daysPerStage[status] = [];
+            daysPerStage[status].push(daysInStage);
+
+            // Pipeline velocity
+            if (d.opsStartDate) {
+                totalDaysSinceStart += Math.floor((now.getTime() - new Date(d.opsStartDate).getTime()) / (1000 * 60 * 60 * 24));
+                dealsWithStartDate++;
+            }
+
+            // Company aggregation
+            if (d.company && d.company._id) {
+                const cid = d.company._id.toString();
+                if (!companyMap[cid]) {
+                    companyMap[cid] = { name: d.company.name, logo: d.company.logo, sector: d.company.sector, deals: 0, value: 0, locales: d.company.localesCount || 0, stage: status };
+                }
+                companyMap[cid].deals++;
+                companyMap[cid].value += d.value || 0;
+                companyMap[cid].stage = status; // latest
+            }
         }
 
+        const avgDaysPerStage: Record<string, number> = {};
+        for (const [stage, days] of Object.entries(daysPerStage)) {
+            avgDaysPerStage[stage] = days.length > 0 ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0;
+        }
+
+        const activeDeals = opsDeals.filter((d: any) => !finalStageKeys.includes(d.opsStatus)).length;
+        const completedDeals = opsDeals.filter((d: any) => finalStageKeys.includes(d.opsStatus)).length;
+
+        // ── Tasks metrics ─────────────────────────────────────
+        const completionRate = totalOpsTasksThisWeek > 0
+            ? Math.round((completedOpsTasksThisWeek / totalOpsTasksThisWeek) * 100)
+            : 0;
+
+        const tasksByTypeMap: Record<string, number> = {};
+        for (const t of tasksByType) { tasksByTypeMap[t._id || 'other'] = t.count; }
+
+        const tasksByPriorityMap: Record<string, number> = {};
+        for (const t of tasksByPriority) { tasksByPriorityMap[t._id || 'medium'] = t.count; }
+
+        // ── Goals metrics ─────────────────────────────────────
+        let avgGoalProgress = 0;
+        if (activeGoals > 0) {
+            const goalIds = activeGoalDocs.map((g: any) => g._id);
+            const taskAgg = await Task.aggregate([
+                { $match: { goal: { $in: goalIds } } },
+                { $group: { _id: '$goal', total: { $sum: 1 }, completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } } } },
+            ]);
+            const progressMap: Record<string, number> = {};
+            for (const t of taskAgg) {
+                progressMap[t._id.toString()] = t.total > 0 ? Math.min((t.completed / t.total) * 100, 100) : 0;
+            }
+            let sum = 0;
+            for (const g of activeGoalDocs) { sum += progressMap[(g as any)._id.toString()] || 0; }
+            avgGoalProgress = Math.round(sum / activeGoalDocs.length);
+        }
+
+        const goalsByCategoryMap: Record<string, number> = {};
+        for (const g of goalsByCategory) { goalsByCategoryMap[g._id || 'custom'] = g.count; }
+
+        // ── Revenue ───────────────────────────────────────────
+        const avgValuePerProject = opsDeals.length > 0 ? Math.round(totalValue / opsDeals.length) : 0;
+        const revenuePerLocale = localesInProgress + localesCompleted > 0
+            ? Math.round(totalValue / (localesInProgress + localesCompleted))
+            : 0;
+
+        // ── Weekly comparison ─────────────────────────────────
+        const latestReport = latestReports[0] || null;
+        let weekComparison = null;
+        if (latestReport) {
+            const lr = latestReport as any;
+            weekComparison = {
+                ...(lr.weekComparison || {}),
+                currentScore: lr.overallScore,
+                weekLabel: lr.weekLabel,
+                dailyProductivity: lr.dailyProductivity,
+                mostProductiveDay: lr.mostProductiveDay,
+                mostProductiveDayCount: lr.mostProductiveDayCount,
+                dealsMovedForward: lr.dealsMovedForward,
+            };
+        }
+
+        // ── Top companies ─────────────────────────────────────
+        const topCompanies = Object.values(companyMap)
+            .sort((a, b) => b.locales - a.locales)
+            .slice(0, 5);
+
+        // ── Pipeline velocity ─────────────────────────────────
+        const avgDaysSinceStart = dealsWithStartDate > 0 ? Math.round(totalDaysSinceStart / dealsWithStartDate) : 0;
+
         return res.json({
-            totalDeals: opsDeals.length,
-            totalValue,
-            byStatus,
-            pendingTasks: opsTasks.length,
-            overdueTasks: overdueTasks.length,
+            pipeline: {
+                totalDeals: opsDeals.length,
+                activeDeals,
+                completedDeals,
+                byStatus,
+                avgDaysPerStage,
+                avgDaysSinceStart,
+            },
+            revenue: {
+                totalValue,
+                valueByCurrency,
+                avgValuePerProject,
+                revenueProjection,
+                revenuePerLocale,
+            },
+            tasks: {
+                pending: pendingOpsTasks,
+                overdue: overdueOpsTasks,
+                completedThisWeek: completedOpsTasksThisWeek,
+                completionRate,
+                byType: tasksByTypeMap,
+                byPriority: tasksByPriorityMap,
+            },
+            goals: {
+                active: activeGoals,
+                completed: completedGoals,
+                overdue: overdueGoals,
+                avgProgress: avgGoalProgress,
+                byCategory: goalsByCategoryMap,
+            },
+            locales: {
+                inProgress: localesInProgress,
+                completed: localesCompleted,
+            },
+            weeklyScore: latestReport ? (latestReport as any).overallScore : null,
+            weekComparison,
+            upcomingDeadlines: upcomingTasks.map((t: any) => ({
+                _id: t._id,
+                title: t.title,
+                type: t.type,
+                priority: t.priority,
+                dueDate: t.dueDate,
+                company: t.company?.name || null,
+            })),
+            recentCompleted: recentCompletedTasks.map((t: any) => ({
+                _id: t._id,
+                title: t.title,
+                type: t.type,
+                completedAt: t.completedAt,
+                company: t.company?.name || null,
+            })),
+            topCompanies,
         });
     } catch (error) {
         console.error(`[OPS] Error getting stats: ${(error as Error).message}`);
@@ -860,11 +1132,8 @@ router.patch('/goals/:id/progress', async (req: Request, res: Response) => {
             completedBy: userId,
         });
 
-        // Auto-complete if target reached
-        if (current >= goal.target && goal.status === 'active') {
-            goal.status = 'completed';
-            goal.completedAt = new Date();
-        }
+        // Removed auto-complete logic based on target as target is no longer used
+
 
         await goal.save();
 
@@ -978,9 +1247,7 @@ router.post('/goals/:id/duplicate', async (req: Request, res: Response) => {
         const newGoal = await Goal.create({
             title: `${original.title} (copia)`,
             description: original.description,
-            target: original.target,
             current: 0,
-            unit: original.unit,
             category: original.category,
             customCategory: original.customCategory,
             status: 'active',
@@ -1117,7 +1384,7 @@ router.get('/activities', async (req: Request, res: Response) => {
             unifiedFeed.push({
                 _id: `goal_created_${g._id}`,
                 type: 'goal_created',
-                description: `Meta creada: ${g.title} (objetivo: ${g.target} ${g.unit})`,
+                description: `Meta creada: ${g.title}`,
                 createdAt: g.createdAt,
                 company: g.company,
                 createdBy: g.assignedTo,
@@ -1140,7 +1407,7 @@ router.get('/activities', async (req: Request, res: Response) => {
                 unifiedFeed.push({
                     _id: `goal_progress_${g._id}_${idx}`,
                     type: 'goal_progress',
-                    description: `Progreso: ${g.title} — ${h.previousValue} → ${h.newValue} ${g.unit}${h.note ? ` (${h.note})` : ''}`,
+                    description: `Progreso: ${g.title} — ${h.previousValue} → ${h.newValue}${h.note ? ` (${h.note})` : ''}`,
                     createdAt: h.date,
                     company: g.company,
                     createdBy: h.completedBy || g.assignedTo,
@@ -1339,7 +1606,7 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
             });
             const weekDelta = weekEntries.reduce((sum: number, h: any) => sum + (h.newValue - h.previousValue), 0);
             const currentAtStart = g.current - weekDelta;
-            const weekProgress = g.target > 0 ? Math.round((weekDelta / g.target) * 100) : 0;
+            const weekProgress = 0;
 
             const tc = taskCountMap[g._id.toString()] || { totalTasks: 0, completedTasks: 0, tasksCompletedThisWeek: 0 };
 
@@ -1347,7 +1614,6 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
                 goalId: g._id,
                 title: g.title,
                 category: g.category,
-                target: g.target,
                 currentAtStart: Math.max(0, currentAtStart),
                 currentAtEnd: g.current,
                 weekDelta,

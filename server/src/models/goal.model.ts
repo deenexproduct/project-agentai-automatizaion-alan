@@ -43,9 +43,7 @@ const MilestoneSchema = new Schema<IMilestone>({
 export interface IGoal extends Document {
     title: string;
     description?: string;
-    target: number;
     current: number;
-    unit: string;
     category: GoalCategory;
     customCategory?: string;
     status: GoalStatus;
@@ -69,21 +67,10 @@ const GoalSchema = new Schema<IGoal>({
         trim: true,
     },
     description: { type: String },
-    target: {
-        type: Number,
-        required: true,
-        min: 1,
-    },
     current: {
         type: Number,
         default: 0,
         min: 0,
-    },
-    unit: {
-        type: String,
-        required: true,
-        trim: true,
-        default: 'unidades',
     },
     category: {
         type: String,
@@ -131,8 +118,7 @@ const GoalSchema = new Schema<IGoal>({
 // ── Virtuals ──────────────────────────────────────────────────
 
 GoalSchema.virtual('progress').get(function (this: IGoal): number {
-    if (this.target <= 0) return 0;
-    return Math.min(Math.round((this.current / this.target) * 100), 100);
+    return 0; // Managed by tasks on the frontend
 });
 
 GoalSchema.virtual('isOverdue').get(function (this: IGoal): boolean {

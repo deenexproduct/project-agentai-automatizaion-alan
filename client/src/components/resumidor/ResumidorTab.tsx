@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ChatPicker, { ChatItem } from '../shared/ChatPicker'
-
+import SearchableSelect from '../common/SearchableSelect'
 import { API_BASE } from '../../config';
 
 const API_URL = `${API_BASE}/api/resumidor`;
@@ -488,15 +488,12 @@ export default function ResumidorTab() {
                                 {/* Model Selector */}
                                 <div className="pt-3 mt-3 border-t border-slate-100">
                                     <label className="text-xs text-slate-500 mb-1 block">Modelo AI</label>
-                                    <select
-                                        value={selectedModel}
-                                        onChange={(e) => setSelectedModel(e.target.value)}
+                                    <SearchableSelect
+                                        value={selectedModel || ''}
+                                        onChange={(val: string) => setSelectedModel(val)}
+                                        options={models.map(m => ({ value: m, label: m }))}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all outline-none"
-                                    >
-                                        {models.map(m => (
-                                            <option key={m} value={m}>{m}</option>
-                                        ))}
-                                    </select>
+                                    />
                                 </div>
                             </div>
                         )}

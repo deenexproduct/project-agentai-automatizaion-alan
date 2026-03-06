@@ -5,8 +5,8 @@ interface PremiumHeaderProps {
     search: string;
     onSearchChange: (value: string) => void;
     searchPlaceholder?: string;
-    onAdd: () => void;
-    addLabel: string;
+    onAdd?: () => void;
+    addLabel?: string;
     onFilter?: () => void;
     showFilters?: boolean;
     children?: React.ReactNode;
@@ -69,15 +69,17 @@ export default function PremiumHeader({
                 )}
 
                 {/* Add button: icon-only on mobile, full on desktop */}
-                <button
-                    onClick={onAdd}
-                    className="group relative flex items-center justify-center gap-2.5 h-[42px] w-[42px] md:w-auto md:px-5 shrink-0 bg-[linear-gradient(110deg,#7c3aed,45%,#c026d3,55%,#7c3aed)] bg-[length:250%_100%] hover:bg-[right_center] text-white font-bold text-[13.5px] tracking-wide rounded-[14px] transition-all duration-500 shadow-[0_6px_16px_rgba(139,92,246,0.3)] hover:shadow-[0_8px_24px_rgba(139,92,246,0.5)] hover:-translate-y-0.5 border border-white/20 overflow-hidden active:scale-[0.98] active:translate-y-0"
-                >
-                    <div className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-white/20 backdrop-blur-md md:-ml-1 shadow-[inset_0_1px_2px_rgba(255,255,255,0.3)]">
-                        <Plus size={14} strokeWidth={3} className="text-white drop-shadow-sm" />
-                    </div>
-                    <span className="relative z-10 drop-shadow-sm hidden md:inline">{addLabel}</span>
-                </button>
+                {onAdd && addLabel && (
+                    <button
+                        onClick={onAdd}
+                        className="group relative flex items-center justify-center gap-2.5 h-[42px] w-[42px] md:w-auto md:px-5 shrink-0 bg-[linear-gradient(110deg,#7c3aed,45%,#c026d3,55%,#7c3aed)] bg-[length:250%_100%] hover:bg-[right_center] text-white font-bold text-[13.5px] tracking-wide rounded-[14px] transition-all duration-500 shadow-[0_6px_16px_rgba(139,92,246,0.3)] hover:shadow-[0_8px_24px_rgba(139,92,246,0.5)] hover:-translate-y-0.5 border border-white/20 overflow-hidden active:scale-[0.98] active:translate-y-0"
+                    >
+                        <div className="relative z-10 flex items-center justify-center w-6 h-6 rounded-full bg-white/20 backdrop-blur-md md:-ml-1 shadow-[inset_0_1px_2px_rgba(255,255,255,0.3)]">
+                            <Plus size={14} strokeWidth={3} className="text-white drop-shadow-sm" />
+                        </div>
+                        <span className="relative z-10 drop-shadow-sm hidden md:inline">{addLabel}</span>
+                    </button>
+                )}
             </div>
         </div>
     );

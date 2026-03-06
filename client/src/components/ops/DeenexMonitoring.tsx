@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-    Loader2, RefreshCw, Users, ShoppingCart, DollarSign, TrendingUp,
-    Award, MapPin, Megaphone, ChevronDown, ChevronUp, Store,
-    Heart, AlertTriangle, Moon, Zap, Star, Package, Ticket,
-    MessageCircle, Bell, Image, BarChart3, Filter, UserCheck, UserX, ArrowRightLeft
+    Loader2, RefreshCw, ShoppingCart, DollarSign, TrendingUp,
+    Award, MapPin, Store, Heart, AlertTriangle, Moon, Zap, Star,
+    Package, Ticket, MessageCircle, Bell, Image, BarChart3, Filter,
+    UserCheck, UserX, ArrowRightLeft, Receipt, CircleDollarSign,
+    Navigation, Activity, CreditCard, Users, ChevronRight
 } from 'lucide-react';
 import {
     getDeenexOverview,
@@ -16,6 +17,7 @@ import {
     getDeenexLocationsLeaderboard,
     DeenexFilters,
 } from '../../services/deenex-monitoring.service';
+import SearchableSelect from '../common/SearchableSelect';
 
 // ── Types ────────────────────────────────────────────────────
 interface OverviewData {
@@ -24,110 +26,153 @@ interface OverviewData {
     facturacionTotal: number;
     usuariosRegistrados: number;
     usuariosInvitados: number;
-    tasaInvitadosARegistrados: number;
+    tasaDeRegistro: number;
 }
 
-// ── Glassmorphic card wrapper ────────────────────────────────
-const GlassCard = ({ children, className = '', style = {} }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) => (
-    <div
-        className={`rounded-2xl p-5 transition-all duration-200 ${className}`}
+// ══════════════════════════════════════════════════════════════
+// DESIGN TOKENS
+// ══════════════════════════════════════════════════════════════
+const PALETTE = {
+    indigo: '#6366f1',
+    violet: '#8b5cf6',
+    sky: '#0ea5e9',
+    emerald: '#22c55e',
+    amber: '#f59e0b',
+    rose: '#ec4899',
+    red: '#ef4444',
+    teal: '#14b8a6',
+    slate: '#94a3b8',
+    orange: '#f97316',
+};
+
+const COLORS = [PALETTE.indigo, PALETTE.sky, PALETTE.emerald, PALETTE.amber, PALETTE.rose, PALETTE.teal, PALETTE.violet, PALETTE.red];
+
+const rgba = (hex: string, a: number) => {
+    const h = hex.replace('#', '');
+    return `rgba(${parseInt(h.substring(0, 2), 16)},${parseInt(h.substring(2, 4), 16)},${parseInt(h.substring(4, 6), 16)},${a})`;
+};
+
+// ══════════════════════════════════════════════════════════════
+// DESIGN COMPONENTS
+// ══════════════════════════════════════════════════════════════
+
+/* ── Glass card ───────────────────────────────────────────── */
+const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+    <div className={`rounded-3xl p-7 ${className}`}
         style={{
-            background: 'rgba(255, 255, 255, 0.75)',
+            background: 'rgba(255,255,255,0.72)',
             backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(59, 130, 246, 0.08)',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.04)',
-            ...style,
-        }}
-    >
+            border: '1px solid rgba(255,255,255,0.7)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.03), 0 4px 24px rgba(99,102,241,0.04)',
+        }}>
         {children}
     </div>
 );
 
-// ── KPI mini-card ────────────────────────────────────────────
-const KpiCard = ({ label, value, icon: Icon, color, bg, subtitle }: {
-    label: string; value: string | number; icon: React.ElementType;
-    color: string; bg: string; subtitle?: string;
-}) => (
-    <GlassCard className="hover:scale-[1.02]">
-        <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: bg }}>
-                <Icon size={20} color={color} />
-            </div>
+/* ── Section divider title ────────────────────────────────── */
+const SectionDivider = ({ title, icon: Icon, color }: { title: string; icon: React.ElementType; color: string }) => (
+    <div className="flex items-center gap-3 pt-4 pb-2">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: rgba(color, 0.1) }}>
+            <Icon size={20} color={color} />
         </div>
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
-        <div className="text-sm text-gray-500 mt-0.5">{label}</div>
-        {subtitle && <div className="text-xs mt-1" style={{ color }}>{subtitle}</div>}
-    </GlassCard>
+        <h3 className="text-lg font-extrabold text-gray-800 tracking-tight">{title}</h3>
+    </div>
 );
 
-// ── Collapsible section ──────────────────────────────────────
-const Section = ({ title, emoji, children, defaultOpen = true }: {
-    title: string; emoji: string; children: React.ReactNode; defaultOpen?: boolean;
-}) => {
-    const [open, setOpen] = useState(defaultOpen);
-    return (
-        <GlassCard style={{ padding: 0 }}>
-            <button
-                onClick={() => setOpen(!open)}
-                className="w-full flex items-center justify-between px-5 py-4 text-left"
-                style={{ cursor: 'pointer', borderBottom: open ? '1px solid rgba(59,130,246,0.06)' : 'none' }}
-            >
-                <div className="flex items-center gap-2">
-                    <span className="text-xl">{emoji}</span>
-                    <h3 className="text-base font-semibold text-gray-800">{title}</h3>
-                </div>
-                {open ? <ChevronUp size={18} color="#94a3b8" /> : <ChevronDown size={18} color="#94a3b8" />}
-            </button>
-            {open && <div className="px-5 pb-5 pt-3">{children}</div>}
-        </GlassCard>
-    );
-};
+/* ── Hero KPI card (big number) ───────────────────────────── */
+const HeroKPI = ({ icon: Icon, label, value, color, subtitle }: {
+    icon: React.ElementType; label: string; value: string | number;
+    color: string; subtitle?: string;
+}) => (
+    <Card className="flex flex-col items-center justify-center text-center py-8 hover:scale-[1.02] transition-transform duration-300">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+            style={{ background: rgba(color, 0.1) }}>
+            <Icon size={24} color={color} />
+        </div>
+        <div className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight leading-none">{String(value)}</div>
+        <div className="text-sm text-gray-500 font-semibold mt-2">{label}</div>
+        {subtitle && <div className="text-xs font-medium mt-1" style={{ color }}>{subtitle}</div>}
+    </Card>
+);
 
-// ── Mini bar chart (pure CSS) ────────────────────────────────
-const MiniBar = ({ items, maxValue }: { items: { label: string; value: number; color: string }[]; maxValue?: number }) => {
-    const max = maxValue || Math.max(...items.map(i => i.value), 1);
+/* ── Horizontal bar chart (spacious) ──────────────────────── */
+const BarChart = ({ items, formatValue, title }: {
+    items: { label: string; value: number; color: string }[];
+    formatValue?: (v: number) => string;
+    title?: string;
+}) => {
+    const safe = (items || []).map(i => ({
+        label: String(i?.label ?? 'N/A'),
+        value: typeof i?.value === 'number' && !isNaN(i.value) ? i.value : 0,
+        color: String(i?.color ?? PALETTE.slate),
+    }));
+    const max = Math.max(...safe.map(i => i.value), 1);
+    if (safe.length === 0) return <div className="text-sm text-gray-400 italic py-4">Sin datos disponibles</div>;
     return (
-        <div className="space-y-2">
-            {items.map((item, i) => (
-                <div key={i} className="flex items-center gap-3">
-                    <div className="text-xs text-gray-600 w-28 shrink-0 truncate" title={item.label}>{item.label}</div>
-                    <div className="flex-1 h-5 rounded-full overflow-hidden" style={{ background: '#f1f5f9' }}>
-                        <div
-                            className="h-full rounded-full transition-all duration-700"
-                            style={{ width: `${Math.max((item.value / max) * 100, 2)}%`, background: item.color }}
-                        />
+        <div>
+            {title && <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">{title}</div>}
+            <div className="space-y-4">
+                {safe.map((item, i) => (
+                    <div key={i}>
+                        <div className="flex justify-between items-baseline mb-1.5">
+                            <span className="text-sm font-semibold text-gray-700">{item.label}</span>
+                            <span className="text-sm font-bold text-gray-900">
+                                {formatValue ? formatValue(item.value) : item.value.toLocaleString()}
+                            </span>
+                        </div>
+                        <div className="h-3 rounded-full overflow-hidden" style={{ background: rgba(item.color, 0.08) }}>
+                            <div className="h-full rounded-full transition-all duration-1000 ease-out"
+                                style={{ width: `${Math.max((item.value / max) * 100, 4)}%`, background: `linear-gradient(90deg, ${item.color}, ${rgba(item.color, 0.7)})` }}
+                            />
+                        </div>
                     </div>
-                    <div className="text-xs font-semibold text-gray-700 w-16 text-right">{item.value.toLocaleString()}</div>
-                </div>
-            ))}
+                ))}
+            </div>
         </div>
     );
 };
 
-// ── Donut stat ───────────────────────────────────────────────
-const DonutStat = ({ value, total, label, color }: { value: number; total: number; label: string; color: string }) => {
+/* ── Donut chart (larger) ─────────────────────────────────── */
+const DonutChart = ({ value, total, label, color, sublabel, size = 120 }: {
+    value: number; total: number; label: string; color: string; sublabel?: string; size?: number;
+}) => {
     const pct = total > 0 ? (value / total) * 100 : 0;
-    const circumference = 2 * Math.PI * 36;
-    const offset = circumference - (pct / 100) * circumference;
+    const r = (size - 16) / 2;
+    const c = 2 * Math.PI * r;
+    const offset = c - (pct / 100) * c;
     return (
-        <div className="flex flex-col items-center gap-1">
-            <svg width="80" height="80" viewBox="0 0 80 80">
-                <circle cx="40" cy="40" r="36" fill="none" stroke="#f1f5f9" strokeWidth="6" />
-                <circle
-                    cx="40" cy="40" r="36" fill="none" stroke={color} strokeWidth="6"
-                    strokeDasharray={circumference} strokeDashoffset={offset}
-                    strokeLinecap="round" transform="rotate(-90 40 40)"
-                    style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+        <div className="flex flex-col items-center gap-3">
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={rgba(color, 0.08)} strokeWidth="10" />
+                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="10"
+                    strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
+                    transform={`rotate(-90 ${size / 2} ${size / 2})`}
+                    style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)' }}
                 />
-                <text x="40" y="43" textAnchor="middle" fill="#1e293b" fontSize="14" fontWeight="700">
+                <text x={size / 2} y={size / 2 + 1} textAnchor="middle" dominantBaseline="middle" fill="#1e293b" fontSize="22" fontWeight="900">
                     {Math.round(pct)}%
                 </text>
             </svg>
-            <div className="text-xs text-gray-600 text-center">{label}</div>
-            <div className="text-sm font-bold" style={{ color }}>{value.toLocaleString()}</div>
+            <div className="text-center">
+                <div className="text-xl font-black" style={{ color }}>{value.toLocaleString()}</div>
+                <div className="text-sm text-gray-600 font-semibold">{label}</div>
+                {sublabel && <div className="text-xs text-gray-400 mt-0.5">{sublabel}</div>}
+            </div>
         </div>
     );
 };
+
+/* ── Mini stat block ──────────────────────────────────────── */
+const StatBlock = ({ label, value, icon: Icon, color, sub }: {
+    label: string; value: string | number; icon?: React.ElementType; color: string; sub?: string;
+}) => (
+    <div className="p-5 rounded-2xl text-center" style={{ background: rgba(color, 0.04) }}>
+        {Icon && <Icon size={18} color={color} className="mx-auto mb-2" />}
+        <div className="text-2xl font-black text-gray-900">{String(value)}</div>
+        <div className="text-xs text-gray-500 font-semibold mt-1">{label}</div>
+        {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
+    </div>
+);
 
 // ══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
@@ -152,440 +197,506 @@ export default function DeenexMonitoring() {
         try {
             if (isRefresh) setRefreshing(true); else setLoading(true);
             setError(null);
-
-            const [ov, br] = await Promise.all([
-                getDeenexOverview(filters),
-                getDeenexBrands(),
-            ]);
-            setOverview(ov);
-            setBrands(br);
-
-            // Load secondary data in parallel
+            const [ov, br] = await Promise.all([getDeenexOverview(filters), getDeenexBrands()]);
+            setOverview(ov); setBrands(br);
             const [cl, or, pt, pr, en, lb] = await Promise.all([
-                getDeenexClientStats(filters),
-                getDeenexOrderStats(filters),
-                getDeenexPointsStats(filters),
-                getDeenexTopProducts(filters),
-                getDeenexEngagementStats(filters),
-                getDeenexLocationsLeaderboard(filters),
+                getDeenexClientStats(filters), getDeenexOrderStats(filters),
+                getDeenexPointsStats(filters), getDeenexTopProducts(filters),
+                getDeenexEngagementStats(filters), getDeenexLocationsLeaderboard(filters),
             ]);
-            setClientStats(cl);
-            setOrderStats(or);
-            setPointsStats(pt);
-            setProducts(pr);
-            setEngagement(en);
-            setLeaderboard(lb);
+            setClientStats(cl); setOrderStats(or); setPointsStats(pt);
+            setProducts(pr); setEngagement(en); setLeaderboard(lb);
         } catch (err: any) {
             console.error('Deenex monitoring load error:', err);
             setError(err.message || 'Error cargando datos de monitoreo');
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
+        } finally { setLoading(false); setRefreshing(false); }
     }, [selectedBrand]);
 
     useEffect(() => { loadAll(); }, [loadAll]);
 
-    // ── Loading state ────────────────────────────────────────
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center h-96 gap-4">
-                <div className="relative">
-                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0ea5e9, #6366f1)', boxShadow: '0 0 30px rgba(99, 102, 241, 0.3)' }}>
-                        <Loader2 size={28} color="#fff" className="animate-spin" />
-                    </div>
-                </div>
-                <div className="text-gray-500 text-sm font-medium">Conectando con Deenex...</div>
+    // ── Loading state ──────────────────────────────────────────
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center h-[60vh] gap-5">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 12px 40px rgba(99,102,241,0.35)' }}>
+                <Loader2 size={28} color="#fff" className="animate-spin" />
             </div>
-        );
-    }
+            <div className="text-gray-400 text-sm font-semibold tracking-wide">Conectando con Deenex…</div>
+        </div>
+    );
 
-    if (error) {
-        return (
-            <div className="flex flex-col items-center justify-center h-96 gap-4">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
-                    <AlertTriangle size={28} color="#ef4444" />
-                </div>
-                <div className="text-gray-600 text-sm">{error}</div>
-                <button
-                    onClick={() => loadAll()}
-                    className="px-4 py-2 rounded-xl text-sm font-medium text-white"
-                    style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', cursor: 'pointer' }}
-                >
-                    Reintentar
-                </button>
+    if (error) return (
+        <div className="flex flex-col items-center justify-center h-[60vh] gap-5">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: rgba(PALETTE.red, 0.1) }}>
+                <AlertTriangle size={28} color={PALETTE.red} />
             </div>
-        );
-    }
+            <div className="text-gray-500 text-sm text-center max-w-md">{error}</div>
+            <button onClick={() => loadAll()}
+                className="px-6 py-3 rounded-xl text-sm font-bold text-white transition-all hover:scale-105"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', cursor: 'pointer', boxShadow: '0 6px 20px rgba(99,102,241,0.35)' }}>
+                Reintentar
+            </button>
+        </div>
+    );
 
-    const COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6'];
-    const ORDER_COLORS: Record<string, string> = { mesa: '#3b82f6', takeaway: '#22c55e', delivery: '#f59e0b' };
-    const ORDER_LABELS: Record<string, string> = { mesa: 'Mesa', takeaway: 'Takeaway', delivery: 'Delivery' };
-    const HEALTH_CONFIG = [
-        { key: 'active', label: 'Activos', icon: Heart, color: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
-        { key: 'atRisk', label: 'En riesgo', icon: AlertTriangle, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-        { key: 'dormant', label: 'Dormidos', icon: Moon, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' },
-    ];
+    const TYPE_LABELS: Record<string, string> = { mesa: 'Dine-in (Mesa)', takeaway: 'Takeaway', delivery: 'Delivery' };
+    const TYPE_COLORS: Record<string, string> = { mesa: PALETTE.indigo, takeaway: PALETTE.sky, delivery: PALETTE.amber };
+    const healthTotal = (clientStats?.health?.active || 0) + (clientStats?.health?.atRisk || 0) + (clientStats?.health?.dormant || 0);
 
     return (
-        <div className="py-4 space-y-5 max-w-[1400px] mx-auto">
-            {/* ── Header ──────────────────────────────── */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="py-6 space-y-8 max-w-[1200px] mx-auto" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+
+            {/* ════════════════════════════════════════════════════
+                 HEADER
+                ════════════════════════════════════════════════════ */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
                 <div>
-                    <h2 className="text-xl font-bold" style={{ background: 'linear-gradient(90deg, #0ea5e9, #6366f1) text', WebkitTextFillColor: 'transparent' }}>
+                    <h2 className="text-2xl font-black tracking-tight"
+                        style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                         Centro de Monitoreo
                     </h2>
-                    <p className="text-sm text-gray-500 mt-0.5">Estadísticas en tiempo real — Base de datos Deenex</p>
+                    <p className="text-sm text-gray-400 mt-1 font-medium">Estadísticas en tiempo real · Base de datos Deenex</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    {/* Brand filter */}
                     {brands.length > 1 && (
-                        <div className="relative">
-                            <Filter size={14} color="#94a3b8" className="absolute left-3 top-1/2 -translate-y-1/2" />
-                            <select
-                                value={selectedBrand}
-                                onChange={(e) => setSelectedBrand(e.target.value)}
-                                className="pl-8 pr-3 py-2 rounded-xl text-sm border-0 appearance-none"
-                                style={{
-                                    background: 'rgba(255,255,255,0.8)',
-                                    backdropFilter: 'blur(10px)',
-                                    border: '1px solid rgba(59,130,246,0.12)',
-                                    cursor: 'pointer',
-                                    outline: 'none',
-                                    minWidth: 180,
-                                }}
-                            >
-                                <option value="">Todas las marcas</option>
-                                {brands.map((b: any) => (
-                                    <option key={b._id} value={b._id}>{b.appName || b.domain}</option>
-                                ))}
-                            </select>
-                        </div>
+                        <SearchableSelect
+                            value={selectedBrand}
+                            onChange={(val: string) => setSelectedBrand(val)}
+                            options={[{ value: '', label: 'Todas las marcas' }, ...brands.map((b: any) => ({ value: b._id, label: b.appName || b.domain }))]}
+                            placeholder="Todas las marcas"
+                            containerClassName="w-[220px]"
+                        />
                     )}
-                    <button
-                        onClick={() => loadAll(true)}
-                        disabled={refreshing}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all"
+                    <button onClick={() => loadAll(true)} disabled={refreshing}
+                        className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white transition-all hover:scale-105 active:scale-95 shrink-0"
                         style={{
-                            background: 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
+                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                             opacity: refreshing ? 0.7 : 1,
                             cursor: refreshing ? 'default' : 'pointer',
-                            boxShadow: '0 4px 15px rgba(59,130,246,0.25)',
-                        }}
-                    >
-                        <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-                        {refreshing ? 'Actualizando...' : 'Actualizar'}
+                            boxShadow: '0 6px 24px rgba(99,102,241,0.3)',
+                        }}>
+                        <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+                        {refreshing ? 'Actualizando…' : 'Actualizar'}
                     </button>
                 </div>
             </div>
 
-            {/* ── KPI Overview Cards (6 métricas) ──────── */}
+            {/* ════════════════════════════════════════════════════
+                 KPIs HERO — each one gets its own big card
+                ════════════════════════════════════════════════════ */}
             {overview && (
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                    <KpiCard label="Locales Activos con Ventas" value={overview.localesActivosConVentas ?? 0} icon={MapPin} color="#0ea5e9" bg="rgba(14,165,233,0.1)" subtitle="Con al menos 1 pedido" />
-                    <KpiCard label="Total Pedidos" value={(overview.totalPedidos ?? 0).toLocaleString()} icon={ShoppingCart} color="#8b5cf6" bg="rgba(139,92,246,0.1)" />
-                    <KpiCard label="Facturación Total" value={`$${(overview.facturacionTotal ?? 0).toLocaleString()}`} icon={DollarSign} color="#22c55e" bg="rgba(34,197,94,0.1)" />
-                    <KpiCard label="Usuarios Registrados" value={(overview.usuariosRegistrados ?? 0).toLocaleString()} icon={UserCheck} color="#3b82f6" bg="rgba(59,130,246,0.1)" subtitle="Google, Apple, Email, Facebook" />
-                    <KpiCard label="Usuarios Invitados" value={(overview.usuariosInvitados ?? 0).toLocaleString()} icon={UserX} color="#f59e0b" bg="rgba(245,158,11,0.1)" />
-                    <KpiCard label="Tasa Invitados / Registrados" value={`${overview.tasaInvitadosARegistrados ?? 0}%`} icon={ArrowRightLeft} color="#6366f1" bg="rgba(99,102,241,0.1)" subtitle="Proporción invitados vs registrados" />
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
+                    <HeroKPI icon={MapPin} label="Locales Activos" value={overview.localesActivosConVentas ?? 0} color={PALETTE.indigo} subtitle="Con al menos 1 pedido" />
+                    <HeroKPI icon={ShoppingCart} label="Total Pedidos" value={(overview.totalPedidos ?? 0).toLocaleString()} color={PALETTE.sky} />
+                    <HeroKPI icon={DollarSign} label="Facturación Total" value={`$${(overview.facturacionTotal ?? 0).toLocaleString()}`} color={PALETTE.emerald} />
+                    <HeroKPI icon={UserCheck} label="Usuarios Registrados" value={(overview.usuariosRegistrados ?? 0).toLocaleString()} color={PALETTE.violet} subtitle="Email, Google, Apple, Facebook" />
+                    <HeroKPI icon={UserX} label="Usuarios Invitados" value={(overview.usuariosInvitados ?? 0).toLocaleString()} color={PALETTE.amber} />
+                    <HeroKPI icon={ArrowRightLeft} label="Tasa de Registro" value={`${overview.tasaDeRegistro ?? 0}%`} color={PALETTE.rose} subtitle="Registrados sobre total" />
                 </div>
             )}
 
-            {/* ── Brands overview ─────────────────────── */}
-            {brands.length > 0 && !selectedBrand && (
-                <Section title="Marcas Registradas" emoji="🏢" defaultOpen={false}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {brands.map((brand: any) => (
-                            <div
-                                key={brand._id}
-                                onClick={() => setSelectedBrand(brand._id)}
-                                className="flex items-center gap-3 p-3 rounded-xl hover:scale-[1.01] transition-all"
-                                style={{ background: 'rgba(59,130,246,0.04)', border: '1px solid rgba(59,130,246,0.08)', cursor: 'pointer' }}
-                            >
-                                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: 'linear-gradient(135deg, #0ea5e9, #3b82f6)' }}>
-                                    <Store size={18} color="#fff" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-semibold text-gray-800 truncate">{brand.appName || brand.domain}</div>
-                                    <div className="text-xs text-gray-500">{brand.localsCount} locales · {brand.clientsCount} clientes · {brand.ordersCount} pedidos</div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </Section>
-            )}
-
-            {/* ── Clients Section ─────────────────────── */}
+            {/* ════════════════════════════════════════════════════
+                 CLIENTES
+                ════════════════════════════════════════════════════ */}
             {clientStats && (
-                <Section title="Clientes" emoji="👥">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                        {/* Health */}
-                        <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Salud de la Base</h4>
-                            <div className="space-y-2">
-                                {HEALTH_CONFIG.map(h => {
-                                    const val = clientStats.health?.[h.key] || 0;
-                                    const total = (clientStats.health?.active || 0) + (clientStats.health?.atRisk || 0) + (clientStats.health?.dormant || 0);
-                                    const pct = total > 0 ? Math.round((val / total) * 100) : 0;
-                                    return (
-                                        <div key={h.key} className="flex items-center gap-3 p-2.5 rounded-xl" style={{ background: h.bg }}>
-                                            <h.icon size={16} color={h.color} />
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-xs font-medium text-gray-700">{h.label}</span>
-                                                    <span className="text-xs font-bold" style={{ color: h.color }}>{val.toLocaleString()} ({pct}%)</span>
-                                                </div>
-                                                <div className="h-1.5 rounded-full mt-1" style={{ background: 'rgba(0,0,0,0.05)' }}>
-                                                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: h.color, transition: 'width 0.6s ease' }} />
-                                                </div>
+                <>
+                    <SectionDivider title="Clientes" icon={Users} color={PALETTE.indigo} />
+
+                    {/* Salud de la Base — full width */}
+                    <Card>
+                        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-5">Salud de la Base de Clientes</div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            {[
+                                { label: 'Activos', value: clientStats.health?.active || 0, color: PALETTE.emerald, icon: Heart, desc: 'Compraron recientemente' },
+                                { label: 'En Riesgo', value: clientStats.health?.atRisk || 0, color: PALETTE.amber, icon: AlertTriangle, desc: 'Sin actividad reciente' },
+                                { label: 'Dormidos', value: clientStats.health?.dormant || 0, color: PALETTE.slate, icon: Moon, desc: 'Sin actividad prolongada' },
+                            ].map(({ label, value, color, icon: Ic, desc }) => {
+                                const pct = healthTotal > 0 ? Math.round((value / healthTotal) * 100) : 0;
+                                return (
+                                    <div key={label} className="p-5 rounded-2xl" style={{ background: rgba(color, 0.04) }}>
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: rgba(color, 0.12) }}>
+                                                <Ic size={18} color={color} />
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-bold text-gray-700">{label}</div>
+                                                <div className="text-xs text-gray-400">{desc}</div>
                                             </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
+                                        <div className="text-3xl font-black text-gray-900 mb-2">{value.toLocaleString()} <span className="text-lg font-bold" style={{ color }}>({pct}%)</span></div>
+                                        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: rgba(color, 0.1) }}>
+                                            <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${Math.max(pct, 3)}%`, background: color }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
+                    </Card>
 
-                        {/* Registro */}
-                        <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Medio de Registro</h4>
-                            <MiniBar
+                    {/* Registro + Género — side by side */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        <Card>
+                            <BarChart title="Método de Registro"
                                 items={(clientStats.registrationMethods || []).map((r: any, i: number) => ({
-                                    label: r.method || 'Desconocido',
-                                    value: r.count,
-                                    color: COLORS[i % COLORS.length],
+                                    label: r.method || 'Desconocido', value: r.count, color: COLORS[i % COLORS.length],
                                 }))}
                             />
-                        </div>
-
-                        {/* CLV & Conversion */}
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Valor del Cliente</h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.06)' }}>
-                                        <div className="text-xs text-gray-500">CLV Promedio</div>
-                                        <div className="text-lg font-bold text-gray-900">${clientStats.clv?.average?.toLocaleString()}</div>
-                                    </div>
-                                    <div className="p-3 rounded-xl" style={{ background: 'rgba(139,92,246,0.06)' }}>
-                                        <div className="text-xs text-gray-500">CLV Máximo</div>
-                                        <div className="text-lg font-bold text-gray-900">${clientStats.clv?.max?.toLocaleString()}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-3 rounded-xl" style={{ background: 'rgba(59,130,246,0.06)' }}>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs text-gray-500">Tasa de Conversión</span>
-                                    <span className="text-sm font-bold" style={{ color: '#3b82f6' }}>{clientStats.purchaseBehavior?.conversionRate}%</span>
-                                </div>
-                                <div className="text-xs text-gray-400 mt-0.5">{clientStats.purchaseBehavior?.totalBuyers?.toLocaleString()} compradores de {clientStats.total?.toLocaleString()} registrados</div>
-                            </div>
-                        </div>
+                        </Card>
+                        <Card>
+                            <BarChart title="Distribución por Género"
+                                items={(clientStats.genderDistribution || []).map((g: any, i: number) => ({
+                                    label: g.gender === 'male' ? '👨 Masculino' : g.gender === 'female' ? '👩 Femenino' : g.gender === 'no_especificado' ? '❓ No especificado' : (g.gender || '❓ Otro'),
+                                    value: g.count, color: [PALETTE.indigo, PALETTE.rose, PALETTE.slate, PALETTE.sky][i % 4],
+                                }))}
+                            />
+                        </Card>
                     </div>
-                </Section>
+
+                    {/* Valor del Cliente — dedicated row */}
+                    <Card>
+                        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-5">Valor del Cliente</div>
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                            <StatBlock label="CLV Promedio" value={`$${clientStats.clv?.average?.toLocaleString() || 0}`} icon={CircleDollarSign} color={PALETTE.emerald} />
+                            <StatBlock label="CLV Máximo" value={`$${clientStats.clv?.max?.toLocaleString() || 0}`} icon={TrendingUp} color={PALETTE.violet} />
+                            <StatBlock label="Revenue Total" value={`$${clientStats.clv?.totalRevenue?.toLocaleString() || 0}`} icon={DollarSign} color={PALETTE.sky} />
+                            <StatBlock label="Compras Promedio" value={clientStats.purchaseBehavior?.avgPurchases || 0} icon={ShoppingCart} color={PALETTE.amber} sub="por comprador" />
+                            <StatBlock label="Gasto Promedio" value={`$${clientStats.purchaseBehavior?.avgSpent?.toLocaleString() || 0}`} icon={Receipt} color={PALETTE.rose} sub="por comprador" />
+                        </div>
+                    </Card>
+
+                    {/* Conversión — standalone */}
+                    <Card className="flex items-center justify-between">
+                        <div>
+                            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Tasa de Conversión</div>
+                            <div className="text-sm text-gray-500">{clientStats.purchaseBehavior?.totalBuyers?.toLocaleString() || 0} compradores de {clientStats.total?.toLocaleString() || 0} registrados</div>
+                        </div>
+                        <div className="text-5xl font-black" style={{ color: PALETTE.indigo }}>{clientStats.purchaseBehavior?.conversionRate || 0}%</div>
+                    </Card>
+                </>
             )}
 
-            {/* ── Orders Section ──────────────────────── */}
+            {/* ════════════════════════════════════════════════════
+                 PEDIDOS
+                ════════════════════════════════════════════════════ */}
             {orderStats && (
-                <Section title="Pedidos" emoji="📦">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                        {/* By type donut */}
-                        <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Por Tipo</h4>
-                            <div className="flex justify-around">
-                                {(orderStats.byType || []).map((t: any) => (
-                                    <DonutStat
-                                        key={t.type}
-                                        value={t.count}
-                                        total={orderStats.total}
-                                        label={ORDER_LABELS[t.type] || t.type}
-                                        color={ORDER_COLORS[t.type] || '#94a3b8'}
-                                    />
-                                ))}
-                            </div>
-                        </div>
+                <>
+                    <SectionDivider title="Pedidos" icon={ShoppingCart} color={PALETTE.sky} />
 
-                        {/* Monthly trend */}
-                        <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Tendencia Mensual</h4>
-                            {orderStats.monthlyTrend?.length > 0 ? (
-                                <MiniBar
+                    {/* Billing KPIs */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                        <StatBlock label="Facturación Total" value={`$${orderStats.billing?.total?.toLocaleString() || 0}`} icon={CircleDollarSign} color={PALETTE.emerald} />
+                        <StatBlock label="Ticket Promedio" value={`$${orderStats.billing?.avgTicket?.toLocaleString() || 0}`} icon={Receipt} color={PALETTE.indigo} />
+                        <StatBlock label="Ticket Máximo" value={`$${orderStats.billing?.maxTicket?.toLocaleString() || 0}`} icon={TrendingUp} color={PALETTE.violet} />
+                        {orderStats.rating?.totalRated > 0 && (
+                            <StatBlock label={`${orderStats.rating.totalRated} reviews`} value={`${orderStats.rating.average} / 5`} icon={Star} color={PALETTE.amber} />
+                        )}
+                    </div>
+
+                    {/* Canal distribution — donuts get their own space */}
+                    <Card>
+                        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Distribución por Canal</div>
+                        <div className="flex flex-wrap justify-center gap-12">
+                            {(orderStats.byType || []).map((t: any) => (
+                                <DonutChart key={t.type} value={t.count} total={orderStats.total}
+                                    label={TYPE_LABELS[t.type] || t.type} color={TYPE_COLORS[t.type] || PALETTE.slate}
+                                    sublabel={`$${(t.revenue || 0).toLocaleString()} revenue`} size={140} />
+                            ))}
+                        </div>
+                    </Card>
+
+                    {/* Revenue by channel + Payment methods — side by side */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        <Card>
+                            <BarChart title="Revenue por Canal"
+                                items={(orderStats.byType || []).map((t: any, i: number) => ({
+                                    label: TYPE_LABELS[t.type] || t.type, value: t.revenue || 0,
+                                    color: TYPE_COLORS[t.type] || COLORS[i % COLORS.length],
+                                }))} formatValue={v => `$${v.toLocaleString()}`} />
+                        </Card>
+                        <Card>
+                            <BarChart title="Métodos de Pago"
+                                items={(orderStats.paymentMethods || []).slice(0, 6).map((p: any, i: number) => ({
+                                    label: p.method || 'N/A', value: p.count, color: COLORS[i % COLORS.length],
+                                }))} />
+                        </Card>
+                    </div>
+
+                    {/* Monthly trends — full width */}
+                    {orderStats.monthlyTrend?.length > 0 && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                            <Card>
+                                <BarChart title="Pedidos por Mes"
                                     items={orderStats.monthlyTrend.map((m: any, i: number) => ({
-                                        label: m.month,
-                                        value: m.orders,
-                                        color: COLORS[i % COLORS.length],
-                                    }))}
-                                />
-                            ) : (
-                                <div className="text-sm text-gray-400 italic">Sin datos de tendencia</div>
-                            )}
+                                        label: m.month, value: m.orders, color: COLORS[i % COLORS.length],
+                                    }))} />
+                            </Card>
+                            <Card>
+                                <BarChart title="Facturación por Mes"
+                                    items={orderStats.monthlyTrend.map((m: any, i: number) => ({
+                                        label: m.month, value: m.revenue || 0,
+                                        color: [PALETTE.emerald, PALETTE.sky, PALETTE.violet, PALETTE.amber, PALETTE.rose, PALETTE.teal][i % 6],
+                                    }))} formatValue={v => `$${v.toLocaleString()}`} />
+                            </Card>
                         </div>
-
-                        {/* Payment methods & rating */}
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Métodos de Pago</h4>
-                                <MiniBar
-                                    items={(orderStats.paymentMethods || []).slice(0, 5).map((p: any, i: number) => ({
-                                        label: p.method || 'N/A',
-                                        value: p.count,
-                                        color: COLORS[i % COLORS.length],
-                                    }))}
-                                />
-                            </div>
-                            {orderStats.rating?.totalRated > 0 && (
-                                <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: 'rgba(245,158,11,0.06)' }}>
-                                    <Star size={18} color="#f59e0b" fill="#f59e0b" />
-                                    <div>
-                                        <div className="text-sm font-bold text-gray-800">{orderStats.rating.average} / 5</div>
-                                        <div className="text-xs text-gray-500">{orderStats.rating.totalRated} valoraciones</div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </Section>
+                    )}
+                </>
             )}
 
-            {/* ── Points Section ──────────────────────── */}
+            {/* ════════════════════════════════════════════════════
+                 ECOSISTEMA DE PUNTOS
+                ════════════════════════════════════════════════════ */}
             {pointsStats && (
-                <Section title="Ecosistema de Puntos" emoji="💰">
-                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.06)' }}>
-                            <Zap size={16} color="#22c55e" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{pointsStats.generated?.amount?.toLocaleString()}</div>
-                            <div className="text-xs text-gray-500">Generados (Cashback)</div>
-                        </div>
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(59,130,246,0.06)' }}>
-                            <ShoppingCart size={16} color="#3b82f6" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{pointsStats.used?.amount?.toLocaleString()}</div>
-                            <div className="text-xs text-gray-500">Usados (Compras)</div>
-                        </div>
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.06)' }}>
-                            <AlertTriangle size={16} color="#ef4444" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{pointsStats.expired?.amount?.toLocaleString()}</div>
-                            <div className="text-xs text-gray-500">Expirados</div>
-                        </div>
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(139,92,246,0.06)' }}>
-                            <Award size={16} color="#8b5cf6" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{pointsStats.rewards?.amount?.toLocaleString()}</div>
-                            <div className="text-xs text-gray-500">Recompensas</div>
-                        </div>
-                        <div className="p-3 rounded-xl flex flex-col items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08))' }}>
-                            <div className="text-2xl font-bold" style={{ color: '#6366f1' }}>{pointsStats.redemptionRate}%</div>
-                            <div className="text-xs text-gray-600 text-center">Tasa de Redención</div>
-                        </div>
+                <>
+                    <SectionDivider title="Ecosistema de Puntos" icon={Zap} color={PALETTE.emerald} />
+
+                    {/* Point stats — large individual cards */}
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-5">
+                        <Card className="text-center !p-6">
+                            <Zap size={20} color={PALETTE.emerald} className="mx-auto mb-2" />
+                            <div className="text-2xl font-black text-gray-900">{(pointsStats.generated?.amount || 0).toLocaleString()}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-1">Generados</div>
+                            <div className="text-xs text-gray-400 mt-0.5">{(pointsStats.generated?.count || 0).toLocaleString()} transacciones</div>
+                        </Card>
+                        <Card className="text-center !p-6">
+                            <ShoppingCart size={20} color={PALETTE.indigo} className="mx-auto mb-2" />
+                            <div className="text-2xl font-black text-gray-900">{(pointsStats.used?.amount || 0).toLocaleString()}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-1">Usados</div>
+                            <div className="text-xs text-gray-400 mt-0.5">{(pointsStats.used?.count || 0).toLocaleString()} transacciones</div>
+                        </Card>
+                        <Card className="text-center !p-6">
+                            <AlertTriangle size={20} color={PALETTE.red} className="mx-auto mb-2" />
+                            <div className="text-2xl font-black text-gray-900">{(pointsStats.expired?.amount || 0).toLocaleString()}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-1">Expirados</div>
+                            <div className="text-xs text-gray-400 mt-0.5">{(pointsStats.expired?.count || 0).toLocaleString()} transacciones</div>
+                        </Card>
+                        <Card className="text-center !p-6">
+                            <Award size={20} color={PALETTE.violet} className="mx-auto mb-2" />
+                            <div className="text-2xl font-black text-gray-900">{(pointsStats.rewards?.amount || 0).toLocaleString()}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-1">Recompensas</div>
+                            <div className="text-xs text-gray-400 mt-0.5">{(pointsStats.rewards?.count || 0).toLocaleString()} transacciones</div>
+                        </Card>
+                        <Card className="text-center !p-6 flex flex-col items-center justify-center"
+                            style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.06))' }}>
+                            <div className="text-4xl font-black" style={{ color: PALETTE.indigo }}>{pointsStats.redemptionRate || 0}%</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-1">Tasa de Redención</div>
+                        </Card>
                     </div>
-                </Section>
+
+                    {/* Breakdown by reason + status — side by side */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        {pointsStats.byReason?.length > 0 && (
+                            <Card>
+                                <BarChart title="Detalle por Motivo"
+                                    items={(pointsStats.byReason || []).map((r: any, i: number) => ({
+                                        label: r.reason === 'cashback' ? 'Cashback' : r.reason === 'purchase' ? 'Compras' : r.reason === 'expiration' ? 'Expiración' : r.reason === 'reward' ? 'Recompensa' : r.reason === 'refund' ? 'Reembolso' : (r.reason || 'Otro'),
+                                        value: Math.abs(r.amount), color: COLORS[i % COLORS.length],
+                                    }))} />
+                            </Card>
+                        )}
+                        {pointsStats.statusDistribution?.length > 0 && (
+                            <Card>
+                                <BarChart title="Distribución por Estado"
+                                    items={(pointsStats.statusDistribution || []).map((s: any, i: number) => ({
+                                        label: s.status === 'completed' ? '✅ Completado' : s.status === 'pending' ? '⏳ Pendiente' : s.status === 'expired' ? '❌ Expirado' : s.status === 'cancelled' ? '🚫 Cancelado' : (s.status || 'Otro'),
+                                        value: s.count, color: [PALETTE.emerald, PALETTE.amber, PALETTE.red, PALETTE.slate, PALETTE.indigo][i % 5],
+                                    }))} />
+                            </Card>
+                        )}
+                    </div>
+                </>
             )}
 
-            {/* ── Locations Leaderboard ───────────────── */}
+            {/* ════════════════════════════════════════════════════
+                 RANKING DE LOCALES
+                ════════════════════════════════════════════════════ */}
             {leaderboard.length > 0 && (
-                <Section title="Ranking de Locales" emoji="🏆">
-                    <div className="space-y-2">
+                <>
+                    <SectionDivider title="Ranking de Locales" icon={MapPin} color={PALETTE.amber} />
+                    <div className="space-y-4">
                         {leaderboard.slice(0, 10).map((local: any, i: number) => {
                             const maxRev = leaderboard[0]?.totalRevenue || 1;
                             const pct = (local.totalRevenue / maxRev) * 100;
+                            const isTop3 = i < 3;
+                            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
                             return (
-                                <div key={local._id} className="flex items-center gap-3 p-3 rounded-xl transition-all hover:bg-blue-50/30">
-                                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-                                        style={{
-                                            background: i < 3 ? 'linear-gradient(135deg, #f59e0b, #f97316)' : 'rgba(148,163,184,0.15)',
-                                            color: i < 3 ? '#fff' : '#64748b',
-                                        }}>
-                                        {i + 1}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="text-sm font-semibold text-gray-800 truncate">{local.name || 'Sin nombre'}</span>
-                                            <span className="text-sm font-bold" style={{ color: '#22c55e' }}>${local.totalRevenue?.toLocaleString()}</span>
+                                <Card key={local._id} className="!p-5 hover:scale-[1.005] transition-transform">
+                                    <div className="flex items-start gap-4">
+                                        {/* Position badge */}
+                                        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black shrink-0"
+                                            style={{
+                                                background: isTop3 ? 'linear-gradient(135deg, #f59e0b, #f97316)' : rgba(PALETTE.slate, 0.08),
+                                                color: isTop3 ? '#fff' : '#64748b',
+                                                boxShadow: isTop3 ? '0 4px 12px rgba(245,158,11,0.3)' : 'none',
+                                            }}>
+                                            {medal || (i + 1)}
                                         </div>
-                                        <div className="h-2 rounded-full overflow-hidden" style={{ background: '#f1f5f9' }}>
-                                            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #0ea5e9, #3b82f6)', transition: 'width 0.6s ease' }} />
-                                        </div>
-                                        <div className="flex gap-3 mt-1 text-xs text-gray-500">
-                                            <span>{local.totalOrders} pedidos</span>
-                                            <span>Ticket: ${local.avgTicket?.toLocaleString()}</span>
-                                            {local.ordersByType && Object.entries(local.ordersByType).map(([type, count]) => (
-                                                <span key={type} style={{ color: ORDER_COLORS[type] || '#94a3b8' }}>{ORDER_LABELS[type] || type}: {(count as number)}</span>
-                                            ))}
+
+                                        {/* Content */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div>
+                                                    <div className="text-base font-extrabold text-gray-800">{local.name || 'Sin nombre'}</div>
+                                                    {local.address && (
+                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                            <Navigation size={10} color={PALETTE.slate} />
+                                                            <span className="text-xs text-gray-400 truncate max-w-[400px]">{local.address}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="text-right shrink-0 ml-4">
+                                                    <div className="text-xl font-black" style={{ color: PALETTE.emerald }}>${local.totalRevenue?.toLocaleString()}</div>
+                                                    <div className="text-xs text-gray-400 font-medium">{local.totalOrders} pedidos · Ticket: ${local.avgTicket?.toLocaleString()}</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Revenue bar */}
+                                            <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: rgba(PALETTE.indigo, 0.06) }}>
+                                                <div className="h-full rounded-full transition-all duration-1000"
+                                                    style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${PALETTE.indigo}, ${PALETTE.violet})` }} />
+                                            </div>
+
+                                            {/* Detail tags */}
+                                            <div className="flex flex-wrap gap-2">
+                                                {local.ordersByType && Object.entries(local.ordersByType).map(([type, count]) => (
+                                                    <span key={type} className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+                                                        style={{ background: rgba(TYPE_COLORS[type] || PALETTE.slate, 0.08), color: TYPE_COLORS[type] || PALETTE.slate }}>
+                                                        {TYPE_LABELS[type] || type}: {count as number}
+                                                    </span>
+                                                ))}
+                                                {(local.points?.generated > 0 || local.points?.used > 0) && (
+                                                    <>
+                                                        <span className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+                                                            style={{ background: rgba(PALETTE.emerald, 0.08), color: PALETTE.emerald }}>
+                                                            Pts gen: {local.points.generated?.toLocaleString()}
+                                                        </span>
+                                                        <span className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+                                                            style={{ background: rgba(PALETTE.indigo, 0.08), color: PALETTE.indigo }}>
+                                                            Pts usados: {local.points.used?.toLocaleString()}
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center w-5">
-                                        {local.active ? <MapPin size={14} color="#22c55e" /> : <MapPin size={14} color="#ef4444" />}
-                                    </div>
-                                </div>
+                                </Card>
                             );
                         })}
                     </div>
-                </Section>
+                </>
             )}
 
-            {/* ── Products Section ────────────────────── */}
+            {/* ════════════════════════════════════════════════════
+                 PRODUCTOS
+                ════════════════════════════════════════════════════ */}
             {products && (
-                <Section title="Productos" emoji="🍽️" defaultOpen={false}>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        <div>
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="flex gap-2 text-sm">
-                                    <span className="px-2 py-0.5 rounded-lg font-medium" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
-                                        <Package size={12} className="inline mr-1" />{products.activeProducts} activos
-                                    </span>
-                                    <span className="px-2 py-0.5 rounded-lg font-medium" style={{ background: 'rgba(148,163,184,0.1)', color: '#94a3b8' }}>
-                                        {products.inactiveProducts} inactivos
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Por Categoría</h4>
-                            <MiniBar
-                                items={(products.byCategory || []).slice(0, 8).map((c: any, i: number) => ({
-                                    label: c.category,
-                                    value: c.count,
-                                    color: COLORS[i % COLORS.length],
-                                }))}
-                            />
-                        </div>
+                <>
+                    <SectionDivider title="Productos" icon={Package} color={PALETTE.violet} />
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                        <Card className="text-center !py-8">
+                            <Package size={24} color={PALETTE.emerald} className="mx-auto mb-3" />
+                            <div className="text-4xl font-black text-gray-900">{products.activeProducts || 0}</div>
+                            <div className="text-sm font-semibold text-gray-500 mt-2">Productos Activos</div>
+                        </Card>
+                        <Card className="text-center !py-8">
+                            <Package size={24} color={PALETTE.slate} className="mx-auto mb-3" />
+                            <div className="text-4xl font-black text-gray-900">{products.inactiveProducts || 0}</div>
+                            <div className="text-sm font-semibold text-gray-500 mt-2">Productos Inactivos</div>
+                        </Card>
+                        <Card className="text-center !py-8">
+                            <BarChart3 size={24} color={PALETTE.indigo} className="mx-auto mb-3" />
+                            <div className="text-4xl font-black text-gray-900">{products.totalProducts || (products.activeProducts || 0) + (products.inactiveProducts || 0)}</div>
+                            <div className="text-sm font-semibold text-gray-500 mt-2">Total Productos</div>
+                        </Card>
                     </div>
-                </Section>
+                    <Card>
+                        <BarChart title="Distribución por Categoría"
+                            items={(products.byCategory || []).slice(0, 10).map((c: any, i: number) => ({
+                                label: typeof c.category === 'string' ? c.category : (c.category?.es || c.category?.en || 'Sin categoría'),
+                                value: c.count || 0,
+                                color: COLORS[i % COLORS.length],
+                            }))} />
+                    </Card>
+                </>
             )}
 
-            {/* ── Engagement Section ──────────────────── */}
+            {/* ════════════════════════════════════════════════════
+                 ENGAGEMENT & MARKETING
+                ════════════════════════════════════════════════════ */}
             {engagement && (
-                <Section title="Engagement & Marketing" emoji="📱" defaultOpen={false}>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(236,72,153,0.06)' }}>
-                            <Image size={16} color="#ec4899" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{engagement.stories?.total}</div>
-                            <div className="text-xs text-gray-500">Stories ({engagement.stories?.active} activas)</div>
-                            <div className="text-xs text-gray-400 mt-0.5">{engagement.stories?.totalViews?.toLocaleString()} vistas</div>
-                        </div>
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(59,130,246,0.06)' }}>
-                            <Bell size={16} color="#3b82f6" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{engagement.notifications?.total}</div>
-                            <div className="text-xs text-gray-500">Notificaciones</div>
-                        </div>
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.06)' }}>
-                            <MessageCircle size={16} color="#22c55e" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{engagement.whatsappCampaigns?.total}</div>
-                            <div className="text-xs text-gray-500">Campañas WhatsApp</div>
-                        </div>
-                        <div className="p-3 rounded-xl" style={{ background: 'rgba(245,158,11,0.06)' }}>
-                            <Ticket size={16} color="#f59e0b" />
-                            <div className="text-lg font-bold text-gray-900 mt-1">{engagement.coupons?.total}</div>
-                            <div className="text-xs text-gray-500">Cupones</div>
-                            {engagement.coupons?.byStatus?.map((s: any) => (
-                                <div key={s.status} className="text-xs text-gray-400">{s.status}: {s.count}</div>
-                            ))}
-                        </div>
+                <>
+                    <SectionDivider title="Engagement & Marketing" icon={Bell} color={PALETTE.rose} />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                        <Card className="text-center !py-8 hover:scale-[1.02] transition-transform">
+                            <Image size={24} color={PALETTE.rose} className="mx-auto mb-3" />
+                            <div className="text-3xl font-black text-gray-900">{engagement.stories?.total || 0}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-2">Stories</div>
+                            <div className="text-xs text-gray-400 mt-1">{engagement.stories?.active || 0} activas · {(engagement.stories?.totalViews || 0).toLocaleString()} vistas</div>
+                        </Card>
+                        <Card className="text-center !py-8 hover:scale-[1.02] transition-transform">
+                            <Bell size={24} color={PALETTE.indigo} className="mx-auto mb-3" />
+                            <div className="text-3xl font-black text-gray-900">{engagement.notifications?.total || 0}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-2">Notificaciones</div>
+                            <div className="text-xs text-gray-400 mt-1">Push enviadas</div>
+                        </Card>
+                        <Card className="text-center !py-8 hover:scale-[1.02] transition-transform">
+                            <MessageCircle size={24} color={PALETTE.emerald} className="mx-auto mb-3" />
+                            <div className="text-3xl font-black text-gray-900">{engagement.whatsappCampaigns?.total || 0}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-2">WhatsApp</div>
+                            <div className="text-xs text-gray-400 mt-1">Campañas enviadas</div>
+                        </Card>
+                        <Card className="text-center !py-8 hover:scale-[1.02] transition-transform">
+                            <Ticket size={24} color={PALETTE.amber} className="mx-auto mb-3" />
+                            <div className="text-3xl font-black text-gray-900">{engagement.coupons?.total || 0}</div>
+                            <div className="text-sm font-semibold text-gray-600 mt-2">Cupones</div>
+                            {engagement.coupons?.byStatus?.length > 0 && (
+                                <div className="text-xs text-gray-400 mt-1">
+                                    {engagement.coupons.byStatus.map((s: any) => `${s.status}: ${s.count}`).join(' · ')}
+                                </div>
+                            )}
+                        </Card>
                     </div>
-                </Section>
+                </>
             )}
 
-            {/* ── Footer ──────────────────────────────── */}
-            <div className="text-center text-xs text-gray-400 py-2">
-                <BarChart3 size={12} className="inline mr-1" />
-                Datos obtenidos en modo lectura (GET only) — Base de datos producción Deenex
+            {/* ════════════════════════════════════════════════════
+                 MARCAS
+                ════════════════════════════════════════════════════ */}
+            {brands.length > 0 && !selectedBrand && (
+                <>
+                    <SectionDivider title="Marcas Registradas" icon={Store} color={PALETTE.teal} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {brands.map((brand: any) => (
+                            <Card key={brand._id} className="hover:scale-[1.02] transition-transform cursor-pointer"
+                                onClick={() => setSelectedBrand(brand._id)}>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                                        style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+                                        <Store size={20} color="#fff" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-base font-bold text-gray-800 truncate">{brand.appName || brand.domain}</div>
+                                        <div className="flex gap-3 mt-1 text-xs text-gray-500">
+                                            <span>{brand.localsCount || 0} locales</span>
+                                            <span>{brand.clientsCount || 0} clientes</span>
+                                            <span>{brand.ordersCount || 0} pedidos</span>
+                                        </div>
+                                    </div>
+                                    <ChevronRight size={16} color={PALETTE.slate} />
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* ════════════════════════════════════════════════════
+                 FOOTER
+                ════════════════════════════════════════════════════ */}
+            <div className="text-center py-6">
+                <div className="inline-flex items-center gap-2 text-xs text-gray-400 font-medium">
+                    <Activity size={12} />
+                    Datos en modo lectura (GET only) — Base de datos producción Deenex
+                </div>
             </div>
         </div>
     );

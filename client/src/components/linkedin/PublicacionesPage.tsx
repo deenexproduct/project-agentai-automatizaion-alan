@@ -22,6 +22,7 @@ import {
     type ValidationIssue,
 } from '../../services/linkedin-posts.service';
 import { getActiveAccount, type LinkedInAccount } from '../../services/linkedin-accounts.service';
+import SearchableSelect from '../common/SearchableSelect';
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -333,41 +334,37 @@ function GenerateTab({
                             <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#6b7280' }}>
                                 🎯 Pilar
                             </label>
-                            <select
-                                value={pilar}
-                                onChange={(e) => setPilar(e.target.value)}
+                            <SearchableSelect
+                                value={pilar || ''}
+                                onChange={(val: string) => setPilar(val)}
+                                options={[
+                                    { value: 'Auto', label: '🔄 Auto (rotación)' },
+                                    ...pilares.map((p) => ({ value: p.nombre, label: p.nombre }))
+                                ]}
                                 className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
                                 style={{
                                     background: 'rgba(255, 255, 255, 0.8)',
                                     border: '1px solid rgba(124, 58, 237, 0.15)',
                                     color: '#1e1b4b',
                                 }}
-                            >
-                                <option value="Auto">🔄 Auto (rotación)</option>
-                                {pilares.map((p) => (
-                                    <option key={p._id} value={p.nombre}>{p.nombre}</option>
-                                ))}
-                            </select>
+                            />
                         </div>
 
                         <div className="flex-1 min-w-[140px]">
                             <label className="text-xs font-semibold mb-1.5 block" style={{ color: '#6b7280' }}>
                                 📐 Formato
                             </label>
-                            <select
-                                value={formato}
-                                onChange={(e) => setFormato(e.target.value)}
+                            <SearchableSelect
+                                value={formato || ''}
+                                onChange={(val: string) => setFormato(val)}
+                                options={FORMATOS.map((f) => ({ value: f, label: f === 'Auto' ? '🔄 Auto' : f }))}
                                 className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
                                 style={{
                                     background: 'rgba(255, 255, 255, 0.8)',
                                     border: '1px solid rgba(124, 58, 237, 0.15)',
                                     color: '#1e1b4b',
                                 }}
-                            >
-                                {FORMATOS.map((f) => (
-                                    <option key={f} value={f}>{f === 'Auto' ? '🔄 Auto' : f}</option>
-                                ))}
-                            </select>
+                            />
                         </div>
 
                         <div className="flex items-end pb-0.5">

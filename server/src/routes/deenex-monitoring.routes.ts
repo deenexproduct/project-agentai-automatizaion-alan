@@ -117,10 +117,13 @@ router.get('/overview', async (req: Request, res: Response) => {
 
         const totalBilling = billingAgg[0]?.total || 0;
 
-        // KPI 6: Tasa de invitados a registrados
-        const guestToRegisteredRate = registeredUsers > 0
-            ? Math.round((guestUsers / registeredUsers) * 1000) / 10
+        // KPI 6: Tasa de registro real (registrados / total)
+        const totalUsers = registeredUsers + guestUsers;
+        const tasaDeRegistro = totalUsers > 0
+            ? Math.round((registeredUsers / totalUsers) * 1000) / 10
             : 0;
+
+        console.log('[DEENEX-DEBUG] registeredUsers:', registeredUsers, 'guestUsers:', guestUsers, 'totalUsers:', totalUsers, 'tasaDeRegistro:', tasaDeRegistro);
 
         return res.json({
             localesActivosConVentas: localesConVentas,
@@ -128,7 +131,7 @@ router.get('/overview', async (req: Request, res: Response) => {
             facturacionTotal: Math.round(totalBilling),
             usuariosRegistrados: registeredUsers,
             usuariosInvitados: guestUsers,
-            tasaInvitadosARegistrados: guestToRegisteredRate,
+            tasaDeRegistro,
         });
     } catch (error: any) {
         console.error('[DEENEX-MONITOR] Overview error:', error.message);
@@ -453,7 +456,16 @@ router.get('/products/top', async (req: Request, res: Response) => {
             totalProducts,
             activeProducts,
             inactiveProducts: totalProducts - activeProducts,
-            byCategory: byCategory.map((c: any) => ({ category: c._id || 'Sin categoría', count: c.count })),
+            byCategory: byCategory.map((c: any) => {
+                let catName = 'Sin categoría';
+                if (c._id) {
+                    if (typeof c._id === 'string') catName = c._id;
+                    else if (typeof c._id === 'object' && c._id.es) catName = c._id.es;
+                    else if (typeof c._id === 'object' && c._id.en) catName = c._id.en;
+                    else if (typeof c._id === 'object') catName = Object.values(c._id).find((v: any) => typeof v === 'string') as string || JSON.stringify(c._id);
+                }
+                return { category: catName, count: c.count };
+            }),
         });
     } catch (error: any) {
         console.error('[DEENEX-MONITOR] Products error:', error.message);

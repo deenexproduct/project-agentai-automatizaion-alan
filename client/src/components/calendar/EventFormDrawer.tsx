@@ -4,6 +4,7 @@ import { EventData, createEvent, updateEvent, deleteEvent, getContacts, getCompa
 import AutocompleteInput from '../common/AutocompleteInput';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatToLocalDateInput } from '../../utils/date';
+import SearchableSelect from '../common/SearchableSelect';
 
 interface EventFormDrawerProps {
     open: boolean;
@@ -329,17 +330,13 @@ export default function EventFormDrawer({ open, event, initialDate, onClose, onS
                             <h3 className="text-[14px] font-bold text-slate-800 mb-4 flex items-center gap-2">
                                 <Users size={16} className="text-violet-500" /> Responsable Principal
                             </h3>
-                            <select
-                                value={selectedUser}
-                                onChange={e => setSelectedUser(e.target.value)}
+                            <SearchableSelect
+                                value={selectedUser || ''}
+                                onChange={(val: string) => setSelectedUser(val)}
+                                options={teamUsers.map(u => ({ value: u._id, label: u.name || u.email }))}
+                                placeholder="Seleccionar un responsable"
                                 className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-[12px] text-[14px] text-slate-800 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all font-medium"
-                                required
-                            >
-                                <option value="" disabled>Seleccionar un responsable</option>
-                                {teamUsers.map(u => (
-                                    <option key={u._id} value={u._id}>{u.name || u.email}</option>
-                                ))}
-                            </select>
+                            />
                         </div>
 
                         <div className="bg-white p-5 rounded-[20px] shadow-sm border border-slate-100">

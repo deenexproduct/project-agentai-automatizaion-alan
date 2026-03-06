@@ -69,6 +69,11 @@
             "date": 1772679611909,
             "name": "/Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/logs/whatsapp-2026-03-05.log",
             "hash": "c4f61f06ef5d197ea86b0b85225bd9f01585191fce7e90b4e6634311bd7941eb"
+        },
+        {
+            "date": 1772798261305,
+            "name": "/Users/alannaimtapia/Desktop/Programacion/voice/server/wa-sessions/logs/whatsapp-2026-03-06.log",
+            "hash": "bad449e214468a194b20c5d58b7d01d2c5e9eabf05617053561eab0d9f28fcd7"
         }
     ],
     "hashType": "sha256"

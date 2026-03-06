@@ -3,6 +3,7 @@ import { X, Save, AlertTriangle, Key, Mail, LayoutTemplate, Calendar, CheckSquar
 import api from '../../lib/axios';
 import { useToastContext } from '../../contexts/ToastContext';
 import { API_BASE } from '../../config';
+import SearchableSelect from '../common/SearchableSelect';
 
 interface CalendarConfigModalProps {
     open: boolean;
@@ -353,12 +354,11 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                                                             Cargando calendarios...
                                                         </div>
                                                     ) : (
-                                                        <select
+                                                        <SearchableSelect
                                                             disabled={!isGoogleOwner}
                                                             className={`w-full h-11 px-4 border border-slate-200 rounded-[12px] text-[14px] text-slate-800 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all shadow-sm outline-none ${!isGoogleOwner ? 'bg-slate-100 cursor-not-allowed opacity-80' : 'bg-slate-50'}`}
-                                                            value={selectedCalendarId}
-                                                            onChange={async (e) => {
-                                                                const newId = e.target.value;
+                                                            value={selectedCalendarId || ''}
+                                                            onChange={async (newId: string) => {
                                                                 console.log('User selected new calendar:', newId);
                                                                 setSelectedCalendarId(newId);
                                                                 try {
@@ -370,16 +370,15 @@ export default function CalendarConfigModal({ open, onClose }: CalendarConfigMod
                                                                     addToast('error', 'Error al guardar el calendario.');
                                                                 }
                                                             }}
-                                                        >
-                                                            {calendars.map(cal => (
-                                                                <option key={cal.id} value={cal.id}>
-                                                                    {cal.summary} {cal.primary ? '(Principal)' : ''}
-                                                                </option>
-                                                            ))}
-                                                            {!calendars.find(c => c.primary)?.id && selectedCalendarId === 'primary' && (
-                                                                <option value="primary">Calendario Principal</option>
-                                                            )}
-                                                        </select>
+                                                            options={[
+                                                                ...calendars.map(cal => ({
+                                                                    value: cal.id,
+                                                                    label: `${cal.summary} ${cal.primary ? '(Principal)' : ''}`
+                                                                })),
+                                                                ...(!calendars.find(c => c.primary)?.id && selectedCalendarId === 'primary' ? [{ value: 'primary', label: 'Calendario Principal' }] : [])
+                                                            ]}
+                                                            placeholder="Seleccionar calendario"
+                                                        />
                                                     )}
                                                     <p className="text-[12px] text-slate-500 mt-2">
                                                         {isGoogleOwner ? "Los eventos se crearán en este calendario exclusivo." : "Este calendario es administrado de manera global por un administrador."}

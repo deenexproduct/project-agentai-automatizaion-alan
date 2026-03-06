@@ -12,6 +12,7 @@ import {
 import OwnerAvatar from '../common/OwnerAvatar';
 import PremiumHeader from '../crm/PremiumHeader';
 import { getTeamUsers } from '../../services/crm.service';
+import SearchableSelect from '../common/SearchableSelect';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -233,7 +234,7 @@ export default function OpsGoals() {
             if (g.status !== 'active' || !g.deadline) return false;
             const dl = new Date(g.deadline);
             const diffDays = Math.ceil((dl.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-            return diffDays <= 3;
+            return diffDays <= 0;
         }).map(g => {
             const dl = new Date(g.deadline!);
             const diffDays = Math.ceil((dl.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -243,36 +244,27 @@ export default function OpsGoals() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
-            {/* Feature #15: Deadline Notification Banner */}
+            {/* Feature #15: Deadline Notification Banner — slim inline */}
             {urgentGoals.length > 0 && (
-                <div className="mb-3 shrink-0 rounded-2xl p-4 border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 shadow-sm" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                    <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center">
-                                <AlertTriangle size={16} className="text-amber-600" />
-                            </div>
-                            <span className="text-[13px] font-bold text-amber-800">
-                                {urgentGoals.length} {urgentGoals.length === 1 ? 'meta próxima a vencer' : 'metas próximas a vencer'}
-                            </span>
-                        </div>
-                        <button onClick={() => setDismissedNotifications(true)} className="text-amber-400 hover:text-amber-600 transition-colors p-1">
-                            <X size={14} />
-                        </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2 ml-10">
+                <div className="mb-2 shrink-0 rounded-xl px-3 py-1.5 border border-amber-200/80 bg-gradient-to-r from-amber-50/80 to-orange-50/80 flex items-center gap-2" style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                    <AlertTriangle size={13} className="text-amber-500 shrink-0" />
+                    <span className="text-[11px] font-bold text-amber-700 shrink-0">
+                        {urgentGoals.length} {urgentGoals.length === 1 ? 'meta vence hoy' : 'metas vencen hoy'}
+                    </span>
+                    <div className="flex items-center gap-1.5 overflow-x-auto flex-1 min-w-0">
                         {urgentGoals.slice(0, 5).map(g => (
                             <button
                                 key={g._id}
                                 onClick={() => setDetailGoal(g)}
-                                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all hover:scale-105 ${g.diffDays < 0 ? 'bg-red-100 text-red-700 border-red-200' :
-                                    g.diffDays === 0 ? 'bg-amber-100 text-amber-700 border-amber-200' :
-                                        'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                    }`}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-all hover:scale-105 whitespace-nowrap ${g.diffDays < 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}
                             >
-                                {g.title} · {g.diffDays < 0 ? `${Math.abs(g.diffDays)}d vencida` : g.diffDays === 0 ? 'Hoy' : `${g.diffDays}d`}
+                                {g.title}{g.diffDays < 0 ? ` · ${Math.abs(g.diffDays)}d` : ''}
                             </button>
                         ))}
                     </div>
+                    <button onClick={() => setDismissedNotifications(true)} className="text-amber-300 hover:text-amber-500 transition-colors shrink-0 p-0.5">
+                        <X size={12} />
+                    </button>
                 </div>
             )}
 
@@ -280,10 +272,10 @@ export default function OpsGoals() {
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4 shrink-0">
                 {[
                     { label: 'Total Metas', value: stats.totalGoals, icon: Target, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.15)' },
-                    { label: 'Cumplidas', value: stats.completedGoals, icon: CheckCircle, color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.15)' },
-                    { label: 'Progreso Prom.', value: `${stats.avgProgress}%`, icon: BarChart3, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.15)' },
                     { label: 'Tareas en Metas', value: `${stats.completedLinkedTasks}/${stats.totalLinkedTasks}`, icon: ListChecks, color: '#0ea5e9', bg: 'rgba(14,165,233,0.1)', border: 'rgba(14,165,233,0.15)' },
-                    { label: 'Progreso Semanal', value: `${stats.weeklyProgress}%`, icon: TrendingUp, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.15)' },
+                    { label: 'Cumplidas', value: stats.completedGoals, icon: CheckCircle, color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.15)' },
+                    { label: 'Prog. Total (Acumulado)', value: `${stats.avgProgress}%`, icon: BarChart3, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.15)' },
+                    { label: 'Prog. Semanal (Velocidad)', value: `${stats.weeklyProgress}%`, icon: TrendingUp, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.15)' },
                 ].map(card => (
                     <div
                         key={card.label}
@@ -364,16 +356,19 @@ export default function OpsGoals() {
                             </button>
                         </div>
                         <ArrowUpDown size={12} className="text-slate-400" />
-                        <select
+                        <SearchableSelect
                             value={sortBy}
-                            onChange={e => setSortBy(e.target.value as any)}
-                            className="text-[11px] font-bold text-slate-500 bg-transparent border-none outline-none cursor-pointer pr-1"
-                        >
-                            <option value="newest">Recientes</option>
-                            <option value="deadline">Deadline</option>
-                            <option value="progress">Progreso</option>
-                            <option value="name">Nombre</option>
-                        </select>
+                            onChange={(val: string) => setSortBy(val as any)}
+                            options={[
+                                { value: 'newest', label: 'Recientes' },
+                                { value: 'deadline', label: 'Deadline' },
+                                { value: 'progress', label: 'Progreso' },
+                                { value: 'name', label: 'Nombre' }
+                            ]}
+                            placeholder="Ordenar por"
+                            className="text-[11px] font-bold text-slate-500 bg-transparent border border-slate-200 outline-none cursor-pointer px-2 py-1 shadow-sm hover:bg-slate-50 rounded-lg h-[26px]"
+                            containerClassName="w-[100px]"
+                        />
                     </div>
                 </div>
             </div>
@@ -810,16 +805,6 @@ function GoalFormDrawer({ goal, onClose, onSaved }: { goal: GoalData | null; onC
                         <label className="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Descripción</label>
                         <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 resize-none" placeholder="Detalle opcional..." />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Objetivo *</label>
-                            <input type="number" min="1" value={target} onChange={e => setTarget(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100" placeholder="50" required />
-                        </div>
-                        <div>
-                            <label className="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Unidad</label>
-                            <input value={unit} onChange={e => setUnit(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100" placeholder="locales, sesiones..." />
-                        </div>
-                    </div>
                     <div>
                         <label className="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Categoría</label>
                         <div className="grid grid-cols-3 gap-2">
@@ -841,32 +826,40 @@ function GoalFormDrawer({ goal, onClose, onSaved }: { goal: GoalData | null; onC
                     </div>
                     <div>
                         <label className="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Empresa (opcional)</label>
-                        <select value={companyId} onChange={e => setCompanyId(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 bg-white">
-                            <option value="">Sin empresa</option>
-                            {companies.map((c: any) => (
-                                <option key={c._id} value={c._id}>{c.name}</option>
-                            ))}
-                        </select>
+                        <SearchableSelect
+                            value={companyId}
+                            onChange={(val: string) => setCompanyId(val)}
+                            options={[
+                                { value: '', label: 'Sin empresa' },
+                                ...companies.map((c: any) => ({ value: c._id, label: c.name }))
+                            ]}
+                            placeholder="Sin empresa"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 bg-white"
+                        />
                     </div>
                     <div>
                         <label className="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Responsable (opcional)</label>
-                        <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 bg-white">
-                            <option value="">Yo (por defecto)</option>
-                            {teamUsers.map((u: any) => (
-                                <option key={u._id} value={u._id}>{u.name}</option>
-                            ))}
-                        </select>
+                        <SearchableSelect
+                            value={assignedTo}
+                            onChange={(val: string) => setAssignedTo(val)}
+                            options={[
+                                { value: '', label: 'Yo (por defecto)' },
+                                ...teamUsers.map((u: any) => ({ value: u._id, label: u.name }))
+                            ]}
+                            placeholder="Yo (por defecto)"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 bg-white"
+                        />
                     </div>
                 </form>
 
                 <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
                     <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-[14px] hover:bg-slate-50 transition-colors">Cancelar</button>
-                    <button onClick={handleSubmit as any} disabled={saving || !title.trim() || !target} className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-[14px] hover:-translate-y-0.5 hover:shadow-lg transition-all disabled:opacity-50 disabled:translate-y-0">
+                    <button onClick={handleSubmit as any} disabled={saving || !title.trim()} className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-[14px] hover:-translate-y-0.5 hover:shadow-lg transition-all disabled:opacity-50 disabled:translate-y-0">
                         {saving ? 'Guardando...' : goal ? 'Guardar' : 'Crear Meta'}
                     </button>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }
 

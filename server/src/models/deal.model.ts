@@ -33,6 +33,7 @@ export interface IDeal extends Document {
     opsStatus?: string;
     opsAssignedTo?: mongoose.Types.ObjectId;
     opsStartDate?: Date;
+    opsStatusHistory: IStatusChange[];
     createdAt: Date;
     updatedAt: Date;
 
@@ -134,6 +135,7 @@ const DealSchema = new Schema<IDeal>({
         type: Date,
         default: null,
     },
+    opsStatusHistory: { type: [StatusChangeSchema], default: [] },
 }, {
     timestamps: true,
     collection: 'crm_deals',
@@ -180,6 +182,18 @@ DealSchema.pre('save', function (next) {
                 to: this.status,
                 changedAt: new Date(),
                 changedBy: undefined, // Set by route handler via deal._previousStatus
+            });
+        }
+    }
+    // Track opsStatus changes
+    if (this.isModified('opsStatus') && !this.isNew) {
+        const prevOps = (this as any)._previousOpsStatus;
+        if (prevOps && prevOps !== this.opsStatus) {
+            this.opsStatusHistory.push({
+                from: prevOps,
+                to: this.opsStatus!,
+                changedAt: new Date(),
+                changedBy: (this as any)._opsChangedBy || undefined,
             });
         }
     }
