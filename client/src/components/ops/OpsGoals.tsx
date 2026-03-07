@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
     Target, Plus, TrendingUp, CheckCircle, Clock, Loader2, MoreHorizontal,
     Pencil, Trash2, BarChart3, Building2, X, History, ChevronRight, RotateCcw,
@@ -7,7 +8,8 @@ import {
 import {
     getOpsGoals, createOpsGoal, updateOpsGoal, updateOpsGoalProgress,
     completeOpsGoal, reopenOpsGoal, deleteOpsGoal, getOpsGoal, getOpsCompanies,
-    getOpsTasks, linkTaskToGoal, duplicateOpsGoal, archiveOpsGoal, manageOpsGoalMilestones
+    getOpsTasks, linkTaskToGoal, duplicateOpsGoal, archiveOpsGoal, manageOpsGoalMilestones,
+    updateOpsTask
 } from '../../services/ops.service';
 import OwnerAvatar from '../common/OwnerAvatar';
 import PremiumHeader from '../crm/PremiumHeader';
@@ -85,10 +87,33 @@ export default function OpsGoals() {
     const [editingGoal, setEditingGoal] = useState<GoalData | null>(null);
     const [detailGoal, setDetailGoal] = useState<GoalData | null>(null);
     const [menuOpen, setMenuOpen] = useState<string | null>(null);
+    const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
     const [progressModal, setProgressModal] = useState<GoalData | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const [deleteReason, setDeleteReason] = useState('');
     const [deleting, setDeleting] = useState(false);
-    const menuRef = { current: null as HTMLDivElement | null };
+    const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+    const toggleMenu = useCallback((goalId: string) => {
+        if (menuOpen === goalId) {
+            setMenuOpen(null);
+        } else {
+            const btn = menuButtonRefs.current[goalId];
+            if (btn) {
+                const r = btn.getBoundingClientRect();
+                const menuHeight = 290; // approximate dropdown height
+                const spaceBelow = window.innerHeight - r.bottom;
+                if (spaceBelow < menuHeight) {
+                    // Open upward
+                    setMenuPos({ bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right });
+                } else {
+                    // Open downward
+                    setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+                }
+            }
+            setMenuOpen(goalId);
+        }
+    }, [menuOpen]);
 
     // Close menu on outside click (replaces the z-40 overlay that was blocking menu clicks)
     useEffect(() => {
@@ -159,13 +184,14 @@ export default function OpsGoals() {
         setMenuOpen(null);
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, reason?: string) => {
         setDeleting(true);
         try {
-            await deleteOpsGoal(id);
+            await deleteOpsGoal(id, reason);
             loadGoals();
             setMenuOpen(null);
             setDeleteConfirm(null);
+            setDeleteReason('');
         } catch (err) {
             console.error('Error deleting goal:', err);
         } finally {
@@ -269,10 +295,9 @@ export default function OpsGoals() {
             )}
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4 shrink-0">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4 shrink-0">
                 {[
                     { label: 'Total Metas', value: stats.totalGoals, icon: Target, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.15)' },
-                    { label: 'Tareas en Metas', value: `${stats.completedLinkedTasks}/${stats.totalLinkedTasks}`, icon: ListChecks, color: '#0ea5e9', bg: 'rgba(14,165,233,0.1)', border: 'rgba(14,165,233,0.15)' },
                     { label: 'Cumplidas', value: stats.completedGoals, icon: CheckCircle, color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.15)' },
                     { label: 'Prog. Total (Acumulado)', value: `${stats.avgProgress}%`, icon: BarChart3, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.15)' },
                     { label: 'Prog. Semanal (Velocidad)', value: `${stats.weeklyProgress}%`, icon: TrendingUp, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.15)' },
@@ -342,33 +367,17 @@ export default function OpsGoals() {
                         <div className="flex items-center bg-white/50 rounded-lg border border-slate-100 p-0.5">
                             <button
                                 onClick={() => setViewMode('list')}
-                                className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                title="Vista lista"
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-[12px] font-bold ${viewMode === 'list' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-500 hover:text-slate-700'}`}
                             >
-                                <List size={14} />
+                                <List size={14} /> Lista
                             </button>
                             <button
                                 onClick={() => setViewMode('timeline')}
-                                className={`p-1.5 rounded-md transition-all ${viewMode === 'timeline' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-400 hover:text-slate-600'}`}
-                                title="Vista timeline"
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-[12px] font-bold ${viewMode === 'timeline' ? 'bg-white shadow-sm text-violet-600' : 'text-slate-500 hover:text-slate-700'}`}
                             >
-                                <CalendarRange size={14} />
+                                <CalendarRange size={14} /> Calendario
                             </button>
                         </div>
-                        <ArrowUpDown size={12} className="text-slate-400" />
-                        <SearchableSelect
-                            value={sortBy}
-                            onChange={(val: string) => setSortBy(val as any)}
-                            options={[
-                                { value: 'newest', label: 'Recientes' },
-                                { value: 'deadline', label: 'Deadline' },
-                                { value: 'progress', label: 'Progreso' },
-                                { value: 'name', label: 'Nombre' }
-                            ]}
-                            placeholder="Ordenar por"
-                            className="text-[11px] font-bold text-slate-500 bg-transparent border border-slate-200 outline-none cursor-pointer px-2 py-1 shadow-sm hover:bg-slate-50 rounded-lg h-[26px]"
-                            containerClassName="w-[100px]"
-                        />
                     </div>
                 </div>
             </div>
@@ -498,13 +507,14 @@ export default function OpsGoals() {
                                             {/* Actions */}
                                             <div className="relative" data-goal-menu onClick={e => e.stopPropagation()}>
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === goal._id ? null : goal._id); }}
+                                                    ref={el => { menuButtonRefs.current[goal._id] = el; }}
+                                                    onClick={(e) => { e.stopPropagation(); toggleMenu(goal._id); }}
                                                     className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
                                                 >
                                                     <MoreHorizontal size={16} />
                                                 </button>
-                                                {menuOpen === goal._id && (
-                                                    <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-[9999] w-44" style={{ position: 'absolute' }}>
+                                                {menuOpen === goal._id && createPortal(
+                                                    <div data-goal-menu className="fixed bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-[9999] w-44" style={{ ...(menuPos.top != null ? { top: `${menuPos.top}px` } : { bottom: `${menuPos.bottom}px` }), right: `${menuPos.right}px` }}>
                                                         <button onClick={(e) => { e.stopPropagation(); setMenuOpen(null); setProgressModal(goal); }} className="w-full text-left px-3 py-2 text-[13px] font-medium hover:bg-slate-50 flex items-center gap-2">
                                                             <FileText size={14} className="text-blue-500" /> Agregar Observación
                                                         </button>
@@ -530,7 +540,8 @@ export default function OpsGoals() {
                                                         <button onClick={(e) => { e.stopPropagation(); setMenuOpen(null); setDeleteConfirm(goal._id); }} className="w-full text-left px-3 py-2 text-[13px] font-medium hover:bg-red-50 text-red-600 flex items-center gap-2">
                                                             <Trash2 size={14} /> Eliminar
                                                         </button>
-                                                    </div>
+                                                    </div>,
+                                                    document.body
                                                 )}
                                             </div>
                                         </div>
@@ -711,18 +722,28 @@ export default function OpsGoals() {
                             <AlertTriangle size={28} />
                         </div>
                         <h3 className="text-[20px] font-bold text-slate-800 mb-2 tracking-tight">¿Eliminar esta meta?</h3>
-                        <p className="text-slate-500 text-[14px] mb-6 leading-relaxed">
+                        <p className="text-slate-500 text-[14px] mb-4 leading-relaxed">
                             Se eliminarán también todas las observaciones. Las tareas vinculadas serán desvinculadas automáticamente.
                         </p>
+                        <div className="mb-5">
+                            <label className="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Motivo de eliminación (opcional)</label>
+                            <textarea
+                                value={deleteReason}
+                                onChange={e => setDeleteReason(e.target.value)}
+                                rows={2}
+                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-[14px] focus:outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100 resize-none placeholder:text-slate-400"
+                                placeholder="Ej: Meta duplicada, ya no es relevante..."
+                            />
+                        </div>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => setDeleteConfirm(null)}
+                                onClick={() => { setDeleteConfirm(null); setDeleteReason(''); }}
                                 className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-[14px] hover:bg-slate-50 transition-colors text-[14px]"
                             >
                                 Cancelar
                             </button>
                             <button
-                                onClick={() => handleDelete(deleteConfirm)}
+                                onClick={() => handleDelete(deleteConfirm, deleteReason.trim() || undefined)}
                                 disabled={deleting}
                                 className="flex-1 py-3 px-4 bg-red-500 text-white font-bold rounded-[14px] hover:bg-red-600 transition-colors shadow-sm shadow-red-500/30 text-[14px] disabled:opacity-50"
                             >
@@ -744,8 +765,6 @@ export default function OpsGoals() {
 function GoalFormDrawer({ goal, onClose, onSaved }: { goal: GoalData | null; onClose: () => void; onSaved: () => void }) {
     const [title, setTitle] = useState(goal?.title || '');
     const [description, setDescription] = useState(goal?.description || '');
-    const [target, setTarget] = useState(goal?.target?.toString() || '');
-    const [unit, setUnit] = useState(goal?.unit || 'unidades');
     const [category, setCategory] = useState(goal?.category || 'operativo');
     const [deadline, setDeadline] = useState(goal?.deadline ? new Date(goal.deadline).toISOString().split('T')[0] : '');
     const [companyId, setCompanyId] = useState(goal?.company?._id?.toString() || '');
@@ -761,14 +780,12 @@ function GoalFormDrawer({ goal, onClose, onSaved }: { goal: GoalData | null; onC
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!title.trim() || !target) return;
+        if (!title.trim()) return;
         setSaving(true);
         try {
             const data: any = {
                 title: title.trim(),
                 description: description.trim() || undefined,
-                target: parseInt(target),
-                unit,
                 category,
                 deadline: deadline || undefined,
                 company: companyId || null,
@@ -1122,74 +1139,6 @@ function GoalDetailDrawer({ goalId, onClose, onUpdated }: { goalId: string; onCl
                         </div>
                     )}
 
-                    {/* Feature #13: Milestones / Sub-metas */}
-                    <div>
-                        <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-[12px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                <ChevronRight size={13} /> Sub-metas ({goal.milestones?.filter(m => m.completed).length || 0}/{goal.milestones?.length || 0})
-                            </h4>
-                        </div>
-                        {goal.milestones && goal.milestones.length > 0 && (
-                            <div className="space-y-1.5 mb-3">
-                                {goal.milestones.map(ms => (
-                                    <div key={ms._id} className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${ms.completed ? 'bg-green-50/50 border-green-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                                        <button
-                                            onClick={async () => {
-                                                try {
-                                                    await manageOpsGoalMilestones(goalId, 'toggle', { milestoneId: ms._id });
-                                                    loadDetail();
-                                                    onUpdated();
-                                                } catch (err) { console.error(err); }
-                                            }}
-                                            className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${ms.completed ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-violet-400'}`}
-                                        >
-                                            {ms.completed && <CheckCircle size={12} />}
-                                        </button>
-                                        <span className={`text-[13px] flex-1 ${ms.completed ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}`}>
-                                            {ms.title}
-                                        </span>
-                                        <button
-                                            onClick={async () => {
-                                                try {
-                                                    await manageOpsGoalMilestones(goalId, 'remove', { milestoneId: ms._id });
-                                                    loadDetail();
-                                                    onUpdated();
-                                                } catch (err) { console.error(err); }
-                                            }}
-                                            className="w-5 h-5 rounded-md flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                                        >
-                                            <X size={11} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        <form
-                            onSubmit={async (e) => {
-                                e.preventDefault();
-                                const input = (e.target as any).milestone;
-                                const title = input.value.trim();
-                                if (!title) return;
-                                try {
-                                    await manageOpsGoalMilestones(goalId, 'add', { title });
-                                    input.value = '';
-                                    loadDetail();
-                                    onUpdated();
-                                } catch (err) { console.error(err); }
-                            }}
-                            className="flex gap-2"
-                        >
-                            <input
-                                name="milestone"
-                                placeholder="Agregar sub-meta..."
-                                className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-[13px] focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
-                            />
-                            <button type="submit" className="px-3 py-2 rounded-xl bg-violet-50 text-violet-600 border border-violet-100 text-[12px] font-bold hover:bg-violet-100 transition-colors">
-                                <Plus size={14} />
-                            </button>
-                        </form>
-                    </div>
-
                     {/* Tasks */}
                     <div>
                         <div className="flex items-center justify-between mb-3">
@@ -1256,11 +1205,27 @@ function GoalDetailDrawer({ goalId, onClose, onUpdated }: { goalId: string; onCl
                             <div className="space-y-2">
                                 {tasks.map((task: any) => {
                                     const isCompleted = task.status === 'completed';
+                                    const handleToggleTask = async (e: React.MouseEvent) => {
+                                        e.stopPropagation();
+                                        try {
+                                            await updateOpsTask(task._id, { status: isCompleted ? 'pending' : 'completed' });
+                                            loadDetail();
+                                            onUpdated();
+                                        } catch (err) { console.error('Error toggling task:', err); }
+                                    };
                                     return (
-                                        <div key={task._id} className={`flex items-center gap-3 p-3 rounded-xl border ${isCompleted ? 'bg-green-50/50 border-green-100' : 'bg-white border-slate-100'}`}>
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isCompleted ? 'border-green-500 bg-green-500' : 'border-slate-300'}`}>
-                                                {isCompleted && <CheckCircle size={12} className="text-white" />}
-                                            </div>
+                                        <div
+                                            key={task._id}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md hover:scale-[1.005] ${isCompleted ? 'bg-green-50/50 border-green-100' : 'bg-white border-slate-100 hover:border-violet-200'}`}
+                                            onClick={() => window.open(`/ops/tasks?taskId=${task._id}`, '_self')}
+                                        >
+                                            <button
+                                                onClick={handleToggleTask}
+                                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all hover:scale-110 ${isCompleted ? 'border-green-500 bg-green-500 hover:bg-green-600 hover:border-green-600' : 'border-slate-300 hover:border-violet-500 hover:bg-violet-50'}`}
+                                                title={isCompleted ? 'Marcar como pendiente' : 'Marcar como completada'}
+                                            >
+                                                {isCompleted && <CheckCircle size={13} className="text-white" />}
+                                            </button>
                                             <div className="flex-1 min-w-0">
                                                 <p className={`text-[13px] font-medium truncate ${isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.title}</p>
                                                 {task.dueDate && (
@@ -1274,7 +1239,7 @@ function GoalDetailDrawer({ goalId, onClose, onUpdated }: { goalId: string; onCl
                                                 <OwnerAvatar name={task.assignedTo.name} profilePhotoUrl={task.assignedTo.profilePhotoUrl} size="xs" />
                                             )}
                                             <button
-                                                onClick={() => handleUnlinkTask(task._id)}
+                                                onClick={(e) => { e.stopPropagation(); handleUnlinkTask(task._id); }}
                                                 className="w-6 h-6 rounded-md flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
                                                 title="Desvincular tarea"
                                             >

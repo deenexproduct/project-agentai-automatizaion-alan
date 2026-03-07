@@ -128,8 +128,8 @@ export const reopenOpsGoal = async (id: string) => {
     return data;
 };
 
-export const deleteOpsGoal = async (id: string) => {
-    const { data } = await api.delete(`/ops/goals/${id}`);
+export const deleteOpsGoal = async (id: string, reason?: string) => {
+    const { data } = await api.delete(`/ops/goals/${id}`, { data: { reason } });
     return data;
 };
 

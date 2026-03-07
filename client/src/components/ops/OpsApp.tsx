@@ -25,6 +25,7 @@ interface SidebarItem {
 
 const opsGroup: SidebarItem[] = [
     { id: 'dashboard', Icon: BarChart3, label: 'Estadísticas' },
+    { id: 'pipeline', Icon: Columns3, label: 'Pipeline' },
     { id: 'monitoring', Icon: Monitor, label: 'Monitoreo' },
     { id: 'tasks', Icon: CheckSquare, label: 'Tareas' },
     { id: 'goals', Icon: Target, label: 'Objetivos' },

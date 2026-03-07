@@ -1299,8 +1299,24 @@ router.patch('/goals/:id/archive', async (req: Request, res: Response) => {
  */
 router.delete('/goals/:id', async (req: Request, res: Response) => {
     try {
-        const goal = await Goal.findByIdAndDelete(req.params.id);
+        const userId = (req as any).user._id;
+        const { reason } = req.body || {};
+
+        const goal = await Goal.findById(req.params.id).lean();
         if (!goal) return res.status(404).json({ error: 'Meta no encontrada.' });
+
+        // Log deletion as Activity (preserves audit trail)
+        const reasonSuffix = reason ? ` — Motivo: ${reason}` : '';
+        await Activity.create({
+            type: 'note',
+            description: `🗑️ Meta eliminada: ${goal.title}${reasonSuffix}`,
+            company: goal.company || undefined,
+            createdBy: userId,
+            userId,
+            completedAt: new Date(),
+        });
+
+        await Goal.findByIdAndDelete(req.params.id);
 
         // Unlink all tasks that referenced this goal
         await Task.updateMany({ goal: req.params.id }, { $unset: { goal: 1 } });

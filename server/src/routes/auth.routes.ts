@@ -3,6 +3,16 @@ import jwt from 'jsonwebtoken';
 import { UserModel } from '../models/user.model';
 import { emailService } from '../services/email.service';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { Task } from '../models/task.model';
+import { Deal } from '../models/deal.model';
+import { Goal } from '../models/goal.model';
+import { Event } from '../models/event.model';
+import { EventFair } from '../models/event-fair.model';
+import { CrmContact } from '../models/crm-contact.model';
+import { Company } from '../models/company.model';
+import { Partner } from '../models/partner.model';
+import { Activity } from '../models/activity.model';
+import { WeeklyReport } from '../models/weeklyReport.model';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_development_secret_voice_multi_tenant_123';
@@ -317,6 +327,77 @@ router.put('/users/:userId/platforms', authMiddleware, async (req: Request, res:
     } catch (error) {
         console.error(`Error in /users/:userId/platforms: ${(error as Error).message}`);
         return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * @route   DELETE /api/auth/users/:userId
+ * @desc    Admin-only endpoint to delete a user and transfer their data
+ */
+router.delete('/users/:userId', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const adminUser = req.user as any;
+        if (adminUser.role !== 'admin') {
+            return res.status(403).json({ error: 'Solo administradores pueden eliminar usuarios.' });
+        }
+
+        const { userId } = req.params;
+        const { transferTo } = req.query;
+
+        if (!transferTo || typeof transferTo !== 'string') {
+            return res.status(400).json({ error: 'Se requiere un usuario destino para la transferencia (transferTo).' });
+        }
+
+        if (userId === adminUser._id.toString()) {
+            return res.status(400).json({ error: 'No puedes eliminarte a ti mismo.' });
+        }
+
+        if (userId === transferTo) {
+            return res.status(400).json({ error: 'El usuario origen y destino no pueden ser el mismo.' });
+        }
+
+        // Validate users exist
+        const [userToDelete, targetUser] = await Promise.all([
+            UserModel.findById(userId),
+            UserModel.findById(transferTo)
+        ]);
+
+        if (!userToDelete) return res.status(404).json({ error: 'El usuario a eliminar no existe.' });
+        if (!targetUser) return res.status(404).json({ error: 'El usuario destino no existe.' });
+
+        // Transfer all referenced data
+        const results = {
+            tasks: await Task.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            tasksCreated: await Task.updateMany({ userId: userId }, { userId: transferTo }),
+            deals: await Deal.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            dealsOps: await Deal.updateMany({ opsAssignedTo: userId }, { opsAssignedTo: transferTo }),
+            dealsCreated: await Deal.updateMany({ userId: userId }, { userId: transferTo }),
+            goals: await Goal.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            goalsCreated: await Goal.updateMany({ userId: userId }, { userId: transferTo }),
+            events: await Event.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            eventFairs: await EventFair.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            eventFairsCreated: await EventFair.updateMany({ userId: userId }, { userId: transferTo }),
+            contacts: await CrmContact.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            companies: await Company.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            partners: await Partner.updateMany({ assignedTo: userId }, { assignedTo: transferTo }),
+            activities: await Activity.updateMany({ createdBy: userId }, { createdBy: transferTo }),
+            reports: await WeeklyReport.updateMany(
+                { 'assignedTo._id': userId },
+                { $set: { assignedTo: { _id: targetUser._id, name: targetUser.name || targetUser.email } } }
+            ),
+            invitedUsers: await UserModel.updateMany({ invitedBy: userId }, { invitedBy: transferTo }),
+        };
+
+        // Delete the user
+        await UserModel.findByIdAndDelete(userId);
+
+        return res.json({
+            message: 'Usuario eliminado y datos transferidos con éxito.',
+            transferResults: results
+        });
+    } catch (error) {
+        console.error(`Error in DELETE /users/:userId: ${(error as Error).message}`);
+        return res.status(500).json({ error: 'Error interno al eliminar el usuario.' });
     }
 });
 

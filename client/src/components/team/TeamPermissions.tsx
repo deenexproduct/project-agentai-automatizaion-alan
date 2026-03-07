@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../lib/axios';
-import { Users, Mail, UserPlus, Shield, Clock, Search, AlertCircle, CheckCircle2, Monitor, Settings } from 'lucide-react';
+import { Users, Mail, UserPlus, Shield, Clock, Search, AlertCircle, CheckCircle2, Monitor, Settings, Trash2 } from 'lucide-react';
 
 interface TeamMember {
     _id: string;
@@ -31,6 +31,11 @@ export default function TeamPermissions() {
     const [inviteMessage, setInviteMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+
+    const [userToDelete, setUserToDelete] = useState<TeamMember | null>(null);
+    const [transferTargetId, setTransferTargetId] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteMessage, setDeleteMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
         loadMembers();
@@ -73,6 +78,30 @@ export default function TeamPermissions() {
             });
         } finally {
             setIsInviting(false);
+        }
+    };
+
+    const handleDeleteUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!userToDelete || !transferTargetId) return;
+
+        setIsDeleting(true);
+        setDeleteMessage(null);
+
+        try {
+            const res = await api.delete(`/auth/users/${userToDelete._id}?transferTo=${transferTargetId}`);
+            setDeleteMessage({ type: 'success', text: res.data.message || 'Usuario eliminado con éxito.' });
+            setTimeout(() => {
+                setUserToDelete(null);
+                setDeleteMessage(null);
+                loadMembers();
+            }, 2000);
+        } catch (error: any) {
+            setDeleteMessage({
+                type: 'error',
+                text: error.response?.data?.error || 'Falló la eliminación del usuario.'
+            });
+            setIsDeleting(false);
         }
     };
 
@@ -241,6 +270,21 @@ export default function TeamPermissions() {
                                                         );
                                                     })}
                                                 </div>
+
+                                                {/* Delete Button */}
+                                                {member._id !== user?._id && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setUserToDelete(member);
+                                                            setTransferTargetId('');
+                                                            setDeleteMessage(null);
+                                                        }}
+                                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-2"
+                                                        title="Eliminar usuario"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -345,6 +389,83 @@ export default function TeamPermissions() {
                     </form>
                 </div>
             </div>
+
+            {/* Delete Confirmation Modal */}
+            {userToDelete && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="p-6">
+                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4">
+                                <AlertCircle className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">
+                                Eliminar Usuario: {userToDelete.name || userToDelete.email}
+                            </h3>
+                            <p className="text-sm text-slate-500 mb-6 relative z-10">
+                                Al eliminar a este usuario, toda su información y responsabilidades (tareas, metas, negocios, etc.) debe ser transferida a otro miembro del equipo.
+                            </p>
+
+                            {deleteMessage && (
+                                <div className={`p-4 rounded-xl mb-6 text-sm flex items-start gap-3 border ${deleteMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                    {deleteMessage.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
+                                    <p className="pt-0.5 leading-tight">{deleteMessage.text}</p>
+                                </div>
+                            )}
+
+                            {(!deleteMessage || deleteMessage.type === 'error') && (
+                                <form onSubmit={handleDeleteUser} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Transferir responsables a:</label>
+                                        <select
+                                            value={transferTargetId}
+                                            onChange={(e) => setTransferTargetId(e.target.value)}
+                                            required
+                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-slate-900"
+                                        >
+                                            <option value="">Seleccionar miembro...</option>
+                                            {members.filter(m => m._id !== userToDelete._id).map(m => (
+                                                <option key={m._id} value={m._id}>
+                                                    {m.name || m.email}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-3 pt-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setUserToDelete(null);
+                                                setDeleteMessage(null);
+                                            }}
+                                            disabled={isDeleting}
+                                            className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium rounded-xl transition-colors disabled:opacity-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={isDeleting || !transferTargetId}
+                                            className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {isDeleting ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                    Eliminando...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Trash2 className="w-4 h-4" />
+                                                    Eliminar e Informar
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

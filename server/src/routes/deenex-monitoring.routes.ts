@@ -32,6 +32,26 @@ router.use(authMiddleware, requireDeenexDB);
 
 import mongoose from 'mongoose';
 
+// ── TEMPORARY DEBUG: Sample documents to inspect field names ──
+router.get('/debug/sample', async (req: Request, res: Response) => {
+    try {
+        const Order = getDeenexOrderModel();
+        const Cliente = getDeenexClienteModel();
+
+        const sampleOrder = await Order.findOne().lean();
+        const sampleClient = await Cliente.findOne().lean();
+
+        return res.json({
+            sampleOrderFields: sampleOrder ? Object.keys(sampleOrder) : [],
+            sampleOrderData: sampleOrder,
+            sampleClientFields: sampleClient ? Object.keys(sampleClient) : [],
+            sampleClientData: sampleClient,
+        });
+    } catch (error: any) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 // ── Helper: build date/brand/local filters ───────────────────
 function buildFilters(query: any) {
     const filters: any = {};
@@ -220,18 +240,67 @@ router.get('/clients/stats', async (req: Request, res: Response) => {
                 { $group: { _id: '$sexo', count: { $sum: 1 } } },
             ]),
 
-            // Health analysis (active / at risk / dormant) based on order dates
+            // Health analysis (active / at risk / dormant) based on last order date
+            // Computed from pagos collection since ultimaCompra may not be populated
+            // Activo: ≤30 days since last order
+            // En Riesgo: 31-90 days since last order
+            // Dormido: >90 days since last order
             (async () => {
                 const now = new Date();
                 const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                const d60 = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+                const d90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-                const [active, atRisk, dormant] = await Promise.all([
-                    Cliente.countDocuments({ ...filters, ultimaCompra: { $gte: d30 } }),
-                    Cliente.countDocuments({ ...filters, ultimaCompra: { $gte: d60, $lt: d30 } }),
-                    Cliente.countDocuments({ ...filters, ultimaCompra: { $lt: d60 } }),
+                const healthAgg = await Order.aggregate([
+                    {
+                        $match: {
+                            ...orderFilters,
+                            idCliente: { $exists: true, $nin: [null, '', 0] },
+                        },
+                    },
+                    {
+                        $addFields: {
+                            _orderDate: {
+                                $ifNull: ['$createdAt', { $toDate: '$_id' }],
+                            },
+                        },
+                    },
+                    {
+                        $group: {
+                            _id: { $toString: '$idCliente' },
+                            lastOrderDate: { $max: '$_orderDate' },
+                        },
+                    },
+                    {
+                        $project: {
+                            status: {
+                                $cond: [
+                                    { $gte: ['$lastOrderDate', d30] },
+                                    'active',
+                                    {
+                                        $cond: [
+                                            { $gte: ['$lastOrderDate', d90] },
+                                            'atRisk',
+                                            'dormant',
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        $group: {
+                            _id: '$status',
+                            count: { $sum: 1 },
+                        },
+                    },
                 ]);
-                return { active, atRisk, dormant };
+
+                const statusMap = new Map(healthAgg.map((h: any) => [h._id, h.count]));
+                return {
+                    active: statusMap.get('active') || 0,
+                    atRisk: statusMap.get('atRisk') || 0,
+                    dormant: statusMap.get('dormant') || 0,
+                };
             })(),
 
             // CLV + purchase data computed from pagos (orders) collection
@@ -273,9 +342,21 @@ router.get('/clients/stats', async (req: Request, res: Response) => {
 
         const ob = orderBehavior[0] || { totalBuyers: 0, avgCLV: 0, maxCLV: 0, totalRevenue: 0, avgPurchases: 0, avgSpent: 0 };
 
+        // Friendly labels for registration methods
+        const methodLabels: Record<string, string> = {
+            invitado: 'Invitado (Guest)',
+            email: 'Email',
+            google: 'Google',
+            apple: 'Apple',
+            facebook: 'Facebook',
+        };
+
         return res.json({
             total,
-            registrationMethods: registrationMethods.map((r: any) => ({ method: r._id || 'desconocido', count: r.count })),
+            registrationMethods: registrationMethods.map((r: any) => ({
+                method: methodLabels[r._id] || r._id || 'desconocido',
+                count: r.count,
+            })),
             genderDistribution: genderDist.map((g: any) => ({ gender: g._id || 'no_especificado', count: g.count })),
             purchaseBehavior: {
                 totalBuyers: ob.totalBuyers,
@@ -354,12 +435,12 @@ router.get('/orders/stats', async (req: Request, res: Response) => {
                 },
             ]),
 
-            // Monthly trend (last 6 months)
+            // Monthly trend — show all available months (no date restriction)
             Order.aggregate([
                 {
                     $match: {
                         ...filters,
-                        createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
+                        createdAt: { $exists: true, $ne: null },
                     },
                 },
                 {

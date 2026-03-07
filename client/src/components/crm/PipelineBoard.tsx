@@ -188,8 +188,8 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
                     search={search}
                     onSearchChange={setSearch}
                     searchPlaceholder="Buscar deal por título, empresa..."
-                    onAdd={() => handleAddDeal()}
-                    addLabel="Nuevo Deal"
+                    onAdd={isOps ? undefined : () => handleAddDeal()}
+                    addLabel={isOps ? undefined : "Nuevo Deal"}
                     containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
                 >
                     <div className="hidden md:flex gap-2 items-center mx-2">
@@ -287,7 +287,7 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
                                                     background: snapshot.isDraggingOver ? `${stage.color}15` : 'transparent'
                                                 }}
                                             >
-                                                {stage.deals.length === 0 && !snapshot.isDraggingOver && (
+                                                {stage.deals.length === 0 && !snapshot.isDraggingOver && !isOps && (
                                                     <div className="h-full flex items-center justify-center pt-8">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleAddDeal(stage.key); }}
