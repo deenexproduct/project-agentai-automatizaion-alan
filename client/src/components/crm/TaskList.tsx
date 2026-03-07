@@ -278,7 +278,7 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
             </div>
 
             {/* Premium Header Reutilizable */}
-            <div className="shrink-0 z-10 bg-white/40 backdrop-blur-2xl rounded-[24px] overflow-hidden mb-4 border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
+            <div className="shrink-0 z-10 bg-white/40 backdrop-blur-2xl rounded-[24px] mb-4 border border-white/60 shadow-[0_8px_32px_rgba(30,27,75,0.05)]">
                 <PremiumHeader
                     search={search}
                     onSearchChange={setSearch}
@@ -288,7 +288,7 @@ export default function TaskList({ urlTaskId, platform }: { urlTaskId?: string, 
                     containerClassName="px-5 py-2.5 !border-none !shadow-none bg-transparent"
                 >
                     {/* Responsable Filter */}
-                    <div className="relative flex items-center">
+                    <div className="relative flex items-center z-20">
                         <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                             <OwnerAvatar
                                 name={teamUsers.find(u => u._id === assignedToFilter)?.name || ''}

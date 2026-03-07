@@ -57,13 +57,15 @@ const rgba = (hex: string, a: number) => {
 // ══════════════════════════════════════════════════════════════
 
 /* ── Glass card ───────────────────────────────────────────── */
-const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+const Card = ({ children, className = '', style, onClick }: { children: React.ReactNode; className?: string; style?: React.CSSProperties; onClick?: () => void }) => (
     <div className={`rounded-3xl p-7 ${className}`}
+        onClick={onClick}
         style={{
             background: 'rgba(255,255,255,0.72)',
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(255,255,255,0.7)',
             boxShadow: '0 1px 2px rgba(0,0,0,0.03), 0 4px 24px rgba(99,102,241,0.04)',
+            ...style,
         }}>
         {children}
     </div>
@@ -257,7 +259,7 @@ export default function DeenexMonitoring() {
                     </h2>
                     <p className="text-sm text-gray-400 mt-1 font-medium">Estadísticas en tiempo real · Base de datos Deenex</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 relative z-20">
                     {brands.length > 1 && (
                         <SearchableSelect
                             value={selectedBrand}

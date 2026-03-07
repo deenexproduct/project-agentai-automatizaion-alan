@@ -9,7 +9,7 @@ import {
     ThumbsUp, ThumbsDown, Minus, Target, RotateCcw,
     Eye, Reply, Ban, Star, Info, Bell, MessageSquare,
     CheckCheck, CircleDot, HelpCircle, ArrowRightLeft, UserX, UserCheck, ArrowRight, ChevronRight,
-    ListTodo, Plus, Calendar, Flag, Trash2, Circle, GitBranch, DollarSign, TrendingUp, CheckSquare, History,
+    ListTodo, Plus, Calendar, Flag, Trash2, Trash, Circle, GitBranch, DollarSign, TrendingUp, CheckSquare, History,
     Camera, ImagePlus
 } from 'lucide-react';
 import {
@@ -580,7 +580,7 @@ export default function ContactActivityDrawer({ contactId, contactPreview, open,
                                 className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-white hover:bg-red-50 text-slate-400 hover:text-red-500 shadow-sm border border-slate-200/60 hover:border-red-200 hover:scale-105"
                                 title="Eliminar Contacto"
                             >
-                                <Trash2 size={14} strokeWidth={2.5} />
+                                <Trash size={14} strokeWidth={2.5} />
                             </button>
                             <button
                                 onClick={onClose}

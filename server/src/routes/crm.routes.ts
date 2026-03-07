@@ -571,14 +571,7 @@ router.delete('/contacts/:id', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
 
-        // Check for active deals
-        const activeDeals = await Deal.countDocuments({
-            $or: [{ primaryContact: req.params.id }, { contacts: req.params.id }],
-            status: { $nin: ['ganado', 'perdido'] },
-        });
-        if (activeDeals > 0) {
-            return res.status(400).json({ error: `No se puede eliminar: el contacto está en ${activeDeals} negocio(s) activo(s)` });
-        }
+
 
         const result = await CrmContact.deleteOne({ _id: req.params.id });
         if (result.deletedCount === 0) return res.status(404).json({ error: 'Contact not found' });
