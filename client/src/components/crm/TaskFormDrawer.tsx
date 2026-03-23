@@ -203,7 +203,15 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
         }
     };
 
+    // Prevent backdrop click from closing the drawer immediately after mounting
+    // (the click that opened the drawer can propagate to the backdrop as a native event)
+    const mountedAtRef = useRef(0);
+    useEffect(() => {
+        if (open) mountedAtRef.current = Date.now();
+    }, [open]);
+
     const handleBackdropClick = (e: React.MouseEvent) => {
+        if (Date.now() - mountedAtRef.current < 200) return;
         if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
             handleAttemptClose();
         }
@@ -343,7 +351,7 @@ export default function TaskFormDrawer({ task, open, initialDate, onClose, onSav
     return (
         <div
             onClick={handleBackdropClick}
-            className="fixed inset-0 z-[100] flex justify-end"
+            className="fixed inset-0 z-[150] flex justify-end"
             style={{
                 background: 'rgba(15, 23, 42, 0.4)', // Darker, moodier slate backdrop
                 backdropFilter: 'blur(8px)',

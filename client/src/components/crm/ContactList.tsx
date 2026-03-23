@@ -55,16 +55,13 @@ export default function ContactList({ onSelectContact, urlContactId, platform }:
             .filter(Boolean)
     )).sort() as string[];
 
+    // role and assignedTo filters are now server-side; only company name and locales remain client-side
     const filteredContacts = contacts.filter(contact => {
-        if (roleFilter && contact.role !== roleFilter) return false;
-
         if (companyFilter) {
             const hasCompany = (contact.companies && contact.companies.some(c => c.name === companyFilter)) ||
                 (contact.company?.name === companyFilter);
             if (!hasCompany) return false;
         }
-
-        if (assignedToFilter && contact.assignedTo?._id !== assignedToFilter) return false;
 
         if (localesFilter) {
             let maxLocales = contact.company?.localesCount || 0;
@@ -89,7 +86,11 @@ export default function ContactList({ onSelectContact, urlContactId, platform }:
                 const data = await getOpsContacts();
                 setContacts(data);
             } else {
-                const res = await getContacts({ search, limit: 100 });
+                const params: any = { search, limit: 100 };
+                if (roleFilter) params.role = roleFilter;
+                if (assignedToFilter) params.assignedTo = assignedToFilter;
+                // channel filter not exposed in UI yet
+                const res = await getContacts(params);
                 setContacts(res.contacts);
             }
         } catch (error) {
@@ -99,13 +100,13 @@ export default function ContactList({ onSelectContact, urlContactId, platform }:
         }
     };
 
-    // Debounced search
+    // Debounced search + filter changes
     useEffect(() => {
         const timeout = setTimeout(() => {
             loadContacts();
         }, 300);
         return () => clearTimeout(timeout);
-    }, [search]);
+    }, [search, roleFilter, assignedToFilter, companyFilter]);
 
     const handleOpenContact = (contact: ContactData) => {
         if (onSelectContact) {

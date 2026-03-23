@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCompanies, CompanyData, getTeamUsers, TeamUser } from '../../services/crm.service';
 import { getOpsCompanies } from '../../services/ops.service';
@@ -7,6 +7,7 @@ import CompanyFormDrawer from './CompanyFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
 import SearchableSelect from '../common/SearchableSelect';
+import { useCompanyLogos } from '../../hooks/useCompanyLogos';
 
 export default function CompanyList({ onSelectCompany, urlCompanyId, platform }: { onSelectCompany?: (id: string) => void, urlCompanyId?: string, platform?: 'comercial' | 'operaciones' }) {
     const isOps = platform === 'operaciones';
@@ -45,7 +46,16 @@ export default function CompanyList({ onSelectCompany, urlCompanyId, platform }:
                 const data = await getOpsCompanies();
                 setCompanies(data);
             } else {
-                const res = await getCompanies({ search, limit: 100 });
+                const params: any = { search, limit: 100 };
+                if (assignedToFilter) params.assignedTo = assignedToFilter;
+                // Map localesFilter ranges to min/max for server-side filtering
+                if (localesFilter) {
+                    if (localesFilter === '0-10') { params.localesMin = '0'; params.localesMax = '10'; }
+                    else if (localesFilter === '11-50') { params.localesMin = '11'; params.localesMax = '50'; }
+                    else if (localesFilter === '51-100') { params.localesMin = '51'; params.localesMax = '100'; }
+                    else if (localesFilter === '100+') { params.localesMin = '101'; }
+                }
+                const res = await getCompanies(params);
                 setCompanies(res.companies);
             }
         } catch (error) {
@@ -55,13 +65,13 @@ export default function CompanyList({ onSelectCompany, urlCompanyId, platform }:
         }
     };
 
-    // Debounced search
+    // Debounced search + filter changes
     useEffect(() => {
         const timeout = setTimeout(() => {
             loadCompanies();
         }, 300);
         return () => clearTimeout(timeout);
-    }, [search]);
+    }, [search, assignedToFilter, localesFilter]);
 
     const handleEdit = (company: CompanyData, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -92,19 +102,12 @@ export default function CompanyList({ onSelectCompany, urlCompanyId, platform }:
         }
     };
 
-    const filteredCompanies = companies.filter(company => {
-        if (assignedToFilter && company.assignedTo?._id !== assignedToFilter) return false;
+    // Filters are now applied server-side — no client-side filtering needed
+    const filteredCompanies = companies;
 
-        if (localesFilter) {
-            const count = company.localesCount || 0;
-            if (localesFilter === '0-10' && (count < 0 || count > 10)) return false;
-            if (localesFilter === '11-50' && (count < 11 || count > 50)) return false;
-            if (localesFilter === '51-100' && (count < 51 || count > 100)) return false;
-            if (localesFilter === '100+' && count <= 100) return false;
-        }
-
-        return true;
-    });
+    // Lazy-load logos from cache + API
+    const companyIds = useMemo(() => companies.map(c => c._id), [companies]);
+    const logoCache = useCompanyLogos(companyIds);
 
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] min-h-[500px] relative mt-4 pb-20 md:pb-0">
@@ -219,12 +222,12 @@ export default function CompanyList({ onSelectCompany, urlCompanyId, platform }:
 
                                     <div className="relative z-10 flex w-full gap-4">
                                         <div className="w-14 h-14 rounded-[16px] border border-white/80 bg-white/80 flex items-center justify-center shadow-sm shrink-0 overflow-hidden backdrop-blur-md group-hover:shadow-[0_4px_12px_rgba(139,92,246,0.15)] transition-all relative">
-                                            {company.logo ? (
+                                            {logoCache[company._id]?.logo ? (
                                                 <img
-                                                    src={company.logo}
+                                                    src={logoCache[company._id].logo}
                                                     alt={company.name}
                                                     className="w-full h-full object-contain p-1 absolute inset-0 z-10"
-                                                    style={{ backgroundColor: company.themeColor || 'rgba(255, 255, 255, 0.5)' }}
+                                                    style={{ backgroundColor: logoCache[company._id]?.themeColor || 'rgba(255, 255, 255, 0.5)' }}
                                                     onError={(e) => {
                                                         e.currentTarget.style.display = 'none';
                                                         const spanFallback = e.currentTarget.parentElement?.querySelector('span');
@@ -234,7 +237,7 @@ export default function CompanyList({ onSelectCompany, urlCompanyId, platform }:
                                             ) : null}
                                             <span
                                                 className="font-black text-violet-500 text-xl tracking-tight relative z-0"
-                                                style={{ display: company.logo ? 'none' : 'block' }}
+                                                style={{ display: logoCache[company._id]?.logo ? 'none' : 'block' }}
                                             >
                                                 {company.name.substring(0, 2).toUpperCase()}
                                             </span>

@@ -21,6 +21,7 @@ import { formatToArgentineDate } from '../../utils/date';
 import DealFormDrawer from './DealFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
+import { useCompanyLogos } from '../../hooks/useCompanyLogos';
 
 // Helper: extraer el userId del JWT almacenado en localStorage
 function getCurrentUserId(): string | null {
@@ -48,9 +49,10 @@ interface DealCardVisualProps {
     isDragging?: boolean;
     isOverlay?: boolean;
     onEdit?: (deal: DealData, e: React.MouseEvent) => void;
+    cachedLogo?: { logo: string; themeColor?: string };
 }
 
-const DealCardVisual = memo(function DealCardVisual({ deal, isDragging, isOverlay, onEdit }: DealCardVisualProps) {
+const DealCardVisual = memo(function DealCardVisual({ deal, isDragging, isOverlay, onEdit, cachedLogo }: DealCardVisualProps) {
     return (
         <div
             onClick={(e) => onEdit?.(deal, e)}
@@ -78,12 +80,12 @@ const DealCardVisual = memo(function DealCardVisual({ deal, isDragging, isOverla
                 <div className="flex items-start gap-3 mb-4">
                     <div className="relative">
                         <div className="w-8 h-8 rounded-[8px] border border-slate-200/80 bg-white/80 flex items-center justify-center shadow-sm shrink-0 overflow-hidden relative mt-0.5" title={deal.company?.name || deal.primaryContact?.fullName || deal.title}>
-                            {deal.company?.logo || deal.primaryContact?.profilePhotoUrl ? (
+                            {cachedLogo?.logo ? (
                                 <img
-                                    src={deal.company?.logo || deal.primaryContact?.profilePhotoUrl}
+                                    src={cachedLogo.logo}
                                     alt="Logo"
                                     className="w-full h-full object-contain p-0.5 absolute inset-0 z-10"
-                                    style={{ backgroundColor: deal.company?.themeColor || 'transparent' }}
+                                    style={{ backgroundColor: cachedLogo.themeColor || 'transparent' }}
                                     onError={(e) => {
                                         e.currentTarget.style.display = 'none';
                                         const spanFallback = e.currentTarget.parentElement?.querySelector('span');
@@ -91,7 +93,7 @@ const DealCardVisual = memo(function DealCardVisual({ deal, isDragging, isOverla
                                     }}
                                 />
                             ) : null}
-                            <span className="font-bold text-[13px] text-slate-600 uppercase relative z-0" style={{ display: (deal.company?.logo || deal.primaryContact?.profilePhotoUrl) ? 'none' : 'block' }}>
+                            <span className="font-bold text-[13px] text-slate-600 uppercase relative z-0" style={{ display: cachedLogo?.logo ? 'none' : 'block' }}>
                                 {(deal.company?.name || deal.primaryContact?.fullName || deal.title || '?').charAt(0)}
                             </span>
                         </div>
@@ -151,7 +153,7 @@ const DealCardVisual = memo(function DealCardVisual({ deal, isDragging, isOverla
 });
 
 // ── SortableDealCard — wraps DealCardVisual with dnd-kit sortable ──
-function SortableDealCard({ deal, onEdit }: { deal: DealData; onEdit: (deal: DealData, e: React.MouseEvent) => void }) {
+function SortableDealCard({ deal, onEdit, cachedLogo }: { deal: DealData; onEdit: (deal: DealData, e: React.MouseEvent) => void; cachedLogo?: { logo: string; themeColor?: string } }) {
     const {
         attributes,
         listeners,
@@ -168,7 +170,7 @@ function SortableDealCard({ deal, onEdit }: { deal: DealData; onEdit: (deal: Dea
 
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-            <DealCardVisual deal={deal} isDragging={isDragging} onEdit={onEdit} />
+            <DealCardVisual deal={deal} isDragging={isDragging} onEdit={onEdit} cachedLogo={cachedLogo} />
         </div>
     );
 }
@@ -180,12 +182,14 @@ function DroppableColumn({
     isDragOver,
     onAddDeal,
     onEditDeal,
+    logoCache,
 }: {
     stage: StageData;
     isOps: boolean;
     isDragOver: boolean;
     onAddDeal: (stageKey: string) => void;
     onEditDeal: (deal: DealData, e: React.MouseEvent) => void;
+    logoCache: Record<string, { logo: string; themeColor?: string }>;
 }) {
     const { setNodeRef } = useDroppable({ id: stage.key });
 
@@ -236,7 +240,7 @@ function DroppableColumn({
                         </div>
                     )}
                     {stage.deals.map((deal) => (
-                        <SortableDealCard key={deal._id} deal={deal} onEdit={onEditDeal} />
+                        <SortableDealCard key={deal._id} deal={deal} onEdit={onEditDeal} cachedLogo={deal.company?._id ? logoCache[deal.company._id] : undefined} />
                     ))}
                 </div>
             </SortableContext>
@@ -257,6 +261,18 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
     const [overColumnKey, setOverColumnKey] = useState<string | null>(null);
     const navigate = useNavigate();
     const currentUserId = useMemo(() => getCurrentUserId(), []);
+
+    // Extract company IDs from all deals for logo caching
+    const companyIds = useMemo(() => {
+        const ids = new Set<string>();
+        for (const stage of stages) {
+            for (const deal of stage.deals) {
+                if (deal.company?._id) ids.add(deal.company._id);
+            }
+        }
+        return Array.from(ids);
+    }, [stages]);
+    const logoCache = useCompanyLogos(companyIds);
 
     // dnd-kit sensor — requires 5px movement before starting drag (prevents accidental drags on click)
     const sensors = useSensors(
@@ -531,6 +547,7 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
                                     isDragOver={overColumnKey === stage.key}
                                     onAddDeal={handleAddDeal}
                                     onEditDeal={handleEditDeal}
+                                    logoCache={logoCache}
                                 />
                             ))}
                         </div>
@@ -539,7 +556,7 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
                         <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
                             {activeDeal ? (
                                 <div style={{ width: 280 }}>
-                                    <DealCardVisual deal={activeDeal} isOverlay />
+                                    <DealCardVisual deal={activeDeal} isOverlay cachedLogo={activeDeal.company?._id ? logoCache[activeDeal.company._id] : undefined} />
                                 </div>
                             ) : null}
                         </DragOverlay>

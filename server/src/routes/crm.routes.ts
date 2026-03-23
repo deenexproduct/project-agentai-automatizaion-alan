@@ -71,71 +71,91 @@ router.post('/pipeline/config/seed', async (req: Request, res: Response) => {
 //  COMPANIES
 // ════════════════════════════════════════════════════════════════
 
+// ── GET /companies/logos — Batch fetch logos (cached client-side) ──
+router.get('/companies/logos', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id.toString();
+        const ids = ((req.query.ids as string) || '').split(',').filter(Boolean);
+        if (!ids.length) return res.json({});
+
+        const mongoose = require('mongoose');
+        const objectIds = ids.map(id => new mongoose.Types.ObjectId(id));
+
+        const companies = await Company.find(
+            { _id: { $in: objectIds }, userId: new mongoose.Types.ObjectId(userId) },
+            { _id: 1, logo: 1, themeColor: 1, updatedAt: 1 }
+        ).lean();
+
+        const logoMap: Record<string, { logo?: string; themeColor?: string; updatedAt?: string }> = {};
+        for (const c of companies) {
+            if (c.logo) {
+                logoMap[c._id.toString()] = { logo: c.logo, themeColor: c.themeColor, updatedAt: (c as any).updatedAt?.toISOString?.() || '' };
+            }
+        }
+
+        res.json(logoMap);
+    } catch (err: any) {
+        console.error('CRM companies logos error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch logos' });
+    }
+});
+
 // ── GET /companies — List with search + pagination ───────────
 router.get('/companies', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id.toString();
-        const { search, sector, assignedTo, page = '1', limit = '20' } = req.query;
+        const { search, sector, assignedTo, localesMin, localesMax, page = '1', limit = '20' } = req.query;
 
         const pageNum = Math.max(1, parseInt(page as string) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
 
-        const query: any = {};
-        if (sector) query.sector = sector;
-        if (assignedTo) query.assignedTo = assignedTo;
-        if (search) {
-            const s = search as string;
-            query.name = { $regex: s, $options: 'i' };
+        const match: any = { userId: new (require('mongoose').Types.ObjectId)(userId) };
+        if (sector) match.sector = sector;
+        if (assignedTo) match.assignedTo = new (require('mongoose').Types.ObjectId)(assignedTo as string);
+        if (search) match.name = { $regex: search as string, $options: 'i' };
+        if (localesMin || localesMax) {
+            match.localesCount = {};
+            if (localesMin) match.localesCount.$gte = parseInt(localesMin as string);
+            if (localesMax) match.localesCount.$lte = parseInt(localesMax as string);
         }
 
-        const [companies, total] = await Promise.all([
-            Company.find(query)
-                .sort({ createdAt: -1 })
-                .skip((pageNum - 1) * limitNum)
-                .limit(limitNum)
-                .populate('assignedTo', 'name email profilePhotoUrl')
-                .populate('partner', 'name')
-                .populate('competitors', 'name logo')
-                .lean(),
-            Company.countDocuments(query),
-        ]);
+        // Single aggregation pipeline: fetch + count + contact/deal counts
+        const pipeline: any[] = [
+            { $match: match },
+            { $sort: { createdAt: -1 as const } },
+            {
+                $facet: {
+                    data: [
+                        { $skip: (pageNum - 1) * limitNum },
+                        { $limit: limitNum },
+                        // Lightweight populate — only fields needed for list view
+                        { $lookup: { from: 'users', localField: 'assignedTo', foreignField: '_id', as: '_assigned', pipeline: [{ $project: { name: 1, email: 1, profilePhotoUrl: 1 } }] } },
+                        { $lookup: { from: 'partners', localField: 'partner', foreignField: '_id', as: '_partner', pipeline: [{ $project: { name: 1 } }] } },
+                        // Count contacts in a single $lookup
+                        { $lookup: { from: 'crm_contacts', let: { cid: '$_id' }, pipeline: [{ $match: { $expr: { $or: [{ $eq: ['$company', '$$cid'] }, { $in: ['$$cid', { $ifNull: ['$companies', []] }] }] } } }, { $count: 'n' }], as: '_cc' } },
+                        // Count deals in a single $lookup
+                        { $lookup: { from: 'crm_deals', localField: '_id', foreignField: 'company', pipeline: [{ $count: 'n' }], as: '_dc' } },
+                        {
+                            $addFields: {
+                                assignedTo: { $arrayElemAt: ['$_assigned', 0] },
+                                partner: { $arrayElemAt: ['$_partner', 0] },
+                                contactsCount: { $ifNull: [{ $arrayElemAt: ['$_cc.n', 0] }, 0] },
+                                dealsCount: { $ifNull: [{ $arrayElemAt: ['$_dc.n', 0] }, 0] },
+                            }
+                        },
+                        // Exclude heavy fields not needed in list view (logos = 80% of payload)
+                        { $project: { _assigned: 0, _partner: 0, _cc: 0, _dc: 0, logo: 0, notes: 0, research: 0, description: 0 } },
+                    ],
+                    count: [{ $count: 'total' }],
+                }
+            },
+        ];
 
-        // Attach counts for each company
-        const companyIds = companies.map(c => c._id);
-        const [contactCounts, dealCounts] = await Promise.all([
-            CrmContact.aggregate([
-                { $match: { $or: [{ company: { $in: companyIds } }, { companies: { $in: companyIds } }] } },
-                {
-                    $project: {
-                        matchedCompanies: {
-                            $setUnion: [
-                                { $cond: [{ $in: ['$company', companyIds] }, ['$company'], []] },
-                                { $filter: { input: { $ifNull: ['$companies', []] }, cond: { $in: ['$$this', companyIds] } } }
-                            ]
-                        }
-                    }
-                },
-                { $unwind: '$matchedCompanies' },
-                { $group: { _id: '$matchedCompanies', count: { $sum: 1 } } },
-            ]),
-            Deal.aggregate([
-                { $match: { company: { $in: companyIds } } },
-                { $group: { _id: '$company', count: { $sum: 1 } } },
-            ]),
-        ]);
+        const [result] = await Company.aggregate(pipeline);
+        const companies = result.data;
+        const total = result.count[0]?.total || 0;
 
-        const contactMap: Record<string, number> = {};
-        for (const c of contactCounts) contactMap[c._id.toString()] = c.count;
-        const dealMap: Record<string, number> = {};
-        for (const d of dealCounts) dealMap[d._id.toString()] = d.count;
-
-        const enriched = companies.map(c => ({
-            ...c,
-            contactsCount: contactMap[c._id.toString()] || 0,
-            dealsCount: dealMap[c._id.toString()] || 0,
-        }));
-
-        res.json({ companies: enriched, total, page: pageNum, pages: Math.ceil(total / limitNum) });
+        res.json({ companies, total, page: pageNum, pages: Math.ceil(total / limitNum) });
     } catch (err: any) {
         console.error('CRM companies list error:', err.message);
         res.status(500).json({ error: 'Failed to fetch companies' });
@@ -281,39 +301,82 @@ router.get('/contacts', async (req: Request, res: Response) => {
 
         const pageNum = Math.max(1, parseInt(page as string) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
+        const ObjectId = require('mongoose').Types.ObjectId;
 
-        const query: any = {};
+        const match: any = { userId: new ObjectId(userId) };
         if (company) {
-            query.$or = [{ company: company }, { companies: company }];
+            match.$or = [{ company: new ObjectId(company as string) }, { companies: new ObjectId(company as string) }];
         }
-        if (role) query.role = role;
-        if (channel) query.channel = channel;
-        if (assignedTo) query.assignedTo = assignedTo;
+        if (role) match.role = role;
+        if (channel) match.channel = channel;
+        if (assignedTo) match.assignedTo = new ObjectId(assignedTo as string);
+
+        // Search using aggregation with $lookup instead of separate Company.find()
         if (search) {
             const s = search as string;
-
-            // Buscar empresas que coincidan con el término de búsqueda
-            const matchingCompanies = await Company.find(
-                { name: { $regex: s, $options: 'i' } },
-                { _id: 1 }
-            ).lean();
-            const companyIds = matchingCompanies.map(c => c._id);
-            console.log(`🔍 Contact search: "${s}" → found ${companyIds.length} matching companies`);
-
-            query.$or = [
-                { fullName: { $regex: s, $options: 'i' } },
-                { email: { $regex: s, $options: 'i' } },
-                { position: { $regex: s, $options: 'i' } },
-                ...(companyIds.length > 0 ? [
-                    { company: { $in: companyIds } },
-                    { companies: { $in: companyIds } },
-                ] : []),
-            ];
+            const regex = { $regex: s, $options: 'i' };
+            // We'll handle company-name search inside the aggregation pipeline
+            match._searchTerm = s; // Marker for pipeline builder below
         }
 
+        // Use aggregation for search (to join company names) or simple find otherwise
+        if (search) {
+            const s = search as string;
+            delete match._searchTerm;
+            const regex = { $regex: s, $options: 'i' };
+
+            const pipeline: any[] = [
+                { $match: { userId: new ObjectId(userId), ...(role ? { role } : {}), ...(channel ? { channel } : {}), ...(assignedTo ? { assignedTo: new ObjectId(assignedTo as string) } : {}) } },
+                // Lookup primary company name
+                { $lookup: { from: 'crm_companies', localField: 'company', foreignField: '_id', as: '_companyData', pipeline: [{ $project: { name: 1, logo: 1, sector: 1, localesCount: 1 } }] } },
+                // Lookup multi-companies
+                { $lookup: { from: 'crm_companies', localField: 'companies', foreignField: '_id', as: '_companiesData', pipeline: [{ $project: { name: 1, logo: 1, sector: 1, localesCount: 1 } }] } },
+                // Filter: match contact fields OR company name
+                {
+                    $match: {
+                        $or: [
+                            { fullName: regex },
+                            { email: regex },
+                            { position: regex },
+                            { '_companyData.name': regex },
+                            { '_companiesData.name': regex },
+                        ]
+                    }
+                },
+                { $sort: { createdAt: -1 as const } },
+                {
+                    $facet: {
+                        data: [
+                            { $skip: (pageNum - 1) * limitNum },
+                            { $limit: limitNum },
+                            // Lookup assignedTo and partner
+                            { $lookup: { from: 'users', localField: 'assignedTo', foreignField: '_id', as: '_assigned', pipeline: [{ $project: { name: 1, email: 1, profilePhotoUrl: 1 } }] } },
+                            { $lookup: { from: 'partners', localField: 'partner', foreignField: '_id', as: '_partnerData', pipeline: [{ $project: { name: 1 } }] } },
+                            {
+                                $addFields: {
+                                    company: { $arrayElemAt: ['$_companyData', 0] },
+                                    companies: '$_companiesData',
+                                    assignedTo: { $arrayElemAt: ['$_assigned', 0] },
+                                    partner: { $arrayElemAt: ['$_partnerData', 0] },
+                                }
+                            },
+                            { $project: { _companyData: 0, _companiesData: 0, _assigned: 0, _partnerData: 0 } },
+                        ],
+                        count: [{ $count: 'total' }],
+                    }
+                },
+            ];
+
+            const [result] = await CrmContact.aggregate(pipeline);
+            const contacts = result.data;
+            const total = result.count[0]?.total || 0;
+            return res.json({ contacts, total, page: pageNum, pages: Math.ceil(total / limitNum) });
+        }
+
+        // Non-search path: simple find with populate (already fast)
         const [contacts, total] = await Promise.all([
-            CrmContact.find(query)
-                .populate('company', 'name logo localesCount')
+            CrmContact.find(match)
+                .populate('company', 'name localesCount')
                 .populate('companies', 'name logo sector localesCount')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .populate('partner', 'name')
@@ -321,7 +384,7 @@ router.get('/contacts', async (req: Request, res: Response) => {
                 .skip((pageNum - 1) * limitNum)
                 .limit(limitNum)
                 .lean(),
-            CrmContact.countDocuments(query),
+            CrmContact.countDocuments(match),
         ]);
 
         res.json({ contacts, total, page: pageNum, pages: Math.ceil(total / limitNum) });
@@ -598,12 +661,10 @@ router.get('/deals', async (req: Request, res: Response) => {
         if (assignedTo) query.assignedTo = assignedTo;
 
         const deals = await Deal.find(query)
-            .populate('company', 'name logo sector localesCount franchiseCount ownedCount costPerLocation')
-            .populate('primaryContact', 'fullName position profilePhotoUrl')
-            .populate('contacts', 'fullName position profilePhotoUrl email phone')
+            .populate('company', 'name sector localesCount franchiseCount ownedCount costPerLocation themeColor')
+            .populate('primaryContact', 'fullName position')
             .populate('assignedTo', 'name email profilePhotoUrl')
-            .populate('userId', 'name profilePhotoUrl email')
-            .populate('statusHistory.changedBy', 'name profilePhotoUrl email')
+            .select('-notes -opsStatusHistory -contacts')
             .sort({ createdAt: -1 })
             .lean();
 
@@ -930,7 +991,7 @@ router.get('/tasks', async (req: Request, res: Response) => {
             Task.find(query)
                 .populate('contact', 'fullName profilePhotoUrl phone email')
                 .populate('deal', 'title')
-                .populate('company', 'name logo localesCount')
+                .populate('company', 'name localesCount')
                 .populate('assignedTo', 'name email profilePhotoUrl')
                 .sort({ dueDate: 1, priority: -1 })
                 .skip((pageNum - 1) * limitNum)
@@ -990,7 +1051,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
         const populated = await Task.findById(task._id)
             .populate('contact', 'fullName profilePhotoUrl phone email')
             .populate('deal', 'title')
-            .populate('company', 'name logo localesCount')
+            .populate('company', 'name localesCount')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 
@@ -1019,7 +1080,7 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
         )
             .populate('contact', 'fullName profilePhotoUrl phone email')
             .populate('deal', 'title')
-            .populate('company', 'name logo localesCount')
+            .populate('company', 'name localesCount')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 
@@ -1048,7 +1109,7 @@ router.patch('/tasks/:id/complete', async (req: Request, res: Response) => {
         const populatedTask = await Task.findById(task._id)
             .populate('contact', 'fullName profilePhotoUrl phone email')
             .populate('deal', 'title')
-            .populate('company', 'name logo localesCount')
+            .populate('company', 'name localesCount')
             .populate('assignedTo', 'name email profilePhotoUrl')
             .lean();
 

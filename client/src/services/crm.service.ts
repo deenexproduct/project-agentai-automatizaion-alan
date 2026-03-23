@@ -360,6 +360,7 @@ export const getDashboardStats = async () => (await api.get<DashboardStats>('/da
 
 // Companies
 export const getCompanies = async (params: any) => (await api.get<{ companies: CompanyData[]; total: number; pages: number }>('/crm/companies', { params })).data;
+export const getCompanyLogos = async (ids: string[]) => (await api.get<Record<string, { logo: string; themeColor?: string; updatedAt?: string }>>('/crm/companies/logos', { params: { ids: ids.join(',') } })).data;
 export const getCompany = async (id: string) => (await api.get<CompanyData & { contacts: ContactData[], deals: DealData[], tasks: TaskData[], activities: ActivityData[] }>(`/crm/companies/${id}`)).data;
 export const createCompany = async (data: Partial<CompanyData>) => (await api.post<CompanyData>('/crm/companies', data)).data;
 export const updateCompany = async (id: string, data: Partial<CompanyData>) => (await api.patch<CompanyData>(`/crm/companies/${id}`, data)).data;
