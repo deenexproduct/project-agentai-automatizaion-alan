@@ -54,7 +54,6 @@ type SidebarTab =
   | "pipeline"
   | "companies"
   | "contacts"
-  | "metrics"
   | "tasks"
   | "partners"
   | "competitors"
@@ -135,15 +134,6 @@ const whatsappGroup: SidebarItem[] = [
     Icon: MessageCircle,
     label: "WhatsApp",
     accentColor: "#25D366",
-  },
-];
-
-const monitoringGroup: SidebarItem[] = [
-  {
-    id: "metrics",
-    Icon: BarChart3,
-    label: "Métricas App",
-    accentColor: "#8b5cf6",
   },
 ];
 
@@ -230,20 +220,6 @@ export default function LinkedInApp() {
 
           {/* CRM Group */}
           {crmGroup.map((item) => (
-            <SidebarButton
-              key={item.id}
-              {...item}
-              active={activeTab === item.id}
-              onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)}
-            />
-          ))}
-          <div
-            className="w-8 my-1 shrink-0"
-            style={{ height: 1, background: "rgba(255,255,255,0.1)" }}
-          />
-
-          {/* Monitoring Group */}
-          {monitoringGroup.map((item) => (
             <SidebarButton
               key={item.id}
               {...item}
@@ -392,15 +368,13 @@ export default function LinkedInApp() {
                                           ? "Transcriptor de Audio"
                                           : activeTab === "whatsapp"
                                             ? "WhatsApp Scheduler"
-                                            : activeTab === "metrics"
-                                              ? "Métricas de la App"
-                                              : activeTab === "extension"
-                                                ? "Extensión Deenex"
-                                                : activeTab === "team"
-                                                  ? "Equipo y Permisos"
-                                                  : activeTab === "profile"
-                                                    ? "Mi Perfil"
-                                                    : "Configuración"}
+                                            : activeTab === "extension"
+                                              ? "Extensión Deenex"
+                                              : activeTab === "team"
+                                                ? "Equipo y Permisos"
+                                                : activeTab === "profile"
+                                                  ? "Mi Perfil"
+                                                  : "Configuración"}
             </h1>
           </div>
 
@@ -451,7 +425,6 @@ export default function LinkedInApp() {
           {activeTab === "prospecting" && <ProspectingPage />}
           {activeTab === "config" && <ConfigPage />}
           {activeTab === "whatsapp" && <WhatsAppPage />}
-          {activeTab === "metrics" && <MetricsDashboard />}
           {activeTab === "voice" && <VoiceCommandPage />}
           {activeTab === "extension" && <ExtensionPage />}
           {activeTab === "team" && <TeamPermissions />}
@@ -516,6 +489,7 @@ function SidebarButton({
           transform: hovered && !disabled ? "scale(1.1)" : "scale(1)",
           boxShadow: active ? `0 0 15px ${accent}4D` : "none",
         }}
+        title={label}
       >
         {/* Active indicator bar */}
         {active && (
