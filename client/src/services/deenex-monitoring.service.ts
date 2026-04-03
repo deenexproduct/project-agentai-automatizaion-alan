@@ -68,3 +68,14 @@ export const getDeenexLocationsLeaderboard = async (filters?: DeenexFilters) => 
     const { data } = await api.get('/deenex-monitoring/locations/leaderboard', { params: toParams(filters) });
     return data;
 };
+
+// ── Product Metrics (New Requested Section) ──────────────────
+export const getDeenexProductMetrics = async (params: {
+    brandId?: string;
+    baseDate?: string;
+    periodType?: 'weekly' | 'monthly' | 'quarterly' | 'four-monthly';
+    periodsCount?: number;
+}) => {
+    const { data } = await api.get('/deenex-monitoring/product-metrics', { params });
+    return data;
+};

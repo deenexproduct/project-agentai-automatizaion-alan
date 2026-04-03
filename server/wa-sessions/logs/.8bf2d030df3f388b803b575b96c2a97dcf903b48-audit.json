@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/home/lr/Workspace/Deenex/project-agentai-automatizaion-alan/server/wa-sessions/logs/.8bf2d030df3f388b803b575b96c2a97dcf903b48-audit.json",
+    "files": [
+        {
+            "date": 1775163529057,
+            "name": "/home/lr/Workspace/Deenex/project-agentai-automatizaion-alan/server/wa-sessions/logs/whatsapp-2026-04-02.log",
+            "hash": "eabf0f2c7286f213a7ed81cbcf89c534c01a3978136e422192c3679cf465b8c8"
+        },
+        {
+            "date": 1775244930545,
+            "name": "/home/lr/Workspace/Deenex/project-agentai-automatizaion-alan/server/wa-sessions/logs/whatsapp-2026-04-03.log",
+            "hash": "f3d072769aac38b76ef05c13dcb573c5e862bf74f338bf120283f03075c90edd"
+        }
+    ],
+    "hashType": "sha256"
+}
