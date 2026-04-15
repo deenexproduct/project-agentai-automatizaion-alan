@@ -750,10 +750,18 @@ import { DeenexMetricsService } from '../services/deenex-metrics.service';
 // ══════════════════════════════════════════════════════════════
 router.get('/product-metrics', async (req: Request, res: Response) => {
     try {
-        const { brandId, baseDate, periodType, periodsCount } = req.query;
+        const { brandIds, brandId, baseDate, periodType, periodsCount } = req.query;
+
+        let parsedBrandIds: string[] = [];
+        if (brandIds) {
+            if (Array.isArray(brandIds)) parsedBrandIds = brandIds as string[];
+            else if (typeof brandIds === 'string') parsedBrandIds = brandIds.split(',');
+        } else if (brandId) {
+            parsedBrandIds = [brandId as string];
+        }
 
         const metrics = await DeenexMetricsService.getProductMetrics({
-            brandId: brandId as string,
+            brandIds: parsedBrandIds,
             baseDate: baseDate ? new Date(baseDate as string) : new Date(),
             periodType: (periodType as any) || 'monthly',
             periodsCount: periodsCount ? parseInt(periodsCount as string) : 3
@@ -767,3 +775,4 @@ router.get('/product-metrics', async (req: Request, res: Response) => {
 });
 
 export default router;
+// touch to trigger tsx watch

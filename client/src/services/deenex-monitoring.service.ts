@@ -71,11 +71,19 @@ export const getDeenexLocationsLeaderboard = async (filters?: DeenexFilters) => 
 
 // ── Product Metrics (New Requested Section) ──────────────────
 export const getDeenexProductMetrics = async (params: {
-    brandId?: string;
+    brandIds?: string[];
     baseDate?: string;
     periodType?: 'weekly' | 'monthly' | 'quarterly' | 'four-monthly';
     periodsCount?: number;
 }) => {
-    const { data } = await api.get('/deenex-monitoring/product-metrics', { params });
+    // Convert array to comma-separated string for simpler query parsing if needed
+    const queryParams: any = { ...params };
+    if (params.brandIds && params.brandIds.length > 0) {
+        queryParams.brandIds = params.brandIds.join(',');
+    } else {
+        delete queryParams.brandIds;
+    }
+    
+    const { data } = await api.get('/deenex-monitoring/product-metrics', { params: queryParams });
     return data;
 };

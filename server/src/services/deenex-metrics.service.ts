@@ -13,15 +13,27 @@ import {
     subDays,
     getYear,
     getMonth,
-    format as formatDate 
+    format as formatDate,
+    differenceInDays,
+    isAfter
 } from 'date-fns';
 
 export interface MetricsResult {
     periodLabel: string;
+    isCurrent?: boolean;
+    daysElapsed?: number;
     metrics: {
         tasaRegistro: number;
+        localesActivosCount: number;
         localesActivos50Orders: number;
         localesActivosTotal: number;
+        pedidosPorLocal: number;
+        pedidosTotales: number;
+        gmv: number;
+        aov: number;
+        cantMesa: number;
+        cantLlevar: number;
+        cantDelivery: number;
         ahorroDirecto: number;
         pPedidosMesa: number;
         pPedidosLlevar: number;
@@ -38,12 +50,12 @@ export interface MetricsResult {
 
 export class DeenexMetricsService {
     static async getProductMetrics(options: { 
-        brandId?: string, 
+        brandIds?: string[], 
         baseDate?: Date, 
         periodType: 'weekly' | 'monthly' | 'quarterly' | 'four-monthly',
         periodsCount?: number 
     }): Promise<MetricsResult[]> {
-        const { brandId, baseDate = new Date(), periodType, periodsCount = 3 } = options;
+        const { brandIds = [], baseDate = new Date(), periodType, periodsCount = 3 } = options;
         
         // Define periods
         const results: MetricsResult[] = [];
@@ -85,12 +97,22 @@ export class DeenexMetricsService {
                 label = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
             }
 
-            const metrics = await this.calculateMetricsForPeriod(start, end, prevStart, prevEnd, brandId);
+            const metrics = await this.calculateMetricsForPeriod(start, end, prevStart, prevEnd, brandIds);
+            
+            // Check if baseDate falls within this period
+            const isCurrent = (start <= baseDate && baseDate <= endOfDay(end)) || (i === 0 && start <= baseDate);
+            const daysElapsed = isCurrent ? Math.max(1, differenceInDays(baseDate, start) + 1) : undefined;
+
             results.push({
                 periodLabel: label,
+                isCurrent,
+                daysElapsed,
                 metrics
             });
         }
+
+        // Reverse to exhibit chronological order (oldest -> newest)
+        results.reverse();
 
         return results;
     }
@@ -100,22 +122,25 @@ export class DeenexMetricsService {
         end: Date, 
         prevStart: Date,
         prevEnd: Date,
-        brandId?: string
+        brandIds: string[]
     ) {
         const Cliente = getDeenexClienteModel();
         const Order = getDeenexOrderModel();
         const Local = getDeenexLocalModel();
 
         const filters: any = {};
-        if (brandId) {
-            const brandObj = mongoose.Types.ObjectId.isValid(brandId) 
-                ? new mongoose.Types.ObjectId(brandId) 
-                : null;
-            
-            filters.$or = [
-                { idMarca: brandId },
-                { idMarca: brandObj }
-            ].filter(o => o.idMarca !== null);
+        if (brandIds && brandIds.length > 0) {
+            const orConditions: any[] = [];
+            for (const id of brandIds) {
+                if (!id) continue;
+                orConditions.push({ idMarca: id });
+                if (mongoose.Types.ObjectId.isValid(id)) {
+                    orConditions.push({ idMarca: new mongoose.Types.ObjectId(id) });
+                }
+            }
+            if (orConditions.length > 0) {
+                filters.$or = orConditions;
+            }
         }
 
         const orderFilters = { ...filters, created: { $gte: start, $lte: end } };
@@ -146,6 +171,7 @@ export class DeenexMetricsService {
                         totalBillingDelivery: { 
                             $sum: { $cond: [{ $in: ["$type", ["delivery", "delivery_propio"]] }, "$totalFacturado", 0] } 
                         },
+                        totalFacturado: { $sum: "$totalFacturado" },
                         countMesa: { $sum: { $cond: [{ $eq: ["$type", "mesa"] }, 1, 0] } },
                         countLlevar: { $sum: { $cond: [{ $eq: ["$type", "takeaway"] }, 1, 0] } }, 
                         countDelivery: { $sum: { $cond: [{ $in: ["$type", ["delivery", "delivery_propio"]] }, 1, 0] } },
@@ -181,7 +207,7 @@ export class DeenexMetricsService {
             })()
         ]);
 
-        const orderSummary = orders[0] || { totalOrders: 0, totalBillingDelivery: 0, countMesa: 0, countLlevar: 0, countDelivery: 0, activeUserIds: [] };
+        const orderSummary = orders[0] || { totalOrders: 0, totalFacturado: 0, totalBillingDelivery: 0, countMesa: 0, countLlevar: 0, countDelivery: 0, activeUserIds: [] };
         
         // Locales with > 50 orders
         const localesWith50 = await Order.aggregate([
@@ -196,6 +222,11 @@ export class DeenexMetricsService {
         // Final calculations
         const pRegistros = totalUsers > 0 ? (regCount / totalUsers) * 100 : 0;
         const localesActivos50 = totalLocals > 0 ? (localesWith50.length / totalLocals) * 100 : 0;
+        const pedidosPorLocal = totalLocals > 0 ? (orderSummary.totalOrders / totalLocals) : 0;
+        
+        const gmv = orderSummary.totalFacturado;
+        const aov = orderSummary.totalOrders > 0 ? gmv / orderSummary.totalOrders : 0;
+
         const ahorro = orderSummary.totalBillingDelivery * 0.15;
         const pMesa = orderSummary.totalOrders > 0 ? (orderSummary.countMesa / orderSummary.totalOrders) * 100 : 0;
         const pLlevar = orderSummary.totalOrders > 0 ? (orderSummary.countLlevar / orderSummary.totalOrders) * 100 : 0;
@@ -217,8 +248,16 @@ export class DeenexMetricsService {
 
         return {
             tasaRegistro: Number(pRegistros.toFixed(2)),
+            localesActivosCount: localesWith50.length,
             localesActivos50Orders: Number(localesActivos50.toFixed(2)),
             localesActivosTotal: totalLocals,
+            pedidosPorLocal: Number(pedidosPorLocal.toFixed(2)),
+            pedidosTotales: orderSummary.totalOrders,
+            gmv: gmv,
+            aov: Math.round(aov),
+            cantMesa: orderSummary.countMesa,
+            cantLlevar: orderSummary.countLlevar,
+            cantDelivery: orderSummary.countDelivery,
             ahorroDirecto: Math.round(ahorro),
             pPedidosMesa: Number(pMesa.toFixed(2)),
             pPedidosLlevar: Number(pLlevar.toFixed(2)),
