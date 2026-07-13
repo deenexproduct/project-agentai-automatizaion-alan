@@ -1,0 +1,11 @@
+# Runtime junk que NO debe subirse al build (rompe el indexado por sockets/locks y pesa cientos de MB).
+# Las sesiones de WhatsApp viven en el volumen persistente de prod, no en el artefacto de build.
+server/wa-sessions/
+**/SingletonSocket
+**/SingletonLock
+**/*.sock
+# Perfiles/caches de navegador que a veces quedan commiteados por error.
+**/Default/Cache/
+**/GraphiteDawnCache/
+node_modules/
+.git/

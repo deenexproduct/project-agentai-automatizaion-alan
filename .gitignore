@@ -2,7 +2,23 @@ node_modules/
 dist/
 uploads/
 wa-session/
+wa-sessions/
+server/wa-sessions/
 linkedin-session/
+
+# Perfiles/caches de navegador (Chromium/Puppeteer) que NO deben commitearse:
+# sockets que rompen el indexado del build y caches que pesan cientos de MB.
+**/SingletonSocket
+**/SingletonLock
+**/SingletonCookie
+*.sock
+**/Default/Cache/
+**/Default/Code Cache/
+**/GraphiteDawnCache/
+**/GPUCache/
+**/ShaderCache/
+**/DawnGraphiteCache/
+**/DawnWebGPUCache/
 .env
 *.log
 _archive/
