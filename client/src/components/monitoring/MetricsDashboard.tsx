@@ -243,6 +243,10 @@ const blocksConfig = [
         type: "currency",
         status: "good",
       },
+      // Filas COMPUESTAS: el valor no sale de un solo campo. computeValueString con type "mixPercent"/
+      // "mixCant" lee directamente los campos reales del backend (pPedidosMesa/Llevar/Delivery y
+      // cantMesa/Llevar/Delivery). El `key` es un placeholder intencional (no existe en MetricsResult) —
+      // no lo uses para leer valor/delta sin actualizar antes el formatter.
       {
         id: "value-mix-canales",
         name: "Mix: Takeaway / Delivery / Mesa",
@@ -252,7 +256,7 @@ const blocksConfig = [
           implication:
             "¿Cuantos pedidos se hacen presencial y cuantos desde casa?",
         },
-        key: "mixCanales",
+        key: "mixCanales", // placeholder — ver nota arriba (valor real desde pPedidos*)
         type: "mixPercent",
         status: "warning",
       },
@@ -265,7 +269,7 @@ const blocksConfig = [
           implication:
             "¿Cuantos pedidos se hacen presencial y cuantos desde casa?",
         },
-        key: "mixCant",
+        key: "mixCant", // placeholder — ver nota arriba (valor real desde cant*)
         type: "mixCant",
         status: "warning",
       },
