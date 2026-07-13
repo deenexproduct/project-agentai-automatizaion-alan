@@ -57,7 +57,8 @@ const blocksConfig = [
       {
         id: "adoption-locales-activos",
         name: "Locales Activos",
-        definition: "Locales con >50 órdenes mensuales.",
+        definition:
+          "Locales con muchos pedidos en el período (umbral ~50/mes, escalado al largo del período).",
         key: "localesActivosCount",
         suffix: " / total",
         type: "fraction",
@@ -67,9 +68,10 @@ const blocksConfig = [
       {
         id: "adoption-pct-locales-activos",
         name: "% Locales Activos",
-        definition: "% de locales que superan las 50 órdenes sobre el total",
+        definition:
+          "% de locales activos (umbral de pedidos escalado al período) sobre el total con status activo",
         tooltip: {
-          formula: "Locales activos / Totales",
+          formula: "Locales activos / Locales con status activo",
           implication:
             "¿Cuántos locales utilizan el canal propio de forma activa?",
         },
