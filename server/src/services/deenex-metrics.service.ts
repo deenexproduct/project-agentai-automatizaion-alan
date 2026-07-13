@@ -18,6 +18,30 @@ import {
     isAfter
 } from 'date-fns';
 
+// ── Reglas CANÓNICAS (alineadas con deenex-data / el admin de Palta, auditadas 2026-07) ─────────────────
+// venta real = paymentStatus PAGADO (sin gate de estadoDeOrden); GMV = VENTA BRUTA (incluye lo pagado con
+// puntos, misma cascada que ordenes.js/filtros.js BRUTO_FIELD); cliente registrado = typeUser!=guest Y
+// delete!='true' (campo String); delivery = cualquier type que empiece con "delivery" (propio + terceros/rappi).
+// Antes esto usaba: SIN filtro de pago (contaba pendientes/cancelados), GMV=totalFacturado cash, delivery solo
+// ["delivery","delivery_propio"] (perdía delivery_rappi ~74%), registrado por heurística de email @guest.com.
+const PAGADO = { $regex: /^pagado$/i };
+const NO_BORRADO = { delete: { $ne: 'true' } };
+const _num = (f: string) => ({ $convert: { input: f, to: 'double', onError: 0, onNull: 0 } });
+const BRUTO_FIELD: any = { $let: { vars: {
+    tobd: _num('$account.totalOriginalBeforeDiscounts'),
+    torig: _num('$account.totalOriginal'),
+    tf: _num('$totalFacturado'),
+    ptu: _num('$account.pointsToUse'),
+    ot: _num('$account.orderTotal'),
+    tot: _num('$total'),
+}, in: { $switch: { branches: [
+    { case: { $gt: ['$$tobd', 0] }, then: '$$tobd' },
+    { case: { $gt: ['$$torig', 0] }, then: '$$torig' },
+    { case: { $gt: ['$$tf', 0] }, then: { $add: ['$$tf', '$$ptu'] } },
+    { case: { $gt: ['$$ot', 0] }, then: '$$ot' },
+], default: '$$tot' } } } };
+const IS_DELIVERY: any = { $regexMatch: { input: { $ifNull: ['$type', ''] }, regex: /^delivery/ } };
+
 export interface MetricsResult {
     periodLabel: string;
     isCurrent?: boolean;
@@ -143,8 +167,9 @@ export class DeenexMetricsService {
             }
         }
 
-        const orderFilters = { ...filters, created: { $gte: start, $lte: end } };
-        const clientFilters = { ...filters }; 
+        // VENTA REAL: solo pedidos PAGADO (antes se contaban todos los estados → pedidos/GMV inflados).
+        const orderFilters = { ...filters, paymentStatus: PAGADO, created: { $gte: start, $lte: end } };
+        const clientFilters = { ...filters };
 
         const [
             regCount,
@@ -157,9 +182,10 @@ export class DeenexMetricsService {
             newRegistersWhoOrdered,
             recompraUsers
         ] = await Promise.all([
-            // 1. % registros sobre usuarios totales (IN THIS PERIOD)
-            Cliente.collection.countDocuments({ ...clientFilters, created: { $gte: start, $lte: end }, typeUser: { $ne: "guest" }, email: { $not: /@guest\.com$/i } }),
-            Cliente.collection.countDocuments({ ...clientFilters, created: { $gte: start, $lte: end }, $or: [{ typeUser: "guest" }, { email: { $regex: /@guest\.com$/i } }] }),
+            // 1. % registros sobre usuarios totales (IN THIS PERIOD). Registrado = typeUser!=guest Y no borrado
+            //    (canónico). Antes usaba heurística de email @guest.com; ahora gatea delete!='true'.
+            Cliente.collection.countDocuments({ ...clientFilters, created: { $gte: start, $lte: end }, typeUser: { $ne: "guest" }, ...NO_BORRADO }),
+            Cliente.collection.countDocuments({ ...clientFilters, created: { $gte: start, $lte: end }, typeUser: "guest", ...NO_BORRADO }),
 
             // Orders summary
             Order.aggregate([
@@ -168,13 +194,16 @@ export class DeenexMetricsService {
                     $group: {
                         _id: null,
                         totalOrders: { $sum: 1 },
-                        totalBillingDelivery: { 
-                            $sum: { $cond: [{ $in: ["$type", ["delivery", "delivery_propio"]] }, "$totalFacturado", 0] } 
+                        // GMV de delivery (para el ahorro vs agregadores) — TODO delivery (propio+terceros), en BRUTO.
+                        totalBillingDelivery: {
+                            $sum: { $cond: [IS_DELIVERY, BRUTO_FIELD, 0] }
                         },
-                        totalFacturado: { $sum: "$totalFacturado" },
+                        // GMV = VENTA BRUTA (no el cash de totalFacturado). Se mantiene el nombre del campo por compat.
+                        totalFacturado: { $sum: BRUTO_FIELD },
                         countMesa: { $sum: { $cond: [{ $eq: ["$type", "mesa"] }, 1, 0] } },
-                        countLlevar: { $sum: { $cond: [{ $eq: ["$type", "takeaway"] }, 1, 0] } }, 
-                        countDelivery: { $sum: { $cond: [{ $in: ["$type", ["delivery", "delivery_propio"]] }, 1, 0] } },
+                        countLlevar: { $sum: { $cond: [{ $eq: ["$type", "takeaway"] }, 1, 0] } },
+                        // Delivery = cualquier "delivery*" (incluye delivery_rappi/terceros que antes se perdían).
+                        countDelivery: { $sum: { $cond: [IS_DELIVERY, 1, 0] } },
                         activeUserIds: { $addToSet: "$idCliente" }
                     }
                 }
@@ -183,16 +212,16 @@ export class DeenexMetricsService {
             // 2. Locales activos
             Local.collection.countDocuments({ ...filters, statusLocal: true }),
 
-            // Growth
-            Cliente.collection.countDocuments({ ...filters, created: { $gte: start, $lte: end }, typeUser: { $ne: "guest" } }),
-            Cliente.collection.countDocuments({ ...filters, created: { $lte: end }, typeUser: { $ne: "guest" } }),
+            // Growth (altas registradas del período / base acumulada al fin) — no borrados.
+            Cliente.collection.countDocuments({ ...filters, created: { $gte: start, $lte: end }, typeUser: { $ne: "guest" }, ...NO_BORRADO }),
+            Cliente.collection.countDocuments({ ...filters, created: { $lte: end }, typeUser: { $ne: "guest" }, ...NO_BORRADO }),
 
             // % base activa
             Order.collection.distinct('idCliente', orderFilters),
 
             // % usuarios activados
             (async () => {
-                const newClientIds = await Cliente.collection.distinct('_id', { ...filters, created: { $gte: start, $lte: end }, typeUser: { $ne: "guest" } });
+                const newClientIds = await Cliente.collection.distinct('_id', { ...filters, created: { $gte: start, $lte: end }, typeUser: { $ne: "guest" }, ...NO_BORRADO });
                 if (newClientIds.length === 0) return 0;
                 const buyers = await Order.collection.distinct('idCliente', { ...orderFilters, idCliente: { $in: newClientIds.map(id => id.toString()) } });
                 return buyers.length;
@@ -200,7 +229,7 @@ export class DeenexMetricsService {
 
             // % recompra
             (async () => {
-                const oldClientIds = await Cliente.collection.distinct('_id', { ...filters, created: { $lt: start }, typeUser: { $ne: "guest" } });
+                const oldClientIds = await Cliente.collection.distinct('_id', { ...filters, created: { $lt: start }, typeUser: { $ne: "guest" }, ...NO_BORRADO });
                 if (oldClientIds.length === 0) return 0;
                 const buyers = await Order.collection.distinct('idCliente', { ...orderFilters, idCliente: { $in: oldClientIds.map(id => id.toString()) } });
                 return buyers.length;
@@ -239,9 +268,9 @@ export class DeenexMetricsService {
         const pActivados = newRegisters > 0 ? (newRegistersWhoOrdered / newRegisters) * 100 : 0;
         const pRecompra = totalRegistered > 0 ? (recompraUsers / totalRegistered) * 100 : 0;
 
-        // Calculate Healthy Base (users who ordered in current period AND previous period)
-        const currentPeriodUsers = await Order.collection.distinct('idCliente', { ...filters, created: { $gte: start, $lte: end } });
-        const prevPeriodUsers = await Order.collection.distinct('idCliente', { ...filters, created: { $gte: prevStart, $lte: prevEnd } });
+        // Calculate Healthy Base (users who ordered — VENTA REAL — in current period AND previous period)
+        const currentPeriodUsers = await Order.collection.distinct('idCliente', { ...filters, paymentStatus: PAGADO, created: { $gte: start, $lte: end } });
+        const prevPeriodUsers = await Order.collection.distinct('idCliente', { ...filters, paymentStatus: PAGADO, created: { $gte: prevStart, $lte: prevEnd } });
         const commonUsers = currentPeriodUsers.filter(id => prevPeriodUsers.includes(id));
 
         const pSaludable = totalRegistered > 0 ? (commonUsers.length / totalRegistered) * 100 : 0;
