@@ -1,0 +1,7 @@
+# Basura de sesión (WhatsApp/Chrome) — datos de runtime, no deben subirse al deploy
+server/wa-sessions/
+**/wa-sessions/
+**/SingletonSocket
+**/SingletonLock
+**/SingletonCookie
+node_modules/
