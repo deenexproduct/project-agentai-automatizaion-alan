@@ -182,10 +182,12 @@ router.get('/brands', async (req: Request, res: Response) => {
         const brands = await Brand.find().select('domain appName businessType rewardPointsSystem headerLogo colors createdAt').lean();
 
         const enriched = await Promise.all(brands.map(async (brand: any) => {
+            // idMarca se guarda como String en las colecciones; matcheamos String y ObjectId por robustez.
+            const marcaMatch = { $or: [{ idMarca: String(brand._id) }, { idMarca: brand._id }] };
             const [locals, clients, orders] = await Promise.all([
-                Local.countDocuments({ idMarca: brand._id }),
-                Cliente.countDocuments({ idMarca: brand._id }),
-                Order.countDocuments({ idMarca: brand._id }),
+                Local.countDocuments(marcaMatch),
+                Cliente.countDocuments(marcaMatch),
+                Order.countDocuments(marcaMatch),
             ]);
             return { ...brand, localsCount: locals, clientsCount: clients, ordersCount: orders };
         }));
