@@ -69,6 +69,10 @@ export interface MetricsResult {
         pUsuariosActivados: number;
         pBaseSaludable: number;
         pRecompra: number;
+        // Completadas 2026-07-13 (antes marcaban "⚠ Agregar" en el front):
+        frecuenciaCompra: number;   // pedidos ÷ compradores activos del período (venta real)
+        pUsuariosPuntos: number;    // % de la base registrada con historial de puntos
+        pChurn: number;             // % de compradores registrados inactivos +90 días (abandono)
     }
 }
 
@@ -275,6 +279,36 @@ export class DeenexMetricsService {
 
         const pSaludable = totalRegistered > 0 ? (commonUsers.length / totalRegistered) * 100 : 0;
 
+        // ── Métricas completadas 2026-07-13 (antes "⚠ Agregar" en el front) ──────────────────────────
+        // Frecuencia = pedidos (venta real) ÷ compradores activos del período (mismo criterio que
+        // frecuenciaCompra de deenex-data). activeUsersInPeriod = distinct idCliente de pedidos PAGADO.
+        const frecuencia = activeUsersInPeriod.length > 0 ? orderSummary.totalOrders / activeUsersInPeriod.length : 0;
+
+        // Usuarios en Puntos = % de la base registrada (al fin del período) con saldo de puntos. El campo real
+        // en usuariosregistrados es `totalPoints` (NO 'puntosHistoricos'; verificado contra prod).
+        const usuariosConPuntos = await Cliente.collection.countDocuments({ ...filters, created: { $lte: end }, typeUser: { $ne: 'guest' }, ...NO_BORRADO, totalPoints: { $gt: 0 } });
+        const pPuntos = totalRegistered > 0 ? (usuariosConPuntos / totalRegistered) * 100 : 0;
+
+        // Churn = % de compradores REGISTRADOS cuya ÚLTIMA compra (venta real, hasta `end`) fue hace +90 días
+        // (mismo umbral DIAS_INACTIVO=90 y criterio de deenex-data valorYRetencion). El usuario NO tiene campo
+        // de última-compra (totalCompras/ultimaCompra no existen en la colección) → se deriva de `pagos`.
+        const churnCutoff = subDays(end, 90);
+        const registeredIds = new Set(
+            (await Cliente.collection.distinct('_id', { ...filters, created: { $lte: end }, typeUser: { $ne: 'guest' }, ...NO_BORRADO }))
+                .map((id: any) => String(id))
+        );
+        const buyerLast: any[] = await Order.aggregate([
+            { $match: { ...filters, paymentStatus: PAGADO, created: { $lte: end } } },
+            { $group: { _id: '$idCliente', ultimo: { $max: '$created' } } },
+        ]);
+        let compradoresReg = 0, compradoresInactivos = 0;
+        for (const b of buyerLast) {
+            if (!registeredIds.has(String(b._id))) continue;
+            compradoresReg++;
+            if (b.ultimo && new Date(b.ultimo) < churnCutoff) compradoresInactivos++;
+        }
+        const pChurn = compradoresReg > 0 ? (compradoresInactivos / compradoresReg) * 100 : 0;
+
         return {
             tasaRegistro: Number(pRegistros.toFixed(2)),
             localesActivosCount: localesWith50.length,
@@ -297,7 +331,10 @@ export class DeenexMetricsService {
             pBaseActiva: Number(pBaseActiva.toFixed(2)),
             pUsuariosActivados: Number(pActivados.toFixed(2)),
             pBaseSaludable: Number(pSaludable.toFixed(2)),
-            pRecompra: Number(pRecompra.toFixed(2))
+            pRecompra: Number(pRecompra.toFixed(2)),
+            frecuenciaCompra: Number(frecuencia.toFixed(2)),
+            pUsuariosPuntos: Number(pPuntos.toFixed(2)),
+            pChurn: Number(pChurn.toFixed(2))
         };
     }
 }

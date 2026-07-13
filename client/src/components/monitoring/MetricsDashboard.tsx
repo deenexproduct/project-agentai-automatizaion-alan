@@ -178,10 +178,16 @@ const blocksConfig = [
       {
         id: "growth-churn",
         name: "Churn de Usuarios",
-        definition: "Usuarios inactivos (Falta implementar)",
-        key: "missing",
-        missing: true,
-        status: "warning",
+        definition: "Compradores registrados sin volver hace +90 días",
+        tooltip: {
+          formula:
+            "Compradores registrados cuya última compra fue hace más de 90 días / Total de compradores registrados",
+          implication:
+            "¿Qué proporción de los que alguna vez compraron dejó de hacerlo? Mide la fuga de la base activa.",
+        },
+        key: "pChurn",
+        type: "percent",
+        status: "bad",
       },
     ],
   },
@@ -304,18 +310,30 @@ const blocksConfig = [
       {
         id: "loyalty-programa-puntos",
         name: "Usuarios en Puntos",
-        definition: "En desarrollo",
-        key: "missing",
-        missing: true,
+        definition: "Base registrada con saldo de puntos",
+        tooltip: {
+          formula:
+            "Usuarios registrados con saldo de puntos (totalPoints > 0) / Total base registrada",
+          implication:
+            "¿Qué parte de la base está enganchada con el programa de fidelización por puntos?",
+        },
+        key: "pUsuariosPuntos",
+        type: "percent",
         status: "warning",
       },
       {
         id: "loyalty-frecuencia",
-        name: "Frecuencia",
-        definition: "En desarrollo",
-        key: "missing",
-        missing: true,
-        status: "warning",
+        name: "Frecuencia de Compra",
+        definition: "Pedidos por comprador activo en el período",
+        tooltip: {
+          formula:
+            "Pedidos (venta real) del período / Compradores activos del período",
+          implication:
+            "En promedio, ¿cuántas veces compró cada cliente activo? Mide la recurrencia real.",
+        },
+        key: "frecuenciaCompra",
+        type: "number",
+        status: "good",
       },
     ],
   },
