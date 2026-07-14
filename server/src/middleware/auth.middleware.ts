@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserModel, IUser } from '../models/user.model';
+import { JWT_SECRET } from '../config/jwt-secret';
 
 // Augment Express Request to include user
 declare global {
@@ -10,8 +11,6 @@ declare global {
         }
     }
 }
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_development_secret_voice_multi_tenant_123';
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
