@@ -1,7 +1,11 @@
 // Script to generate all test data needed for complete report rendering
 const mongoose = require('mongoose');
 
-const MONGO_URI = 'mongodb+srv://plataformacomercial_db_user:IibBxQoLLn5u30FR@deenex-comercial.p9pcnz3.mongodb.net/comercial';
+const MONGO_URI = process.env.MONGODB_URI;
+if (!MONGO_URI) {
+    console.error('Falta la variable de entorno MONGODB_URI. Definila en un .env (no commitear credenciales).');
+    process.exit(1);
+}
 const USER_ID = '699d9386d93cc1dc427f6f03';
 
 async function main() {
