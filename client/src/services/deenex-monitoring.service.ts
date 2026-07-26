@@ -40,12 +40,29 @@ export interface LocationDTO {
     direccion: string;
     idMarca: string;
     marca: string;
-    activo: boolean;
+    statusLocal: boolean;
+    /** Pedidos all-time (venta real: paymentStatus PAGADO) */
+    pedidos: number;
+    /** Facturación all-time (venta BRUTA, regla canónica) */
+    facturacion: number;
+    /** Pedidos all-time cuyo type empieza con "delivery" */
+    pedidosDelivery: number;
     lat: number;
     lng: number;
 }
 
-export const getDeenexLocations = async (): Promise<LocationDTO[]> => {
+export interface BrandRef {
+    idMarca: string;
+    marca: string;
+}
+
+export interface LocationsResponse {
+    locations: LocationDTO[];
+    /** TODAS las marcas (para que la leyenda muestre en gris las que tienen 0 locales activos) */
+    brands: BrandRef[];
+}
+
+export const getDeenexLocations = async (): Promise<LocationsResponse> => {
     const { data } = await api.get('/deenex-monitoring/locations');
     return data;
 };

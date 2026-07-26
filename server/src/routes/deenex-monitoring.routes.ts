@@ -650,20 +650,66 @@ router.get('/engagement/stats', async (req: Request, res: Response) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// GET /locations — Locales con coordenadas para el mapa
+// GET /locations — Locales con coordenadas + stats all-time para el mapa
 // ══════════════════════════════════════════════════════════════
+// Reglas CANÓNICAS (mismas que el admin de las marcas / deenex-data):
+//   venta real = paymentStatus PAGADO · facturación = venta BRUTA (cascada) · delivery = type ^delivery
+const PAGADO_MATCH = { $regex: /^pagado$/i };
+const _numExpr = (f: string) => ({ $convert: { input: f, to: 'double', onError: 0, onNull: 0 } });
+const BRUTO_EXPR = {
+    $let: {
+        vars: {
+            tobd: _numExpr('$account.totalOriginalBeforeDiscounts'),
+            torig: _numExpr('$account.totalOriginal'),
+            tf: _numExpr('$totalFacturado'),
+            ptu: _numExpr('$account.pointsToUse'),
+            ot: _numExpr('$account.orderTotal'),
+            tot: _numExpr('$total'),
+        },
+        in: {
+            $switch: {
+                branches: [
+                    { case: { $gt: ['$$tobd', 0] }, then: '$$tobd' },
+                    { case: { $gt: ['$$torig', 0] }, then: '$$torig' },
+                    { case: { $gt: ['$$tf', 0] }, then: { $add: ['$$tf', '$$ptu'] } },
+                    { case: { $gt: ['$$ot', 0] }, then: '$$ot' },
+                ],
+                default: '$$tot',
+            },
+        },
+    },
+};
+const IS_DELIVERY_EXPR = { $regexMatch: { input: { $ifNull: ['$type', ''] }, regex: /^delivery/ } };
+
 router.get('/locations', async (_req: Request, res: Response) => {
     try {
         const Brand = getDeenexBrandModel();
         const Local = getDeenexLocalModel();
+        const Order = getDeenexOrderModel();
 
-        const [brands, locals] = await Promise.all([
+        const [brands, locals, statsByLocal] = await Promise.all([
             Brand.find().select('appName domain').lean(),
             Local.find().select('nameLocal addressLocal statusLocal idMarca geoLocation').lean(),
+            // Stats all-time por local (venta real). ~1,4s sobre 28k pagos → una sola query
+            // alimenta el filtro de "local activo" y las stats del popup.
+            Order.collection.aggregate([
+                { $match: { paymentStatus: PAGADO_MATCH } },
+                {
+                    $group: {
+                        _id: '$idLocal',
+                        pedidos: { $sum: 1 },
+                        facturacion: { $sum: BRUTO_EXPR },
+                        pedidosDelivery: { $sum: { $cond: [IS_DELIVERY_EXPR, 1, 0] } },
+                    },
+                },
+            ], { allowDiskUse: true }).toArray(),
         ]);
 
         const brandName = new Map<string, string>(
             brands.map((b: any) => [String(b._id), b.appName || b.domain || '—'])
+        );
+        const statsMap = new Map<string, any>(
+            statsByLocal.map((s: any) => [String(s._id), s])
         );
 
         const locations = locals
@@ -672,20 +718,80 @@ router.get('/locations', async (_req: Request, res: Response) => {
                 return { l, lat: Number(geo.latitude), lng: Number(geo.longitude) };
             })
             .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0)
-            .map(({ l, lat, lng }) => ({
-                id: String(l._id),
-                nombre: l.nameLocal || 'Sin nombre',
-                direccion: l.addressLocal || '',
-                idMarca: String(l.idMarca ?? ''),
-                marca: brandName.get(String(l.idMarca ?? '')) || '—',
-                activo: l.statusLocal === true,
-                lat,
-                lng,
-            }));
+            .map(({ l, lat, lng }) => {
+                const s = statsMap.get(String(l._id)) || { pedidos: 0, facturacion: 0, pedidosDelivery: 0 };
+                return {
+                    id: String(l._id),
+                    nombre: l.nameLocal || 'Sin nombre',
+                    direccion: l.addressLocal || '',
+                    idMarca: String(l.idMarca ?? ''),
+                    marca: brandName.get(String(l.idMarca ?? '')) || '—',
+                    statusLocal: l.statusLocal === true,
+                    pedidos: s.pedidos,
+                    facturacion: Math.round(s.facturacion),
+                    pedidosDelivery: s.pedidosDelivery,
+                    lat,
+                    lng,
+                };
+            });
 
-        return res.json(locations);
+        // TODAS las marcas viajan aparte para que la leyenda pueda mostrar en gris las que
+        // no tienen ningún local activo (0 locales).
+        const allBrands = brands.map((b: any) => ({
+            idMarca: String(b._id),
+            marca: b.appName || b.domain || '—',
+        }));
+
+        return res.json({ locations, brands: allBrands });
     } catch (error: any) {
         console.error('[DEENEX-MONITOR] Locations error:', error.message);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
+// GET /locations/:id/stats — Estadísticas mínimas de un local (para el popup del mapa)
+// Canónico: venta real (paymentStatus PAGADO), facturación = GMV bruto, delivery = type ^delivery.
+// Filtra por idMarca + idLocal para usar el índice compuesto idMarca_1_idLocal_1.
+// ══════════════════════════════════════════════════════════════
+router.get('/locations/:id/stats', async (req: Request, res: Response) => {
+    try {
+        const Order = getDeenexOrderModel();
+        const idLocal = req.params.id;
+        const idMarca = req.query.idMarca as string | undefined;
+
+        const PAGADO = { $regex: /^pagado$/i };
+        const num = (f: string) => ({ $convert: { input: f, to: 'double', onError: 0, onNull: 0 } });
+        const BRUTO = { $let: { vars: {
+            tobd: num('$account.totalOriginalBeforeDiscounts'), torig: num('$account.totalOriginal'),
+            tf: num('$totalFacturado'), ptu: num('$account.pointsToUse'), ot: num('$account.orderTotal'), tot: num('$total') },
+            in: { $switch: { branches: [
+                { case: { $gt: ['$$tobd', 0] }, then: '$$tobd' },
+                { case: { $gt: ['$$torig', 0] }, then: '$$torig' },
+                { case: { $gt: ['$$tf', 0] }, then: { $add: ['$$tf', '$$ptu'] } },
+                { case: { $gt: ['$$ot', 0] }, then: '$$ot' },
+            ], default: '$$tot' } } } };
+        const IS_DELIVERY = { $regexMatch: { input: { $ifNull: ['$type', ''] }, regex: /^delivery/ } };
+
+        const match: any = { idLocal, paymentStatus: PAGADO };
+        if (idMarca) match.idMarca = idMarca;
+
+        const [r] = await Order.collection.aggregate([
+            { $match: match },
+            { $group: { _id: null,
+                pedidos: { $sum: 1 },
+                facturacion: { $sum: BRUTO },
+                pedidosDelivery: { $sum: { $cond: [IS_DELIVERY, 1, 0] } },
+            } },
+        ], { allowDiskUse: true }).toArray();
+
+        return res.json({
+            pedidos: r?.pedidos || 0,
+            facturacion: Math.round(r?.facturacion || 0),
+            pedidosDelivery: r?.pedidosDelivery || 0,
+        });
+    } catch (error: any) {
+        console.error('[DEENEX-MONITOR] Location stats error:', error.message);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
