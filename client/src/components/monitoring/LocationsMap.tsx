@@ -113,7 +113,6 @@ export default function LocationsMap() {
   // ── Mapas de calor (se cargan on-demand la primera vez que se activan) ──
   const [heatDelivery, setHeatDelivery] = useState(false);
   const [heatPoints, setHeatPoints] = useState<HeatPoint[] | null>(null);
-  const [heatMaxCelda, setHeatMaxCelda] = useState(0);
   const [heatLoading, setHeatLoading] = useState(false);
 
   useEffect(() => {
@@ -125,7 +124,6 @@ export default function LocationsMap() {
         const data = await getDeenexDeliveryHeatmap();
         if (!alive) return;
         setHeatPoints(data.puntos || []);
-        setHeatMaxCelda(data.maxCelda || 0);
       } catch (e) {
         console.error(e);
         if (alive) setHeatPoints([]);
@@ -212,13 +210,36 @@ export default function LocationsMap() {
     [locations, filterMode, minPedidos, hiddenBrands],
   );
 
-  // Puntos del mapa de calor de delivery, respetando el filtro de marcas de la leyenda.
+  // idMarca que SÍ se muestran: las de la leyenda (ya sin las marcas fantasma de MARCAS_OCULTAS).
+  // Los puntos de calor traen solo idMarca, así que este set es la forma de aplicarles la exclusión.
+  const visibleBrandIds = useMemo(
+    () => new Set(brands.map((b) => b.idMarca)),
+    [brands],
+  );
+
+  // Puntos del mapa de calor de delivery: respetan el filtro de la leyenda Y las marcas ocultas.
   const heatVisiblePoints = useMemo<[number, number][]>(() => {
     if (!heatDelivery || !heatPoints) return [];
     return heatPoints
-      .filter((p) => !hiddenBrands.has(p.idMarca))
+      .filter((p) => visibleBrandIds.has(p.idMarca) && !hiddenBrands.has(p.idMarca))
       .map((p) => [p.lat, p.lng] as [number, number]);
-  }, [heatDelivery, heatPoints, hiddenBrands]);
+  }, [heatDelivery, heatPoints, hiddenBrands, visibleBrandIds]);
+
+  // Celda más densa (~1 km, 2 decimales) de los puntos VISIBLES. Se recalcula acá y no se usa el
+  // maxCelda del backend porque aquél se computa sobre todas las entregas: al filtrar marcas, el
+  // número del backend quedaría desactualizado y la leyenda mentiría.
+  const maxCeldaVisible = useMemo(() => {
+    if (heatVisiblePoints.length === 0) return 0;
+    const celdas = new Map<string, number>();
+    let max = 0;
+    for (const [lat, lng] of heatVisiblePoints) {
+      const k = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+      const n = (celdas.get(k) || 0) + 1;
+      celdas.set(k, n);
+      if (n > max) max = n;
+    }
+    return max;
+  }, [heatVisiblePoints]);
 
   const points = useMemo<[number, number][]>(
     () => visible.map((l) => [l.lat, l.lng]),
@@ -341,7 +362,7 @@ export default function LocationsMap() {
                 <span>más</span>
               </div>
               <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                Zona más caliente: <b className="text-slate-500">{heatMaxCelda}</b>{" "}
+                Zona más caliente: <b className="text-slate-500">{maxCeldaVisible}</b>{" "}
                 entregas en ~1 km². Total {heatVisiblePoints.length} entregas
                 (histórico, pedidos pagados).
               </div>
