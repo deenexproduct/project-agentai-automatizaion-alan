@@ -650,6 +650,47 @@ router.get('/engagement/stats', async (req: Request, res: Response) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// GET /locations — Locales con coordenadas para el mapa
+// ══════════════════════════════════════════════════════════════
+router.get('/locations', async (_req: Request, res: Response) => {
+    try {
+        const Brand = getDeenexBrandModel();
+        const Local = getDeenexLocalModel();
+
+        const [brands, locals] = await Promise.all([
+            Brand.find().select('appName domain').lean(),
+            Local.find().select('nameLocal addressLocal statusLocal idMarca geoLocation').lean(),
+        ]);
+
+        const brandName = new Map<string, string>(
+            brands.map((b: any) => [String(b._id), b.appName || b.domain || '—'])
+        );
+
+        const locations = locals
+            .map((l: any) => {
+                const geo = l.geoLocation || {};
+                return { l, lat: Number(geo.latitude), lng: Number(geo.longitude) };
+            })
+            .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0)
+            .map(({ l, lat, lng }) => ({
+                id: String(l._id),
+                nombre: l.nameLocal || 'Sin nombre',
+                direccion: l.addressLocal || '',
+                idMarca: String(l.idMarca ?? ''),
+                marca: brandName.get(String(l.idMarca ?? '')) || '—',
+                activo: l.statusLocal === true,
+                lat,
+                lng,
+            }));
+
+        return res.json(locations);
+    } catch (error: any) {
+        console.error('[DEENEX-MONITOR] Locations error:', error.message);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
 // GET /locations/leaderboard — Ranking de locales
 // ══════════════════════════════════════════════════════════════
 router.get('/locations/leaderboard', async (req: Request, res: Response) => {
