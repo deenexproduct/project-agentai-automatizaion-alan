@@ -33,6 +33,23 @@ export const getDeenexBrands = async () => {
     return data;
 };
 
+// ── Locations (mapa de locales) ──────────────────────────────
+export interface LocationDTO {
+    id: string;
+    nombre: string;
+    direccion: string;
+    idMarca: string;
+    marca: string;
+    activo: boolean;
+    lat: number;
+    lng: number;
+}
+
+export const getDeenexLocations = async (): Promise<LocationDTO[]> => {
+    const { data } = await api.get('/deenex-monitoring/locations');
+    return data;
+};
+
 // ── Client Stats ─────────────────────────────────────────────
 export const getDeenexClientStats = async (filters?: DeenexFilters) => {
     const { data } = await api.get('/deenex-monitoring/clients/stats', { params: toParams(filters) });
