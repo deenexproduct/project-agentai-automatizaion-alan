@@ -746,17 +746,17 @@ export default function MetricsDashboard() {
               </thead>
               <tbody>
                 {block.metrics
-                  .filter((m) => !m.missing)
+                  .filter((m) => !(m as any).missing)
                   .map((metric, idx, arr) => {
                     const isLastRow = idx === arr.length - 1;
                     return (
                       <tr
                         key={idx}
-                        className={`${!isLastRow ? "border-b border-slate-50" : ""} ${metric.missing ? "bg-slate-50/50" : "bg-transparent"}`}
+                        className={`${!isLastRow ? "border-b border-slate-50" : ""} ${(metric as any).missing ? "bg-slate-50/50" : "bg-transparent"}`}
                       >
                         <td className="py-3 px-6">
                           <div
-                            className={`text-[13px] font-semibold leading-snug flex items-center gap-1.5 ${metric.missing ? "text-slate-400" : "text-slate-800"}`}
+                            className={`text-[13px] font-semibold leading-snug flex items-center gap-1.5 ${(metric as any).missing ? "text-slate-400" : "text-slate-800"}`}
                           >
                             {metric.name}
                             {(metric as any).tooltip && (
@@ -767,7 +767,7 @@ export default function MetricsDashboard() {
                                 }
                               />
                             )}
-                            {metric.missing && (
+                            {(metric as any).missing && (
                               <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold text-slate-400 bg-slate-200/50 uppercase">
                                 En dev
                               </span>
@@ -791,7 +791,7 @@ export default function MetricsDashboard() {
                             mData,
                           );
                           const deltaStr =
-                            di > 0 && !metric.missing
+                            di > 0 && !(metric as any).missing
                               ? computeDeltaString(val, prevVal, metric.type)
                               : null;
 
@@ -803,11 +803,11 @@ export default function MetricsDashboard() {
                               className={`text-center py-2.5 px-1.5 align-middle ${period.isCurrent ? "bg-amber-500/5" : "bg-transparent"}`}
                             >
                               <div
-                                className={`text-[13px] font-mono ${metric.missing ? "text-slate-300" : period.isCurrent ? "text-amber-600 italic" : isLast ? "text-slate-900 font-bold" : "text-slate-500"} ${!period.isCurrent && isLast ? "font-bold" : "font-normal"}`}
+                                className={`text-[13px] font-mono ${(metric as any).missing ? "text-slate-300" : period.isCurrent ? "text-amber-600 italic" : isLast ? "text-slate-900 font-bold" : "text-slate-500"} ${!period.isCurrent && isLast ? "font-bold" : "font-normal"}`}
                               >
-                                {metric.missing ? "—" : valStr}
+                                {(metric as any).missing ? "—" : valStr}
                               </div>
-                              {!metric.missing &&
+                              {!(metric as any).missing &&
                                 !period.isCurrent &&
                                 deltaStr && <InlineDelta value={deltaStr} />}
                             </td>
