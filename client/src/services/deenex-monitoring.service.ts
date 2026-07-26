@@ -67,6 +67,26 @@ export const getDeenexLocations = async (): Promise<LocationsResponse> => {
     return data;
 };
 
+// ── Mapas de calor ───────────────────────────────────────────
+export interface HeatPoint {
+    lat: number;
+    lng: number;
+    idMarca: string;
+}
+
+export interface HeatmapResponse {
+    puntos: HeatPoint[];
+    total: number;
+    /** Máximo de entregas en una celda de ~1 km (tope del rango de la leyenda) */
+    maxCelda: number;
+}
+
+/** Puntos de ENTREGA reales (coordinates.dropoff) de los pedidos delivery pagados. */
+export const getDeenexDeliveryHeatmap = async (): Promise<HeatmapResponse> => {
+    const { data } = await api.get('/deenex-monitoring/heatmap/delivery');
+    return data;
+};
+
 // ── Client Stats ─────────────────────────────────────────────
 export const getDeenexClientStats = async (filters?: DeenexFilters) => {
     const { data } = await api.get('/deenex-monitoring/clients/stats', { params: toParams(filters) });

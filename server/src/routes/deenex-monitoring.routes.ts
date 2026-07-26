@@ -797,6 +797,57 @@ router.get('/locations/:id/stats', async (req: Request, res: Response) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// GET /heatmap/delivery — Puntos de ENTREGA para el mapa de calor
+// ══════════════════════════════════════════════════════════════
+// Usa la coordenada real de entrega del pedido (coordinates.dropoff), no la del local:
+// muestra dónde está la DEMANDA de delivery. Solo venta real (PAGADO) y type ^delivery.
+router.get('/heatmap/delivery', async (_req: Request, res: Response) => {
+    try {
+        const Order = getDeenexOrderModel();
+
+        const raw = await Order.collection.aggregate([
+            {
+                $match: {
+                    paymentStatus: PAGADO_MATCH,
+                    type: { $regex: /^delivery/ },
+                    'coordinates.dropoff.lat': { $exists: true, $ne: null },
+                    'coordinates.dropoff.lon': { $exists: true, $ne: null },
+                },
+            },
+            {
+                $project: {
+                    _id: 0,
+                    lat: '$coordinates.dropoff.lat',
+                    lng: '$coordinates.dropoff.lon',
+                    idMarca: 1,
+                },
+            },
+        ], { allowDiskUse: true }).toArray();
+
+        const puntos = raw
+            .map((p: any) => ({
+                lat: Number(p.lat),
+                lng: Number(p.lng),
+                idMarca: String(p.idMarca ?? ''),
+            }))
+            .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.lat !== 0 && p.lng !== 0);
+
+        // Densidad por celda de ~1 km (2 decimales) → da el tope del rango de la leyenda.
+        const celdas = new Map<string, number>();
+        for (const p of puntos) {
+            const k = `${p.lat.toFixed(2)},${p.lng.toFixed(2)}`;
+            celdas.set(k, (celdas.get(k) || 0) + 1);
+        }
+        const maxCelda = celdas.size > 0 ? Math.max(...celdas.values()) : 0;
+
+        return res.json({ puntos, total: puntos.length, maxCelda });
+    } catch (error: any) {
+        console.error('[DEENEX-MONITOR] Heatmap delivery error:', error.message);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
 // GET /locations/leaderboard — Ranking de locales
 // ══════════════════════════════════════════════════════════════
 router.get('/locations/leaderboard', async (req: Request, res: Response) => {
