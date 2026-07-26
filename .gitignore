@@ -8,3 +8,4 @@ linkedin-session/
 _archive/
 work_agent/
 .gemini/
+client/vite.config.local.ts
