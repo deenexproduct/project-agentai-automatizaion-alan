@@ -31,9 +31,17 @@ const GRIS = "#94a3b8";
 const normMarca = (s: string) =>
   (s || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 const MARCAS_OCULTAS = new Set(
-  ["Café Martínez", "Cafeses de Especialidad", "Coquitos", "Glorias", "Havanna", "Pandanés"].map(
-    normMarca,
-  ),
+  [
+    "Café Martínez",
+    "Cafeses de Especialidad",
+    "Coquitos",
+    "Glorias",
+    "Havanna",
+    "Pandanés",
+    "The Coffee Shop",
+    "UTE",
+    "—", // locales sin marca resuelta
+  ].map(normMarca),
 );
 const marcaVisible = (marca: string) => !MARCAS_OCULTAS.has(normMarca(marca));
 
