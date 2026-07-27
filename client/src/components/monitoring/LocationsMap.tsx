@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -81,21 +81,84 @@ const HEAT_CSS_GRADIENT = `linear-gradient(to right, ${Object.entries(HEAT_GRADI
   .map(([stop, color]) => `${color} ${Number(stop) * 100}%`)
   .join(", ")})`;
 
-/** Capa de mapa de calor (leaflet.heat). Se monta/desmonta según el filtro activo. */
-function HeatLayer({ points }: { points: [number, number][] }) {
+// Config de la capa de calor. `max` NO se fija acá: se recalcula por vista (ver HeatLayer).
+const HEAT_RADIUS = 25;
+const HEAT_BLUR = 18;
+const HEAT_MAXZOOM = 14;
+// Piso de normalización: con menos entregas que esto en la celda pico, no se pinta "zona caliente"
+// (evita que una entrega suelta se vea igual de roja que un foco real).
+const HEAT_PICO_MINIMO = 3;
+
+/**
+ * Capa de mapa de calor (leaflet.heat). Se monta/desmonta según el filtro activo.
+ *
+ * NORMALIZACIÓN POR VISTA: leaflet.heat usa `max` (default 1) como tope de intensidad y le aplica a
+ * cada punto un factor de zoom `f = 1/2^(maxZoom-zoom)`. Con max=1 y peso 1 por entrega, cualquier
+ * celda con una entrega ya satura → el mapa se pinta todo rojo y NO distingue densidad (verificado
+ * visualmente con los datos reales). Solución: recalcular `max` con la celda más densa de lo que se
+ * está viendo, así el gradiente siempre usa todo su rango y los focos se leen a cualquier zoom.
+ * El pico se reporta al padre para que la leyenda diga la verdad.
+ */
+function HeatLayer({
+  points,
+  onPeak,
+}: {
+  points: [number, number][];
+  onPeak?: (peak: number) => void;
+}) {
   const map = useMap();
+  const peakRef = useRef(onPeak);
+  peakRef.current = onPeak;
+
   useEffect(() => {
     if (points.length === 0) return;
     const layer = (L as any)
       .heatLayer(
         points.map(([lat, lng]) => [lat, lng, 1]),
-        { radius: 24, blur: 18, maxZoom: 14, minOpacity: 0.3, gradient: HEAT_GRADIENT },
+        {
+          radius: HEAT_RADIUS,
+          blur: HEAT_BLUR,
+          maxZoom: HEAT_MAXZOOM,
+          minOpacity: 0.12,
+          gradient: HEAT_GRADIENT,
+        },
       )
       .addTo(map);
+
+    const tune = () => {
+      // getBounds() explota si el mapa todavía no tiene centro/zoom.
+      if (!(map as any)._loaded) return;
+      const z = map.getZoom();
+      const f = 1 / Math.pow(2, Math.max(0, Math.min(HEAT_MAXZOOM - z, 12)));
+      const g = (HEAT_RADIUS + HEAT_BLUR) / 2; // celda interna de leaflet.heat, en px
+      const bounds = map.getBounds().pad(0.15);
+      const celdas = new Map<string, number>();
+      let peak = 0;
+      for (const [lat, lng] of points) {
+        if (!bounds.contains([lat, lng] as any)) continue;
+        const p = map.project([lat, lng] as any, z);
+        const k = `${Math.floor(p.x / g)}:${Math.floor(p.y / g)}`;
+        const n = (celdas.get(k) || 0) + 1;
+        celdas.set(k, n);
+        if (n > peak) peak = n;
+      }
+      const efectivo = Math.max(peak, HEAT_PICO_MINIMO);
+      layer.setOptions({ max: Math.max(efectivo * f, 0.05) });
+      peakRef.current?.(peak);
+    };
+
+    // Ojo: setView/fitBounds son animados → hay que tunear en los eventos, no sincrónicamente.
+    map.on("zoomend", tune);
+    map.on("moveend", tune);
+    tune();
+
     return () => {
+      map.off("zoomend", tune);
+      map.off("moveend", tune);
       map.removeLayer(layer);
     };
   }, [points, map]);
+
   return null;
 }
 
@@ -225,21 +288,10 @@ export default function LocationsMap() {
       .map((p) => [p.lat, p.lng] as [number, number]);
   }, [heatDelivery, heatPoints, hiddenBrands, visibleBrandIds]);
 
-  // Celda más densa (~1 km, 2 decimales) de los puntos VISIBLES. Se recalcula acá y no se usa el
-  // maxCelda del backend porque aquél se computa sobre todas las entregas: al filtrar marcas, el
-  // número del backend quedaría desactualizado y la leyenda mentiría.
-  const maxCeldaVisible = useMemo(() => {
-    if (heatVisiblePoints.length === 0) return 0;
-    const celdas = new Map<string, number>();
-    let max = 0;
-    for (const [lat, lng] of heatVisiblePoints) {
-      const k = `${lat.toFixed(2)},${lng.toFixed(2)}`;
-      const n = (celdas.get(k) || 0) + 1;
-      celdas.set(k, n);
-      if (n > max) max = n;
-    }
-    return max;
-  }, [heatVisiblePoints]);
+  // Pico de la vista actual (entregas en la celda más densa de lo que se ve). Lo reporta HeatLayer,
+  // que es quien normaliza el gradiente contra ese mismo valor → la leyenda describe exactamente la
+  // escala que se está dibujando (y cambia al hacer zoom/pan o al filtrar marcas).
+  const [picoEnVista, setPicoEnVista] = useState(0);
 
   const points = useMemo<[number, number][]>(
     () => visible.map((l) => [l.lat, l.lng]),
@@ -271,7 +323,7 @@ export default function LocationsMap() {
         />
         <FitBounds points={points} />
         {heatDelivery && heatVisiblePoints.length > 0 && (
-          <HeatLayer points={heatVisiblePoints} />
+          <HeatLayer points={heatVisiblePoints} onPeak={setPicoEnVista} />
         )}
         {visible.map((l) => {
           const color = colorByBrand.get(l.idMarca) || GRIS;
@@ -358,13 +410,15 @@ export default function LocationsMap() {
                 style={{ background: HEAT_CSS_GRADIENT }}
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
-                <span>menos entregas</span>
-                <span>más</span>
+                <span>menos</span>
+                <span>
+                  {picoEnVista > 0 ? `${picoEnVista} entregas` : "más"}
+                </span>
               </div>
               <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                Zona más caliente: <b className="text-slate-500">{maxCeldaVisible}</b>{" "}
-                entregas en ~1 km². Total {heatVisiblePoints.length} entregas
-                (histórico, pedidos pagados).
+                La escala se ajusta a lo que estás viendo: el rojo marca la zona
+                con más entregas de esta vista. Total{" "}
+                {heatVisiblePoints.length} entregas (histórico, pedidos pagados).
               </div>
             </div>
           )}
