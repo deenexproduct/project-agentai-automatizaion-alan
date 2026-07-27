@@ -152,9 +152,34 @@ function HeatLayer({
   const picoMinimoRef = useRef(picoMinimo);
   picoMinimoRef.current = picoMinimo;
   const tuneRef = useRef<(() => void) | null>(null);
+  // Se incrementa cuando el mapa recién consigue tamaño, para re-correr el efecto y crear la capa.
+  const [listoParaPintar, setListoParaPintar] = useState(0);
 
   useEffect(() => {
     if (points.length === 0) return;
+
+    // 🔴 leaflet.heat dimensiona su canvas con map.getSize() en el onAdd y enseguida hace getImageData:
+    // si en ese instante el contenedor mide 0 (layout todavía sin resolver, panel oculto, transición),
+    // tira `IndexSizeError: The source height is 0` que NO está capturado por nadie → como el árbol no
+    // tiene error boundary, React desmonta TODO el mapa y el usuario se queda con la pantalla en blanco.
+    // En vez de arriesgarlo, si el mapa todavía no tiene tamaño se espera al próximo frame/resize.
+    const size = map.getSize();
+    if (size.x === 0 || size.y === 0) {
+      let cancelado = false;
+      const reintentar = () => {
+        if (cancelado) return;
+        const s = map.getSize();
+        if (s.x > 0 && s.y > 0) setListoParaPintar((n) => n + 1);
+        else requestAnimationFrame(reintentar);
+      };
+      requestAnimationFrame(reintentar);
+      map.once("resize", reintentar);
+      return () => {
+        cancelado = true;
+        map.off("resize", reintentar);
+      };
+    }
+
     const layer = (L as any)
       .heatLayer(
         points.map(([lat, lng, w]) => [lat, lng, w]),
@@ -228,7 +253,7 @@ function HeatLayer({
       }
       map.removeLayer(layer);
     };
-  }, [points, map]);
+  }, [points, map, listoParaPintar]);
 
   // `picoMinimo` cambia sin que cambien los puntos (p. ej. al recalcularse el promedio): se re-tunea la
   // capa existente en vez de recrearla entera, y se lee por ref para no tener un closure viejo.
@@ -264,12 +289,18 @@ export default function LocationsMap() {
   // "Sin datos de entrega con coordenadas" (falso: hay 509) y encima el guard de abajo nunca reintenta.
   const [heatError, setHeatError] = useState<string | null>(null);
 
+  // 🔴 `heatLoading` NO puede estar en las deps: el efecto lo setea adentro, así que se re-disparaba a
+  // sí mismo, el cleanup del primer pase ponía alive=false y cuando el fetch resolvía se descartaba el
+  // resultado — heatPoints se quedaba en null y heatLoading en true PARA SIEMPRE. Efecto visible: el
+  // panel decía "cargando entregas…" eternamente y la capa de calor NUNCA se creaba (reproducido: canvas
+  // .leaflet-heatmap-layer = 0 después de 30 s con el fetch ya resuelto). El estado de carga se sigue
+  // publicando para la UI, pero quien decide si hay que buscar es heatPoints === null.
   useEffect(() => {
-    if (!heatDelivery || heatPoints !== null || heatLoading || heatError) return;
+    if (!heatDelivery || heatPoints !== null || heatError) return;
     let alive = true;
+    setHeatLoading(true);
     (async () => {
       try {
-        setHeatLoading(true);
         const data = await getDeenexDeliveryHeatmap();
         if (!alive) return;
         setHeatPoints(data.puntos || []);
@@ -288,7 +319,7 @@ export default function LocationsMap() {
     return () => {
       alive = false;
     };
-  }, [heatDelivery, heatPoints, heatLoading, heatError]);
+  }, [heatDelivery, heatPoints, heatError]);
 
   useEffect(() => {
     let alive = true;
