@@ -295,27 +295,41 @@ export default function LocationsMap() {
     [brands],
   );
 
-  // Puntos del mapa de calor: respetan el filtro de la leyenda Y las marcas ocultas, y cada modo
-  // define el PESO de la entrega (lo que el gradiente termina midiendo).
-  const heatVisiblePoints = useMemo<[number, number, number][]>(() => {
+  // Entregas que entran al mapa de calor: filtro de leyenda + marcas ocultas, y en "lejanas" solo las
+  // que superan el radio sano.
+  const heatVisibleRaw = useMemo(() => {
     if (!heatDelivery || !heatPoints) return [];
     const umbral = heatMeta?.umbralLejano ?? 3;
     return heatPoints
       .filter((p) => visibleBrandIds.has(p.idMarca) && !hiddenBrands.has(p.idMarca))
-      // "lejanas" no cambia el peso: recorta el set a las entregas fuera del radio sano.
-      .filter((p) => (heatMode === "lejanas" ? p.dist != null && p.dist >= umbral : true))
-      .map((p) => [
-        p.lat,
-        p.lng,
-        heatMode === "facturacion" ? Math.max(p.facturacion, 0) : 1,
-      ] as [number, number, number]);
+      .filter((p) => (heatMode === "lejanas" ? p.dist != null && p.dist >= umbral : true));
   }, [heatDelivery, heatMode, heatPoints, heatMeta, hiddenBrands, visibleBrandIds]);
 
-  // Total del modo actual, en las unidades del modo (entregas o $). Es lo que suman los pesos.
+  // Total REAL del modo, en sus unidades (entregas o $). Se calcula sobre los valores sin recortar:
+  // es lo que se muestra en la leyenda y tiene que ser la suma de verdad.
   const heatTotal = useMemo(
-    () => heatVisiblePoints.reduce((a, p) => a + p[2], 0),
-    [heatVisiblePoints],
+    () =>
+      heatMode === "facturacion"
+        ? heatVisibleRaw.reduce((a, p) => a + Math.max(p.facturacion, 0), 0)
+        : heatVisibleRaw.length,
+    [heatMode, heatVisibleRaw],
   );
+
+  // Pesos para el gradiente. En "facturación" se RECORTA cada peso al p99: hay un pedido de $3,3M que
+  // solo él es el 10% de toda la facturación de delivery (el siguiente es 7 veces menor), y sin tope
+  // ese único punto se lleva todo el rojo y deja el resto del mapa en frío. El recorte afecta SOLO
+  // cómo se pinta; el total de la leyenda sigue siendo el real.
+  const heatVisiblePoints = useMemo<[number, number, number][]>(() => {
+    if (heatMode !== "facturacion") {
+      return heatVisibleRaw.map((p) => [p.lat, p.lng, 1] as [number, number, number]);
+    }
+    const vals = heatVisibleRaw.map((p) => Math.max(p.facturacion, 0)).sort((a, b) => a - b);
+    const tope = vals.length ? vals[Math.floor(vals.length * 0.99)] : 0;
+    return heatVisibleRaw.map(
+      (p) =>
+        [p.lat, p.lng, Math.min(Math.max(p.facturacion, 0), tope || Infinity)] as [number, number, number],
+    );
+  }, [heatMode, heatVisibleRaw]);
 
   // El piso de normalización va en las MISMAS unidades que el peso: 3 entregas, o el equivalente en
   // plata (3 tickets promedio). Sin esto, en la capa de facturación el piso de "3 pesos" no filtra nada.
