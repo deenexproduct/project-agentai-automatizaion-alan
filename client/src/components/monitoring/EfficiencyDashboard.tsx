@@ -96,7 +96,14 @@ export default function EfficiencyDashboard() {
   if (!data) return null;
 
   const { resumen, canales, porDistancia, porDensidad, ranking, umbrales } = data;
-  const peores = [...ranking].reverse().slice(0, 5);
+  // Los "peores" son los que NO están en los mejores. Con `reverse().slice(0,5)` a secas, cuando hay
+  // menos de 10 locales rankeables (hoy son 8, y el piso de 10 pedidos garantiza que sean pocos) los
+  // mismos locales salían listados arriba como los más eficientes y abajo como los menos.
+  const mejores = ranking.slice(0, 5);
+  const peores = ranking
+    .slice(mejores.length)
+    .reverse()
+    .slice(0, 5);
 
   return (
     <div className="space-y-4 pb-8">
@@ -298,7 +305,7 @@ export default function EfficiencyDashboard() {
             <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 mb-1">
               Más eficientes
             </div>
-            <RankTable filas={ranking.slice(0, 5)} />
+            <RankTable filas={mejores} />
             {peores.length > 0 && (
               <>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-red-500 mt-4 mb-1">
