@@ -89,6 +89,13 @@ const HEAT_MAXZOOM = 14;
 // (evita que una entrega suelta se vea igual de roja que un foco real).
 const HEAT_PICO_MINIMO = 3;
 
+// Las 3 lecturas del mismo set de entregas. Cambian el PESO de cada punto (y en "lejanas", el filtro),
+// no los datos: una sola llamada al backend alimenta las tres.
+//   entregas    → dónde se pide más seguido
+//   facturación → dónde está la plata (una zona puede pedir poco y facturar mucho)
+//   lejanas     → entregas fuera del radio sano = dónde faltaría un local
+type HeatMode = "off" | "entregas" | "facturacion" | "lejanas";
+
 /**
  * Capa de mapa de calor (leaflet.heat). Se monta/desmonta según el filtro activo.
  *
@@ -102,9 +109,13 @@ const HEAT_PICO_MINIMO = 3;
 function HeatLayer({
   points,
   onPeak,
+  picoMinimo = HEAT_PICO_MINIMO,
 }: {
-  points: [number, number][];
+  /** [lat, lng, peso]. El peso es 1 para "entregas" y la facturación del pedido para "facturación". */
+  points: [number, number, number][];
   onPeak?: (peak: number) => void;
+  /** Piso de normalización, en unidades del peso (entregas o pesos $). */
+  picoMinimo?: number;
 }) {
   const map = useMap();
   const peakRef = useRef(onPeak);
@@ -114,7 +125,7 @@ function HeatLayer({
     if (points.length === 0) return;
     const layer = (L as any)
       .heatLayer(
-        points.map(([lat, lng]) => [lat, lng, 1]),
+        points.map(([lat, lng, w]) => [lat, lng, w]),
         {
           radius: HEAT_RADIUS,
           blur: HEAT_BLUR,
@@ -134,15 +145,16 @@ function HeatLayer({
       const bounds = map.getBounds().pad(0.15);
       const celdas = new Map<string, number>();
       let peak = 0;
-      for (const [lat, lng] of points) {
+      for (const [lat, lng, w] of points) {
         if (!bounds.contains([lat, lng] as any)) continue;
         const p = map.project([lat, lng] as any, z);
         const k = `${Math.floor(p.x / g)}:${Math.floor(p.y / g)}`;
-        const n = (celdas.get(k) || 0) + 1;
+        // Se ACUMULA el peso, no se cuentan puntos: en la capa de facturación el pico es en $.
+        const n = (celdas.get(k) || 0) + w;
         celdas.set(k, n);
         if (n > peak) peak = n;
       }
-      const efectivo = Math.max(peak, HEAT_PICO_MINIMO);
+      const efectivo = Math.max(peak, picoMinimo);
       layer.setOptions({ max: Math.max(efectivo * f, 0.05) });
       peakRef.current?.(peak);
     };
@@ -173,9 +185,11 @@ export default function LocationsMap() {
   const [filterMode, setFilterMode] = useState<FilterMode>("activos");
   const [minPedidos, setMinPedidos] = useState<number>(20);
 
-  // ── Mapas de calor (se cargan on-demand la primera vez que se activan) ──
-  const [heatDelivery, setHeatDelivery] = useState(false);
+  // ── Mapas de calor (una sola llamada alimenta las 3 capas; se carga on-demand) ──
+  const [heatMode, setHeatMode] = useState<HeatMode>("off");
+  const heatDelivery = heatMode !== "off";
   const [heatPoints, setHeatPoints] = useState<HeatPoint[] | null>(null);
+  const [heatMeta, setHeatMeta] = useState<{ umbralLejano: number; totalLejanas: number } | null>(null);
   const [heatLoading, setHeatLoading] = useState(false);
 
   useEffect(() => {
@@ -187,6 +201,7 @@ export default function LocationsMap() {
         const data = await getDeenexDeliveryHeatmap();
         if (!alive) return;
         setHeatPoints(data.puntos || []);
+        setHeatMeta({ umbralLejano: data.umbralLejano ?? 3, totalLejanas: data.totalLejanas ?? 0 });
       } catch (e) {
         console.error(e);
         if (alive) setHeatPoints([]);
@@ -280,13 +295,35 @@ export default function LocationsMap() {
     [brands],
   );
 
-  // Puntos del mapa de calor de delivery: respetan el filtro de la leyenda Y las marcas ocultas.
-  const heatVisiblePoints = useMemo<[number, number][]>(() => {
+  // Puntos del mapa de calor: respetan el filtro de la leyenda Y las marcas ocultas, y cada modo
+  // define el PESO de la entrega (lo que el gradiente termina midiendo).
+  const heatVisiblePoints = useMemo<[number, number, number][]>(() => {
     if (!heatDelivery || !heatPoints) return [];
+    const umbral = heatMeta?.umbralLejano ?? 3;
     return heatPoints
       .filter((p) => visibleBrandIds.has(p.idMarca) && !hiddenBrands.has(p.idMarca))
-      .map((p) => [p.lat, p.lng] as [number, number]);
-  }, [heatDelivery, heatPoints, hiddenBrands, visibleBrandIds]);
+      // "lejanas" no cambia el peso: recorta el set a las entregas fuera del radio sano.
+      .filter((p) => (heatMode === "lejanas" ? p.dist != null && p.dist >= umbral : true))
+      .map((p) => [
+        p.lat,
+        p.lng,
+        heatMode === "facturacion" ? Math.max(p.facturacion, 0) : 1,
+      ] as [number, number, number]);
+  }, [heatDelivery, heatMode, heatPoints, heatMeta, hiddenBrands, visibleBrandIds]);
+
+  // Total del modo actual, en las unidades del modo (entregas o $). Es lo que suman los pesos.
+  const heatTotal = useMemo(
+    () => heatVisiblePoints.reduce((a, p) => a + p[2], 0),
+    [heatVisiblePoints],
+  );
+
+  // El piso de normalización va en las MISMAS unidades que el peso: 3 entregas, o el equivalente en
+  // plata (3 tickets promedio). Sin esto, en la capa de facturación el piso de "3 pesos" no filtra nada.
+  const heatPicoMinimo = useMemo(() => {
+    if (heatMode !== "facturacion") return HEAT_PICO_MINIMO;
+    const n = heatVisiblePoints.length;
+    return n > 0 ? (heatTotal / n) * HEAT_PICO_MINIMO : HEAT_PICO_MINIMO;
+  }, [heatMode, heatVisiblePoints, heatTotal]);
 
   // Pico de la vista actual (entregas en la celda más densa de lo que se ve). Lo reporta HeatLayer,
   // que es quien normaliza el gradiente contra ese mismo valor → la leyenda describe exactamente la
@@ -323,7 +360,7 @@ export default function LocationsMap() {
         />
         <FitBounds points={points} />
         {heatDelivery && heatVisiblePoints.length > 0 && (
-          <HeatLayer points={heatVisiblePoints} onPeak={setPicoEnVista} />
+          <HeatLayer points={heatVisiblePoints} onPeak={setPicoEnVista} picoMinimo={heatPicoMinimo} />
         )}
         {visible.map((l) => {
           const color = colorByBrand.get(l.idMarca) || GRIS;
@@ -386,24 +423,33 @@ export default function LocationsMap() {
         <div className="mb-2 pb-2 border-b border-slate-100">
           <div className="font-semibold text-slate-700 mb-1">Mapas de calor</div>
 
-          <label className="flex items-center gap-2 text-slate-600 cursor-pointer py-0.5">
-            <input
-              type="checkbox"
-              checked={heatDelivery}
-              onChange={(e) => setHeatDelivery(e.target.checked)}
-            />
-            <span className="flex-1">Delivery</span>
-            {heatDelivery && heatLoading && (
-              <span className="text-[10px] text-slate-400">cargando…</span>
-            )}
-            {heatDelivery && !heatLoading && heatPoints && (
-              <span className="text-[10px] text-slate-400">
-                {heatVisiblePoints.length}
-              </span>
-            )}
-          </label>
+          {/* Selector de capa: apagado + las 3 lecturas */}
+          <div className="grid grid-cols-2 gap-1">
+            {([
+              { k: "off", label: "Ninguno" },
+              { k: "entregas", label: "Entregas" },
+              { k: "facturacion", label: "Facturación" },
+              { k: "lejanas", label: "Lejanas" },
+            ] as { k: HeatMode; label: string }[]).map((m) => (
+              <button
+                key={m.k}
+                onClick={() => setHeatMode(m.k)}
+                className={`text-[11px] py-1 rounded-md border transition-colors ${
+                  heatMode === m.k
+                    ? "bg-slate-800 text-white border-slate-800 font-semibold"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
 
-          {heatDelivery && !heatLoading && heatPoints && heatPoints.length > 0 && (
+          {heatDelivery && heatLoading && (
+            <div className="text-[10px] text-slate-400 mt-1.5">cargando entregas…</div>
+          )}
+
+          {heatDelivery && !heatLoading && heatPoints && heatVisiblePoints.length > 0 && (
             <div className="mt-1.5">
               <div
                 className="h-2 rounded-full border border-slate-200"
@@ -412,14 +458,42 @@ export default function LocationsMap() {
               <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
                 <span>menos</span>
                 <span>
-                  {picoEnVista > 0 ? `${picoEnVista} entregas` : "más"}
+                  {picoEnVista > 0
+                    ? heatMode === "facturacion"
+                      ? fmtMoney(picoEnVista)
+                      : `${Math.round(picoEnVista)} entregas`
+                    : "más"}
                 </span>
               </div>
               <div className="text-[10px] text-slate-400 mt-1 leading-snug">
-                La escala se ajusta a lo que estás viendo: el rojo marca la zona
-                con más entregas de esta vista. Total{" "}
-                {heatVisiblePoints.length} entregas (histórico, pedidos pagados).
+                {heatMode === "facturacion" ? (
+                  <>
+                    El rojo marca dónde se factura más, no dónde se pide más
+                    seguido. Total {fmtMoney(heatTotal)} en{" "}
+                    {heatVisiblePoints.length} entregas.
+                  </>
+                ) : heatMode === "lejanas" ? (
+                  <>
+                    Solo entregas a {heatMeta?.umbralLejano ?? 3}+ km del local:
+                    donde se concentran, falta un local cerca.{" "}
+                    {heatVisiblePoints.length} de {heatPoints.length} entregas.
+                  </>
+                ) : (
+                  <>
+                    El rojo marca la zona con más entregas de esta vista. Total{" "}
+                    {heatVisiblePoints.length} entregas (histórico, pedidos
+                    pagados).
+                  </>
+                )}
               </div>
+            </div>
+          )}
+
+          {heatDelivery && !heatLoading && heatPoints && heatPoints.length > 0 && heatVisiblePoints.length === 0 && (
+            <div className="text-[10px] text-slate-400 mt-1.5 leading-snug">
+              {heatMode === "lejanas"
+                ? `Ninguna entrega supera los ${heatMeta?.umbralLejano ?? 3} km con los filtros actuales.`
+                : "Sin entregas con los filtros actuales."}
             </div>
           )}
 

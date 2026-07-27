@@ -801,35 +801,67 @@ router.get('/locations/:id/stats', async (req: Request, res: Response) => {
 // ══════════════════════════════════════════════════════════════
 // Usa la coordenada real de entrega del pedido (coordinates.dropoff), no la del local:
 // muestra dónde está la DEMANDA de delivery. Solo venta real (PAGADO) y type ^delivery.
+//
+// Umbral de "entrega lejana". Se usa 3 km y no los 5 km donde el costo realmente se dispara (ahí el
+// envío pasa de ~8% a 22% del ticket y el tiempo se duplica) porque arriba de 5 km hay 5 entregas en
+// todo el histórico: no alcanzan para dibujar un mapa. A 3 km son ~21, que ya muestran algo.
+const EFF_KM_LEJANO = 3;
+
+// Cada punto viaja con lo necesario para las TRES capas de calor del front, sin pedir más llamadas:
+//   · entregas    → peso 1 (dónde se pide más seguido)
+//   · facturación → peso `bruto` (dónde está la plata, que no es lo mismo)
+//   · lejanas     → se filtran por `dist` (entregas lejos del local = dónde falta un local)
 router.get('/heatmap/delivery', async (_req: Request, res: Response) => {
     try {
         const Order = getDeenexOrderModel();
+        const Local = getDeenexLocalModel();
 
-        const raw = await Order.collection.aggregate([
-            {
-                $match: {
-                    paymentStatus: PAGADO_MATCH,
-                    type: { $regex: /^delivery/ },
-                    'coordinates.dropoff.lat': { $exists: true, $ne: null },
-                    'coordinates.dropoff.lon': { $exists: true, $ne: null },
+        const [raw, locals] = await Promise.all([
+            Order.collection.aggregate([
+                {
+                    $match: {
+                        paymentStatus: PAGADO_MATCH,
+                        type: { $regex: /^delivery/ },
+                        'coordinates.dropoff.lat': { $exists: true, $ne: null },
+                        'coordinates.dropoff.lon': { $exists: true, $ne: null },
+                    },
                 },
-            },
-            {
-                $project: {
-                    _id: 0,
-                    lat: '$coordinates.dropoff.lat',
-                    lng: '$coordinates.dropoff.lon',
-                    idMarca: 1,
+                {
+                    $project: {
+                        _id: 0,
+                        lat: '$coordinates.dropoff.lat',
+                        lng: '$coordinates.dropoff.lon',
+                        idMarca: 1,
+                        idLocal: 1,
+                        // Venta BRUTA canónica menos el envío = lo que realmente entra por comida.
+                        bruto: BRUTO_EXPR,
+                        envio: { $convert: { input: '$account.shippingCost', to: 'double', onError: 0, onNull: 0 } },
+                    },
                 },
-            },
-        ], { allowDiskUse: true }).toArray();
+            ], { allowDiskUse: true }).toArray(),
+            Local.find().select('geoLocation').lean(),
+        ]);
+
+        const geoById = new Map<string, any>(locals.map((l: any) => [String(l._id), l.geoLocation]));
 
         const puntos = raw
-            .map((p: any) => ({
-                lat: Number(p.lat),
-                lng: Number(p.lng),
-                idMarca: String(p.idMarca ?? ''),
-            }))
+            .map((p: any) => {
+                const lat = Number(p.lat), lng = Number(p.lng);
+                const g = geoById.get(String(p.idLocal));
+                // Distancia real local→entrega. null cuando el local no tiene coords (no se puede saber).
+                let dist: number | null = null;
+                if (g?.latitude && g?.longitude) {
+                    const d = _haversineKm(Number(g.latitude), Number(g.longitude), lat, lng);
+                    if (Number.isFinite(d) && d <= 200) dist = Number(d.toFixed(2));
+                }
+                return {
+                    lat,
+                    lng,
+                    idMarca: String(p.idMarca ?? ''),
+                    facturacion: Math.max(Math.round((Number(p.bruto) || 0) - (Number(p.envio) || 0)), 0),
+                    dist,
+                };
+            })
             .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.lat !== 0 && p.lng !== 0);
 
         // Densidad por celda de ~1 km (2 decimales) → da el tope del rango de la leyenda.
@@ -840,7 +872,16 @@ router.get('/heatmap/delivery', async (_req: Request, res: Response) => {
         }
         const maxCelda = celdas.size > 0 ? Math.max(...celdas.values()) : 0;
 
-        return res.json({ puntos, total: puntos.length, maxCelda });
+        return res.json({
+            puntos,
+            total: puntos.length,
+            maxCelda,
+            // Umbral de "entrega lejana": a partir de acá el costo del envío se dispara (verificado:
+            // el peso del envío pasa de ~8% a 22% y el tiempo se duplica cruzando los 5 km).
+            umbralLejano: EFF_KM_LEJANO,
+            totalLejanas: puntos.filter((p) => p.dist != null && p.dist >= EFF_KM_LEJANO).length,
+            facturacionTotal: puntos.reduce((a, p) => a + p.facturacion, 0),
+        });
     } catch (error: any) {
         console.error('[DEENEX-MONITOR] Heatmap delivery error:', error.message);
         return res.status(500).json({ error: 'Internal server error' });
@@ -1146,7 +1187,7 @@ router.get('/efficiency', async (req: Request, res: Response) => {
                 ...resumenDe(rows),
                 localesConEntregas: locales_.length,
                 localesRankeables: rankeables.length,
-                entregasLejanas: rows.filter((r) => r.dist >= 3).length,
+                entregasLejanas: rows.filter((r) => r.dist >= EFF_KM_LEJANO).length,
             },
             canales,
             porDistancia,

@@ -125,6 +125,10 @@ export interface HeatPoint {
     lat: number;
     lng: number;
     idMarca: string;
+    /** Venta bruta de la comida (sin el envío) — peso de la capa "facturación". */
+    facturacion: number;
+    /** Distancia local→entrega en km. null si el local no tiene coordenadas. */
+    dist: number | null;
 }
 
 export interface HeatmapResponse {
@@ -132,6 +136,10 @@ export interface HeatmapResponse {
     total: number;
     /** Máximo de entregas en una celda de ~1 km (tope del rango de la leyenda) */
     maxCelda: number;
+    /** Km a partir de los cuales una entrega cuenta como "lejana". */
+    umbralLejano: number;
+    totalLejanas: number;
+    facturacionTotal: number;
 }
 
 /** Puntos de ENTREGA reales (coordinates.dropoff) de los pedidos delivery pagados. */
