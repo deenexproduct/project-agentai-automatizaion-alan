@@ -67,6 +67,53 @@ export const getDeenexLocations = async (): Promise<LocationsResponse> => {
     return data;
 };
 
+// ── Eficiencia logística (pestaña Eficiencia) ────────────────
+/** Corte de métricas: siempre viaja con su `n` para poder juzgar si la muestra alcanza. */
+export interface EffCorte {
+    n: number;
+    distanciaMediana: number;
+    envioMediano: number;
+    pctEnvioSobreComida: number;
+    tiempoMediano: number;
+    nConTiempo: number;
+    fallas: number;
+    gmv: number;
+}
+
+export interface EffLocal extends EffCorte {
+    id: string;
+    nombre: string;
+    marca: string;
+    vecinosCerca: number;
+    pctTerceros: number;
+    clientes: number;
+}
+
+export interface EfficiencyResponse {
+    resumen: EffCorte & {
+        localesConEntregas: number;
+        localesRankeables: number;
+        entregasLejanas: number;
+    };
+    canales: Array<EffCorte & { canal: 'terceros' | 'propio' }>;
+    porDistancia: Array<EffCorte & { rango: string }>;
+    porDensidad: Array<{
+        grupo: string;
+        locales: number;
+        pedidosMedianaPorLocal: number;
+        distanciaMediana: number;
+        pctEnvioSobreComida: number;
+    }>;
+    ranking: EffLocal[];
+    umbrales: { minPedidosLocal: number; vecinoKm: number };
+    advertencias: Record<string, string>;
+}
+
+export const getDeenexEfficiency = async (): Promise<EfficiencyResponse> => {
+    const { data } = await api.get('/deenex-monitoring/efficiency');
+    return data;
+};
+
 // ── Mapas de calor ───────────────────────────────────────────
 export interface HeatPoint {
     lat: number;

@@ -16,6 +16,7 @@ import {
   TrendingUp,
   MonitorSmartphoneIcon,
   MapPin,
+  Gauge,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import PlatformSwitcher from "../common/PlatformSwitcher";
@@ -29,6 +30,7 @@ import ProfileSettings from "../settings/ProfileSettings";
 import TeamPermissions from "../team/TeamPermissions";
 import MetricsDashboard from "../monitoring/MetricsDashboard";
 import LocationsMap from "../monitoring/LocationsMap";
+import EfficiencyDashboard from "../monitoring/EfficiencyDashboard";
 import DeenexMonitoring from "./DeenexMonitoring";
 import OpsActivity from "./OpsActivity";
 import OpsReports from "./OpsReports";
@@ -45,6 +47,7 @@ type OpsTab =
   | "monitoring"
   | "metrics"
   | "locations"
+  | "efficiency"
   | "profile"
   | "team";
 
@@ -65,6 +68,7 @@ const opsGroup: SidebarItem[] = [
     label: "Métricas App",
   },
   { id: "locations", Icon: MapPin, label: "Mapa de Locales" },
+  { id: "efficiency", Icon: Gauge, label: "Eficiencia" },
   { id: "tasks", Icon: CheckSquare, label: "Tareas" },
   { id: "goals", Icon: Target, label: "Objetivos" },
   { id: "reports", Icon: FileText, label: "Informes" },
@@ -90,6 +94,7 @@ const TAB_TITLES: Record<OpsTab, string> = {
   monitoring: "Centro de Monitoreo",
   metrics: "Métricas de la App",
   locations: "Mapa de Locales",
+  efficiency: "Eficiencia Logística",
   profile: "Mi Perfil",
   team: "Equipo y Permisos",
 };
@@ -229,6 +234,7 @@ export default function OpsApp() {
           {activeTab === "monitoring" && <DeenexMonitoring />}
           {activeTab === "metrics" && <MetricsDashboard />}
           {activeTab === "locations" && <LocationsMap />}
+          {activeTab === "efficiency" && <EfficiencyDashboard />}
           {activeTab === "profile" && <ProfileSettings />}
           {activeTab === "team" && <TeamPermissions />}
         </div>
