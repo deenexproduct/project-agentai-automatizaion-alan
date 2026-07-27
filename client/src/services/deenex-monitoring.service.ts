@@ -78,6 +78,12 @@ export interface EffCorte {
     nConTiempo: number;
     fallas: number;
     gmv: number;
+    /** Reparto real del costo de envío (deliveryCondiciones): quién lo paga. */
+    costoEnvioTotal: number;
+    costoAbsorbidoMarca: number;
+    costoPagadoUsuario: number;
+    pctEnvioAbsorbidoMarca: number;
+    enviosGratis: number;
 }
 
 export interface EffLocal extends EffCorte {

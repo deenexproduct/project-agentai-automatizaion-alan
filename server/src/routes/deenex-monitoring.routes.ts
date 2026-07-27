@@ -1028,7 +1028,7 @@ router.get('/efficiency', async (req: Request, res: Response) => {
             Brand.find().select('appName domain').lean(),
             Local.find().select('nameLocal idMarca geoLocation statusLocal').lean(),
             Order.collection.find(match, {
-                projection: { idLocal: 1, idMarca: 1, idCliente: 1, type: 1, coordinates: 1, account: 1, totalFacturado: 1, estadoDeOrden: 1, created: 1, update: 1 },
+                projection: { idLocal: 1, idMarca: 1, idCliente: 1, type: 1, coordinates: 1, account: 1, totalFacturado: 1, estadoDeOrden: 1, created: 1, update: 1, deliveryCondiciones: 1 },
             }).toArray(),
         ]);
 
@@ -1046,7 +1046,15 @@ router.get('/efficiency', async (req: Request, res: Response) => {
 
             const tipo = String(p.type || '').toLowerCase();
             const canal = /rappi|pedidosya|pedidos_ya|mercado|uber|justo/.test(tipo) ? 'terceros' : 'propio';
+            // `account.shippingCost` == `deliveryCondiciones.costoUsuario` (verificado en prod): es lo
+            // que paga EL CLIENTE. Lo que realmente le pesa al comercio es `costoMarca`, la parte del
+            // envío que absorbe. Cobertura de deliveryCondiciones: 99% (503/509).
+            const dc = p.deliveryCondiciones || {};
             const envio = Number(p.account?.shippingCost) || 0;
+            const costoTotalEnvio = Number(dc.costoTotal) || envio;
+            const costoMarca = Number(dc.costoMarca) || 0;
+            const costoUsuario = Number(dc.costoUsuario) || envio;
+            const envioGratis = dc.envioGratis === true;
             const bruto = Number(p.account?.totalinvoiced) || Number(p.totalFacturado) || 0;
             const comida = Math.max(bruto - envio, 0);
             // Tiempo de ciclo: created→update. Se acota a [5,180] min porque `update` se toca después por
@@ -1056,7 +1064,7 @@ router.get('/efficiency', async (req: Request, res: Response) => {
                 const m = (new Date(p.update).getTime() - new Date(p.created).getTime()) / 60000;
                 if (m >= 5 && m <= 180) mins = m;
             }
-            rows.push({ locId: String(p.idLocal), loc, canal, dist, envio, comida, mins, estado: p.estadoDeOrden, cliente: String(p.idCliente) });
+            rows.push({ locId: String(p.idLocal), loc, canal, dist, envio, comida, mins, estado: p.estadoDeOrden, cliente: String(p.idCliente), costoTotalEnvio, costoMarca, costoUsuario, envioGratis });
         }
 
         const ratiosDe = (rs: any[]) => rs.filter((r) => r.envio > 0 && r.comida > 0).map((r) => r.envio / r.comida);
@@ -1069,6 +1077,17 @@ router.get('/efficiency', async (req: Request, res: Response) => {
             nConTiempo: rs.filter((r) => r.mins != null).length,
             fallas: rs.filter((r) => EFF_FALLAS_REALES.includes(r.estado)).length,
             gmv: Math.round(rs.reduce((a, r) => a + r.comida, 0)),
+            // ── Quién paga el envío (deliveryCondiciones) ──
+            // Lo que absorbe el comercio vs lo que paga el cliente. Es el costo REAL para el negocio:
+            // el ratio de arriba (envío/comida) mide el peso del envío, éste mide lo que se le descuenta.
+            costoEnvioTotal: Math.round(rs.reduce((a, r) => a + r.costoTotalEnvio, 0)),
+            costoAbsorbidoMarca: Math.round(rs.reduce((a, r) => a + r.costoMarca, 0)),
+            costoPagadoUsuario: Math.round(rs.reduce((a, r) => a + r.costoUsuario, 0)),
+            pctEnvioAbsorbidoMarca: (() => {
+                const t = rs.reduce((a, r) => a + r.costoTotalEnvio, 0);
+                return t > 0 ? Number(((100 * rs.reduce((a, r) => a + r.costoMarca, 0)) / t).toFixed(1)) : 0;
+            })(),
+            enviosGratis: rs.filter((r) => r.envioGratis).length,
         });
 
         // ── 1) Canal: terceros vs propio ──
@@ -1136,7 +1155,8 @@ router.get('/efficiency', async (req: Request, res: Response) => {
             umbrales: { minPedidosLocal: EFF_MIN_PEDIDOS_LOCAL, vecinoKm: EFF_VECINO_KM },
             // Se declaran las limitaciones para que el front las muestre en vez de que alguien lea de más.
             advertencias: {
-                costoEsCobrado: 'El costo de envío es lo que se cobra al cliente, NO la comisión del marketplace: los ratios miden peso del envío, no margen.',
+                costoEnvioSeparado: 'El costo de envío está separado en lo que absorbe el comercio y lo que paga el cliente (deliveryCondiciones, 99% de cobertura). "Envío / comida" mide el peso del envío sobre el ticket; "absorbido por la marca" es lo que efectivamente le cuesta al negocio.',
+                sinComisionMarketplace: 'La comisión que cobra Rappi NO está en el sistema (se buscó en locales, brands, pagos y liquidaciones): es un dato externo del contrato. Sin él no se puede calcular el margen final del canal de terceros.',
                 fallasSubestimadas: 'Solo se cuentan como falla CANCELADO y PICKUPFAILED; el resto de los estados abiertos son pedidos sin actualizar.',
                 muestraChica: 'Volumen histórico bajo: cada corte trae su `n` para poder juzgar si el número es representativo.',
             },

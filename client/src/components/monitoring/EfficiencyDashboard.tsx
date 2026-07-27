@@ -152,6 +152,68 @@ export default function EfficiencyDashboard() {
         </table>
       </Card>
 
+      {/* 1.b ¿Quién paga el envío? */}
+      <Card
+        titulo="¿Quién paga el envío?"
+        subtitulo="El costo de envío se reparte entre lo que absorbe el comercio y lo que paga el cliente. Lo que absorbe el comercio es el costo real del canal; lo que paga el cliente no le cuesta al negocio."
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          {[
+            { label: "Costo total de envío", valor: money(resumen.costoEnvioTotal) },
+            { label: "Lo absorbe el comercio", valor: money(resumen.costoAbsorbidoMarca), destacar: true },
+            { label: "Lo paga el cliente", valor: money(resumen.costoPagadoUsuario) },
+            { label: "Envíos gratis", valor: num(resumen.enviosGratis) },
+          ].map((k) => (
+            <div key={k.label} className="rounded-lg bg-slate-50 p-3">
+              <div className="text-[11px] text-slate-400 uppercase tracking-wide">{k.label}</div>
+              <div className={`text-[17px] font-semibold mt-0.5 ${k.destacar ? "text-red-600" : "text-slate-800"}`}>
+                {k.valor}
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Barra: qué proporción del envío absorbe el negocio */}
+        <div className="h-3 rounded-full overflow-hidden bg-slate-100 flex">
+          <div
+            className="bg-red-400"
+            style={{ width: `${Math.min(resumen.pctEnvioAbsorbidoMarca, 100)}%` }}
+            title={`Comercio: ${resumen.pctEnvioAbsorbidoMarca}%`}
+          />
+          <div className="bg-emerald-400 flex-1" title="Cliente" />
+        </div>
+        <div className="flex justify-between text-[11px] text-slate-500 mt-1">
+          <span>
+            Comercio <b>{resumen.pctEnvioAbsorbidoMarca}%</b>
+          </span>
+          <span>
+            Cliente <b>{Number((100 - resumen.pctEnvioAbsorbidoMarca).toFixed(1))}%</b>
+          </span>
+        </div>
+
+        <table className="w-full mt-4">
+          <thead>
+            <tr className="border-b border-slate-100">
+              <TH>Canal</TH>
+              <TH right>Costo total</TH>
+              <TH right>Absorbe el comercio</TH>
+              <TH right>% absorbido</TH>
+              <TH right>Envíos gratis</TH>
+            </tr>
+          </thead>
+          <tbody>
+            {canales.map((c) => (
+              <tr key={c.canal} className="border-b border-slate-50 last:border-0">
+                <TD bold>{c.canal === "terceros" ? "Terceros (Rappi)" : "Delivery propio"}</TD>
+                <TD right>{money(c.costoEnvioTotal)}</TD>
+                <TD right>{money(c.costoAbsorbidoMarca)}</TD>
+                <TD right>{c.pctEnvioAbsorbidoMarca}%</TD>
+                <TD right>{c.enviosGratis}</TD>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
       {/* 2. Acantilado de distancia */}
       <Card
         titulo="¿Hasta dónde conviene entregar?"
