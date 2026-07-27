@@ -139,6 +139,8 @@ export interface HeatmapResponse {
     /** Km a partir de los cuales una entrega cuenta como "lejana". */
     umbralLejano: number;
     totalLejanas: number;
+    /** Entregas cuya distancia no se puede calcular: su local no existe en `locales`. */
+    sinDistancia: number;
     facturacionTotal: number;
 }
 

@@ -681,6 +681,33 @@ const BRUTO_EXPR = {
 };
 const IS_DELIVERY_EXPR = { $regexMatch: { input: { $ifNull: ['$type', ''] }, regex: /^delivery/ } };
 
+// ¿La rama de BRUTO_EXPR que gana para este pedido trae el envío adentro? SOLO `tf+ptu` lo arrastra
+// (lo declara la fuente canónica en deenex-data/src/core/filtros.js: "AUDIT OPF1-BRUTO-RAMA3-LATENTE-01:
+// esta rama (tf+ptu) SÍ arrastra costo de envío"). Restarle el envío a las otras ramas descuenta algo
+// que nunca estuvo sumado: sobre las 509 entregas históricas eran 472 pedidos mal restados, $1,29M de
+// menos y 10 facturaciones negativas clampeadas a 0 que después se leían como "sin monto".
+const BRUTO_INCLUYE_ENVIO_EXPR = {
+    $let: {
+        vars: {
+            tobd: _numExpr('$account.totalOriginalBeforeDiscounts'),
+            torig: _numExpr('$account.totalOriginal'),
+            tf: _numExpr('$totalFacturado'),
+            ot: _numExpr('$account.orderTotal'),
+        },
+        in: {
+            $switch: {
+                branches: [
+                    { case: { $gt: ['$$tobd', 0] }, then: false },
+                    { case: { $gt: ['$$torig', 0] }, then: false },
+                    { case: { $gt: ['$$tf', 0] }, then: true },
+                    { case: { $gt: ['$$ot', 0] }, then: false },
+                ],
+                default: true, // rama `total`: es el total del pedido, envío incluido
+            },
+        },
+    },
+};
+
 router.get('/locations', async (_req: Request, res: Response) => {
     try {
         const Brand = getDeenexBrandModel();
@@ -833,8 +860,9 @@ router.get('/heatmap/delivery', async (_req: Request, res: Response) => {
                         lng: '$coordinates.dropoff.lon',
                         idMarca: 1,
                         idLocal: 1,
-                        // Venta BRUTA canónica menos el envío = lo que realmente entra por comida.
+                        // Venta BRUTA canónica + si esa rama trae el envío adentro (para restarlo solo ahí).
                         bruto: BRUTO_EXPR,
+                        brutoIncluyeEnvio: BRUTO_INCLUYE_ENVIO_EXPR,
                         envio: { $convert: { input: '$account.shippingCost', to: 'double', onError: 0, onNull: 0 } },
                     },
                 },
@@ -858,7 +886,10 @@ router.get('/heatmap/delivery', async (_req: Request, res: Response) => {
                     lat,
                     lng,
                     idMarca: String(p.idMarca ?? ''),
-                    facturacion: Math.max(Math.round((Number(p.bruto) || 0) - (Number(p.envio) || 0)), 0),
+                    facturacion: Math.max(
+                        Math.round((Number(p.bruto) || 0) - (p.brutoIncluyeEnvio ? Number(p.envio) || 0 : 0)),
+                        0,
+                    ),
                     dist,
                 };
             })
@@ -880,6 +911,10 @@ router.get('/heatmap/delivery', async (_req: Request, res: Response) => {
             // el peso del envío pasa de ~8% a 22% y el tiempo se duplica cruzando los 5 km).
             umbralLejano: EFF_KM_LEJANO,
             totalLejanas: puntos.filter((p) => p.dist != null && p.dist >= EFF_KM_LEJANO).length,
+            // Entregas cuya distancia NO se puede calcular: su `idLocal` no existe en `locales` (locales
+            // borrados sin reasignar los pedidos). No son "cercanas", son no medibles → el front las saca
+            // del denominador en vez de contarlas como si estuvieran dentro del radio.
+            sinDistancia: puntos.filter((p) => p.dist == null).length,
             facturacionTotal: puntos.reduce((a, p) => a + p.facturacion, 0),
         });
     } catch (error: any) {

@@ -149,6 +149,9 @@ function HeatLayer({
   const map = useMap();
   const peakRef = useRef(onPeak);
   peakRef.current = onPeak;
+  const picoMinimoRef = useRef(picoMinimo);
+  picoMinimoRef.current = picoMinimo;
+  const tuneRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (points.length === 0) return;
@@ -165,40 +168,73 @@ function HeatLayer({
       )
       .addTo(map);
 
+    // Se REPLICA el bucket interno de leaflet.heat (_redraw), no se aproxima. Aproximarlo tenía dos
+    // desfasajes que rompían la escala:
+    //   · bounds: usar getBounds().pad(0.15) contaba entregas fuera del viewport que la librería NUNCA
+    //     dibuja (ella descarta más allá de _r px) → el pico salía inflado, el `max` quedaba alto y en
+    //     muchas vistas nada llegaba al rojo (peor caso medido: leyenda "33 entregas", pintado real 1).
+    //   · fase: la grilla de la librería está corrida por `panePos % g`; sin ese offset un cluster se
+    //     parte en dos celdas en un lado y se fusiona en el otro (pico medido 0,66x–1,25x del real).
+    // Además `g` y el margen se leen del propio layer (_heat._r) en vez de recalcularlos: con blur 0 la
+    // librería cae a su radio por defecto y la fórmula a mano se desviaría.
     const tune = () => {
-      // getBounds() explota si el mapa todavía no tiene centro/zoom.
+      // getSize()/_getMapPanePos() explotan si el mapa todavía no tiene centro/zoom.
       if (!(map as any)._loaded) return;
+      const heat = (layer as any)._heat;
+      if (!heat) return;
       const z = map.getZoom();
       const f = 1 / Math.pow(2, Math.max(0, Math.min(HEAT_MAXZOOM - z, 12)));
-      const g = (HEAT_RADIUS + HEAT_BLUR) / 2; // celda interna de leaflet.heat, en px
-      const bounds = map.getBounds().pad(0.15);
+      const R = heat._r;
+      const g = R / 2;
+      const size = map.getSize();
+      const pane = (map as any)._getMapPanePos();
+      const wx = pane.x % g;
+      const wy = pane.y % g;
       const celdas = new Map<string, number>();
       let peak = 0;
       for (const [lat, lng, w] of points) {
-        if (!bounds.contains([lat, lng] as any)) continue;
-        const p = map.project([lat, lng] as any, z);
-        const k = `${Math.floor(p.x / g)}:${Math.floor(p.y / g)}`;
+        const a = map.latLngToContainerPoint([lat, lng] as any);
+        if (a.x < -R || a.y < -R || a.x > size.x + R || a.y > size.y + R) continue;
+        const k = `${Math.floor((a.x - wx) / g)}:${Math.floor((a.y - wy) / g)}`;
         // Se ACUMULA el peso, no se cuentan puntos: en la capa de facturación el pico es en $.
         const n = (celdas.get(k) || 0) + w;
         celdas.set(k, n);
         if (n > peak) peak = n;
       }
-      const efectivo = Math.max(peak, picoMinimo);
-      layer.setOptions({ max: Math.max(efectivo * f, 0.05) });
+      const efectivo = Math.max(peak, picoMinimoRef.current);
+      // El piso va en unidades de PESO, antes de multiplicar por f. El `Math.max(..., 0.05)` anterior
+      // comparaba un absoluto contra un valor ya escalado por zoom: a zoom bajo el piso ganaba siempre
+      // y el pico se pintaba amarillo (pasaba en el zoom inicial con la capa "lejanas").
+      layer.setOptions({ max: efectivo * f });
       peakRef.current?.(peak);
     };
 
     // Ojo: setView/fitBounds son animados → hay que tunear en los eventos, no sincrónicamente.
     map.on("zoomend", tune);
     map.on("moveend", tune);
+    tuneRef.current = tune;
     tune();
 
     return () => {
       map.off("zoomend", tune);
       map.off("moveend", tune);
+      tuneRef.current = null;
+      // leaflet.heat agenda un requestAnimationFrame en setOptions/redraw y su onRemove NO lo cancela:
+      // si el frame corre después de removeLayer, _redraw lee this._map (ya null) y tira TypeError.
+      const frame = (layer as any)._frame;
+      if (frame) {
+        (L as any).Util.cancelAnimFrame(frame);
+        (layer as any)._frame = null;
+      }
       map.removeLayer(layer);
     };
   }, [points, map]);
+
+  // `picoMinimo` cambia sin que cambien los puntos (p. ej. al recalcularse el promedio): se re-tunea la
+  // capa existente en vez de recrearla entera, y se lee por ref para no tener un closure viejo.
+  useEffect(() => {
+    tuneRef.current?.();
+  }, [picoMinimo]);
 
   return null;
 }
@@ -218,11 +254,18 @@ export default function LocationsMap() {
   const [heatMode, setHeatMode] = useState<HeatMode>("off");
   const heatDelivery = heatMode !== "off";
   const [heatPoints, setHeatPoints] = useState<HeatPoint[] | null>(null);
-  const [heatMeta, setHeatMeta] = useState<{ umbralLejano: number; totalLejanas: number } | null>(null);
+  const [heatMeta, setHeatMeta] = useState<{
+    umbralLejano: number;
+    totalLejanas: number;
+    sinDistancia: number;
+  } | null>(null);
   const [heatLoading, setHeatLoading] = useState(false);
+  // Un fallo de red/servidor NO es "no hay entregas": si se colapsan en heatPoints=[] el usuario lee
+  // "Sin datos de entrega con coordenadas" (falso: hay 509) y encima el guard de abajo nunca reintenta.
+  const [heatError, setHeatError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!heatDelivery || heatPoints !== null || heatLoading) return;
+    if (!heatDelivery || heatPoints !== null || heatLoading || heatError) return;
     let alive = true;
     (async () => {
       try {
@@ -230,10 +273,14 @@ export default function LocationsMap() {
         const data = await getDeenexDeliveryHeatmap();
         if (!alive) return;
         setHeatPoints(data.puntos || []);
-        setHeatMeta({ umbralLejano: data.umbralLejano ?? 3, totalLejanas: data.totalLejanas ?? 0 });
+        setHeatMeta({
+          umbralLejano: data.umbralLejano ?? 3,
+          totalLejanas: data.totalLejanas ?? 0,
+          sinDistancia: data.sinDistancia ?? 0,
+        });
       } catch (e) {
         console.error(e);
-        if (alive) setHeatPoints([]);
+        if (alive) setHeatError("No se pudieron cargar las entregas.");
       } finally {
         if (alive) setHeatLoading(false);
       }
@@ -241,7 +288,7 @@ export default function LocationsMap() {
     return () => {
       alive = false;
     };
-  }, [heatDelivery, heatPoints, heatLoading]);
+  }, [heatDelivery, heatPoints, heatLoading, heatError]);
 
   useEffect(() => {
     let alive = true;
@@ -324,15 +371,22 @@ export default function LocationsMap() {
     [brands],
   );
 
-  // Entregas que entran al mapa de calor: filtro de leyenda + marcas ocultas, y en "lejanas" solo las
-  // que superan el radio sano.
-  const heatVisibleRaw = useMemo(() => {
+  // Universo del mapa de calor: todas las entregas de las marcas visibles (sin marcas ocultas). Es el
+  // denominador honesto de las leyendas — el crudo del backend incluye marcas que el mapa no muestra.
+  const heatBase = useMemo(() => {
     if (!heatDelivery || !heatPoints) return [];
+    return heatPoints.filter(
+      (p) => visibleBrandIds.has(p.idMarca) && !hiddenBrands.has(p.idMarca),
+    );
+  }, [heatDelivery, heatPoints, hiddenBrands, visibleBrandIds]);
+
+  // Lo que entra a la capa actual: en "lejanas" solo las que superan el radio sano.
+  const heatVisibleRaw = useMemo(() => {
     const umbral = heatMeta?.umbralLejano ?? 3;
-    return heatPoints
-      .filter((p) => visibleBrandIds.has(p.idMarca) && !hiddenBrands.has(p.idMarca))
-      .filter((p) => (heatMode === "lejanas" ? p.dist != null && p.dist >= umbral : true));
-  }, [heatDelivery, heatMode, heatPoints, heatMeta, hiddenBrands, visibleBrandIds]);
+    return heatMode === "lejanas"
+      ? heatBase.filter((p) => p.dist != null && p.dist >= umbral)
+      : heatBase;
+  }, [heatBase, heatMode, heatMeta]);
 
   // Zonas de ~1 km con su ticket MEDIANO. Solo se quedan las que tienen suficientes entregas: con 1 o
   // 2 pedidos el "típico" es el ticket de esos pedidos, no el de la zona.
@@ -340,8 +394,9 @@ export default function LocationsMap() {
     if (heatMode !== "ticket") return [];
     const celdas = new Map<string, { lat: number; lng: number; tickets: number[] }>();
     for (const p of heatVisibleRaw) {
-      // Se excluyen las entregas sin monto: un 0 acá significa "no quedó registrado", no "gratis",
-      // y metido en un promedio lo arrastra para abajo (15 de 509 pedidos están en 0).
+      // Se excluyen las entregas sin monto: un 0 acá es "no quedó registrado", no "gratis", y metido
+      // en un promedio lo arrastra para abajo. Son 5 de 509 (eran 15 hasta que se arregló la doble
+      // resta del envío en el backend, que fabricaba 10 negativos clampeados a 0).
       if (!(p.facturacion > 0)) continue;
       const k = `${Math.round(p.lat / TICKET_CELDA_GRADOS)}:${Math.round(p.lng / TICKET_CELDA_GRADOS)}`;
       const c = celdas.get(k) || { lat: 0, lng: 0, tickets: [] as number[] };
@@ -386,20 +441,35 @@ export default function LocationsMap() {
     [heatMode, heatVisibleRaw],
   );
 
-  // Pesos para el gradiente. En "facturación" se RECORTA cada peso al p99: hay un pedido de $3,3M que
-  // solo él es el 10% de toda la facturación de delivery (el siguiente es 7 veces menor), y sin tope
-  // ese único punto se lleva todo el rojo y deja el resto del mapa en frío. El recorte afecta SOLO
-  // cómo se pinta; el total de la leyenda sigue siendo el real.
-  const heatVisiblePoints = useMemo<[number, number, number][]>(() => {
+  // Pesos para el gradiente. En "facturación" se topea cada peso para que un pedido enorme no se lleve
+  // todo el rojo y deje el resto del mapa en frío. Se usa **p95 con interpolación** y no p99 con índice
+  // entero: `Math.floor(n*0.99)` da `n-1` para todo n <= 100, o sea el propio máximo → no recortaba
+  // NADA justo al filtrar por marca, que es cuando quedan pocos puntos y el outlier más pesa.
+  // (El pedido de $3,3M que motivó esto es de The Coffee Shop, hoy en MARCAS_OCULTAS: ya no entra.)
+  const { puntosPesados: heatVisiblePoints, topeados } = useMemo(() => {
     if (heatMode !== "facturacion") {
-      return heatVisibleRaw.map((p) => [p.lat, p.lng, 1] as [number, number, number]);
+      return {
+        puntosPesados: heatVisibleRaw.map((p) => [p.lat, p.lng, 1] as [number, number, number]),
+        topeados: 0,
+      };
     }
     const vals = heatVisibleRaw.map((p) => Math.max(p.facturacion, 0)).sort((a, b) => a - b);
-    const tope = vals.length ? vals[Math.floor(vals.length * 0.99)] : 0;
-    return heatVisibleRaw.map(
-      (p) =>
-        [p.lat, p.lng, Math.min(Math.max(p.facturacion, 0), tope || Infinity)] as [number, number, number],
-    );
+    // Con muy pocos puntos cualquier percentil es ruido: mejor no tocar nada.
+    const tope =
+      vals.length >= 20
+        ? (() => {
+            const idx = (vals.length - 1) * 0.95;
+            const lo = Math.floor(idx), hi = Math.ceil(idx);
+            return vals[lo] + (vals[hi] - vals[lo]) * (idx - lo);
+          })()
+        : Infinity;
+    let n = 0;
+    const puntosPesados = heatVisibleRaw.map((p) => {
+      const v = Math.max(p.facturacion, 0);
+      if (v > tope) n++;
+      return [p.lat, p.lng, Math.min(v, tope)] as [number, number, number];
+    });
+    return { puntosPesados, topeados: n };
   }, [heatMode, heatVisibleRaw]);
 
   // El piso de normalización va en las MISMAS unidades que el peso: 3 entregas, o el equivalente en
@@ -407,8 +477,29 @@ export default function LocationsMap() {
   const heatPicoMinimo = useMemo(() => {
     if (heatMode !== "facturacion") return HEAT_PICO_MINIMO;
     const n = heatVisiblePoints.length;
-    return n > 0 ? (heatTotal / n) * HEAT_PICO_MINIMO : HEAT_PICO_MINIMO;
-  }, [heatMode, heatVisiblePoints, heatTotal]);
+    if (n === 0) return HEAT_PICO_MINIMO;
+    // Promedio de los pesos YA topeados: mezclar el total sin recortar con pesos recortados sería
+    // comparar dos escalas distintas.
+    const promedioPesos = heatVisiblePoints.reduce((a, p) => a + p[2], 0) / n;
+    return promedioPesos * HEAT_PICO_MINIMO;
+  }, [heatMode, heatVisiblePoints]);
+
+  // Denominadores honestos para las leyendas: todos se miden sobre el universo que el usuario está
+  // viendo (heatVisibleRaw, ya sin marcas ocultas), no sobre el crudo del backend.
+  const conMonto = useMemo(
+    () => heatVisibleRaw.filter((p) => p.facturacion > 0).length,
+    [heatVisibleRaw],
+  );
+  const entregasEnZonas = useMemo(
+    () => zonasTicket.reduce((a, z) => a + z.entregas, 0),
+    [zonasTicket],
+  );
+  // Entregas cuya distancia se puede calcular: las que no tienen local asociado no son "cercanas",
+  // son no medibles, y contarlas en el denominador diría que están dentro del radio.
+  const medibles = useMemo(
+    () => heatBase.filter((p) => p.dist != null).length,
+    [heatBase],
+  );
 
   // Pico de la vista actual (entregas en la celda más densa de lo que se ve). Lo reporta HeatLayer,
   // que es quien normaliza el gradiente contra ese mismo valor → la leyenda describe exactamente la
@@ -450,7 +541,10 @@ export default function LocationsMap() {
 
         {/* Ticket promedio: círculos por zona (ver nota en TICKET_CELDA_GRADOS: un promedio no se suma) */}
         {heatMode === "ticket" &&
-          zonasTicket.map((z, i) => {
+          // Se pinta de MENOR a mayor ticket: el orden de montaje es el orden de pintado en SVG, así
+          // que iterando la lista tal cual (ordenada desc) la zona más cara quedaba debajo de las
+          // baratas — justo el color que se quiere ver.
+          [...zonasTicket].reverse().map((z, i) => {
             const span = ticketRango.max - ticketRango.min;
             const t = span > 0 ? (z.ticket - ticketRango.min) / span : 0.5;
             const color = colorDelGradiente(t);
@@ -574,6 +668,23 @@ export default function LocationsMap() {
             <div className="text-[10px] text-slate-400 mt-1.5">cargando entregas…</div>
           )}
 
+          {/* Un fallo de carga se dice como fallo, con reintento: setear heatPoints=null rehabilita
+              el efecto de fetch (su guard sale temprano mientras heatPoints !== null). */}
+          {heatDelivery && !heatLoading && heatError && (
+            <div className="mt-1.5 text-[10px] leading-snug">
+              <span className="text-red-500">{heatError}</span>{" "}
+              <button
+                className="text-indigo-600 hover:underline"
+                onClick={() => {
+                  setHeatError(null);
+                  setHeatPoints(null);
+                }}
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
           {/* Ticket promedio: leyenda propia — es una escala fija de $, no un gradiente por vista */}
           {heatMode === "ticket" && !heatLoading && heatPoints && (
             <div className="mt-1.5">
@@ -589,8 +700,10 @@ export default function LocationsMap() {
                   </div>
                   <div className="text-[10px] text-slate-400 mt-1 leading-snug">
                     Cada círculo es una zona de ~1 km: el color es el ticket mediano y el tamaño,
-                    cuántas entregas lo respaldan. Solo zonas con {TICKET_MIN_ENTREGAS}+ entregas —{" "}
-                    {zonasTicket.length} de {heatVisibleRaw.length} entregas agrupadas.
+                    cuántas entregas lo respaldan.{" "}
+                    <b>{zonasTicket.length} zonas</b> con {TICKET_MIN_ENTREGAS}+ entregas, que agrupan{" "}
+                    {entregasEnZonas} de las {conMonto} entregas con monto. Las otras{" "}
+                    {conMonto - entregasEnZonas} caen en zonas demasiado chicas para sacar un típico.
                   </div>
                 </>
               ) : (
@@ -610,11 +723,12 @@ export default function LocationsMap() {
               />
               <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
                 <span>menos</span>
+                {/* El pico NO es una cifra de negocio: es el peso acumulado en una celda de ~21 px, así
+                    que cambia varias veces con solo acercar el mapa. En entregas se puede decir el
+                    número; en plata poner "$X" al lado del total real confundía dos cifras distintas. */}
                 <span>
-                  {picoEnVista > 0
-                    ? heatMode === "facturacion"
-                      ? fmtMoney(picoEnVista)
-                      : `${Math.round(picoEnVista)} entregas`
+                  {picoEnVista > 0 && heatMode !== "facturacion"
+                    ? `${Math.round(picoEnVista)} entregas en el punto más denso`
                     : "más"}
                 </span>
               </div>
@@ -623,26 +737,32 @@ export default function LocationsMap() {
                   <>
                     El rojo marca dónde se factura más, no dónde se pide más
                     seguido. Total {fmtMoney(heatTotal)} en{" "}
-                    {heatVisiblePoints.length} entregas.
+                    {heatVisiblePoints.length} entregas
+                    {topeados > 0 && ` (${topeados} topeadas para pintar)`}.
                   </>
                 ) : heatMode === "lejanas" ? (
                   <>
-                    Solo entregas a {heatMeta?.umbralLejano ?? 3}+ km del local:
-                    donde se concentran, falta un local cerca.{" "}
-                    {heatVisiblePoints.length} de {heatPoints.length} entregas.
+                    {/* Denominador: las medibles, no el crudo del backend. Las que no tienen local
+                        asociado no son "cercanas", son imposibles de evaluar. Y el texto no promete
+                        "acá falta un local": con 21 casos dispersos eso no se sostiene. */}
+                    Entregas a {heatMeta?.umbralLejano ?? 3}+ km del local:{" "}
+                    {heatVisiblePoints.length} de {medibles} medibles
+                    {(heatMeta?.sinDistancia ?? 0) > 0 &&
+                      ` (${heatMeta?.sinDistancia} sin local asociado quedan afuera)`}
+                    . Son pocas y dispersas: sirven para mirar casos, no para decidir dónde abrir.
                   </>
                 ) : (
                   <>
                     El rojo marca la zona con más entregas de esta vista. Total{" "}
-                    {heatVisiblePoints.length} entregas (histórico, pedidos
-                    pagados).
+                    {heatVisiblePoints.length} entregas (histórico completo, sin
+                    filtro de fecha; delivery es ~5% de los pedidos).
                   </>
                 )}
               </div>
             </div>
           )}
 
-          {heatDelivery && !heatLoading && heatPoints && heatPoints.length > 0 && heatVisiblePoints.length === 0 && (
+          {heatMode !== "ticket" && heatDelivery && !heatLoading && heatPoints && heatPoints.length > 0 && heatVisiblePoints.length === 0 && (
             <div className="text-[10px] text-slate-400 mt-1.5 leading-snug">
               {heatMode === "lejanas"
                 ? `Ninguna entrega supera los ${heatMeta?.umbralLejano ?? 3} km con los filtros actuales.`
