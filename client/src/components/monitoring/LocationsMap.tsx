@@ -94,7 +94,36 @@ const HEAT_PICO_MINIMO = 3;
 //   entregas    → dónde se pide más seguido
 //   facturación → dónde está la plata (una zona puede pedir poco y facturar mucho)
 //   lejanas     → entregas fuera del radio sano = dónde faltaría un local
-type HeatMode = "off" | "entregas" | "facturacion" | "lejanas";
+type HeatMode = "off" | "entregas" | "facturacion" | "lejanas" | "ticket";
+
+// ── Capa "ticket mediano por zona" ────────────────────────────────────────────────────────────────────────
+// NO se dibuja como mapa de calor a propósito: leaflet.heat SUMA los pesos de los puntos que caen en
+// la misma celda, y un promedio no se suma. Al alejarse, dos zonas vecinas de $40.000 se fusionarían
+// en una de $80.000 — el mapa mostraría un valor inventado. Se dibuja como círculos por zona:
+// color = ticket mediano, tamaño = cantidad de entregas (o sea, cuánta confianza tiene el número).
+const TICKET_CELDA_GRADOS = 0.01; // ~1 km, mismo corte que usa el backend para la densidad
+const TICKET_MIN_ENTREGAS = 3;    // con menos entregas el número es una anécdota, no una zona
+
+/** Color del gradiente de calor para un valor normalizado [0,1] (interpola entre los stops). */
+function colorDelGradiente(t: number): string {
+  const stops = Object.entries(HEAT_GRADIENT)
+    .map(([k, v]) => [Number(k), v] as [number, string])
+    .sort((a, b) => a[0] - b[0]);
+  const x = Math.max(0, Math.min(1, t));
+  let lo = stops[0], hi = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (x >= stops[i][0] && x <= stops[i + 1][0]) { lo = stops[i]; hi = stops[i + 1]; break; }
+  }
+  const span = hi[0] - lo[0];
+  const r = span === 0 ? 0 : (x - lo[0]) / span;
+  const mix = (a: string, b: string) => {
+    const n = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const [ar, ag, ab] = n(a), [br, bg, bb] = n(b);
+    const c = (u: number, v: number) => Math.round(u + (v - u) * r).toString(16).padStart(2, "0");
+    return `#${c(ar, br)}${c(ag, bg)}${c(ab, bb)}`;
+  };
+  return mix(lo[1], hi[1]);
+}
 
 /**
  * Capa de mapa de calor (leaflet.heat). Se monta/desmonta según el filtro activo.
@@ -305,6 +334,48 @@ export default function LocationsMap() {
       .filter((p) => (heatMode === "lejanas" ? p.dist != null && p.dist >= umbral : true));
   }, [heatDelivery, heatMode, heatPoints, heatMeta, hiddenBrands, visibleBrandIds]);
 
+  // Zonas de ~1 km con su ticket MEDIANO. Solo se quedan las que tienen suficientes entregas: con 1 o
+  // 2 pedidos el "típico" es el ticket de esos pedidos, no el de la zona.
+  const zonasTicket = useMemo(() => {
+    if (heatMode !== "ticket") return [];
+    const celdas = new Map<string, { lat: number; lng: number; tickets: number[] }>();
+    for (const p of heatVisibleRaw) {
+      // Se excluyen las entregas sin monto: un 0 acá significa "no quedó registrado", no "gratis",
+      // y metido en un promedio lo arrastra para abajo (15 de 509 pedidos están en 0).
+      if (!(p.facturacion > 0)) continue;
+      const k = `${Math.round(p.lat / TICKET_CELDA_GRADOS)}:${Math.round(p.lng / TICKET_CELDA_GRADOS)}`;
+      const c = celdas.get(k) || { lat: 0, lng: 0, tickets: [] as number[] };
+      // Centroide real de la celda (promedio de las entregas), no el centro de la grilla.
+      c.lat += p.lat; c.lng += p.lng; c.tickets.push(p.facturacion);
+      celdas.set(k, c);
+    }
+    return Array.from(celdas.values())
+      .filter((c) => c.tickets.length >= TICKET_MIN_ENTREGAS)
+      .map((c) => {
+        const n = c.tickets.length;
+        const orden = [...c.tickets].sort((a, b) => a - b);
+        // MEDIANA, no promedio: con zonas de 3-5 entregas, un pedido atípico (hay uno de $3,3M) se
+        // lleva el promedio puesto e inventa una "zona cara" que no existe. La mediana aguanta.
+        const ticket = orden[Math.floor(n / 2)];
+        return {
+          lat: c.lat / n,
+          lng: c.lng / n,
+          entregas: n,
+          ticket,
+          facturacion: c.tickets.reduce((a, b) => a + b, 0),
+        };
+      })
+      .sort((a, b) => b.ticket - a.ticket);
+  }, [heatMode, heatVisibleRaw]);
+
+  // Rango de tickets para colorear. Se usa el p90 como tope (no el máximo) para que una zona cara
+  // aislada no deje al resto en el mismo color frío.
+  const ticketRango = useMemo(() => {
+    if (zonasTicket.length === 0) return { min: 0, max: 0 };
+    const vals = zonasTicket.map((z) => z.ticket).sort((a, b) => a - b);
+    return { min: vals[0], max: vals[Math.floor(vals.length * 0.9)] || vals[vals.length - 1] };
+  }, [zonasTicket]);
+
   // Total REAL del modo, en sus unidades (entregas o $). Se calcula sobre los valores sin recortar:
   // es lo que se muestra en la leyenda y tiene que ser la suma de verdad.
   const heatTotal = useMemo(
@@ -373,9 +444,48 @@ export default function LocationsMap() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FitBounds points={points} />
-        {heatDelivery && heatVisiblePoints.length > 0 && (
+        {heatMode !== "ticket" && heatDelivery && heatVisiblePoints.length > 0 && (
           <HeatLayer points={heatVisiblePoints} onPeak={setPicoEnVista} picoMinimo={heatPicoMinimo} />
         )}
+
+        {/* Ticket promedio: círculos por zona (ver nota en TICKET_CELDA_GRADOS: un promedio no se suma) */}
+        {heatMode === "ticket" &&
+          zonasTicket.map((z, i) => {
+            const span = ticketRango.max - ticketRango.min;
+            const t = span > 0 ? (z.ticket - ticketRango.min) / span : 0.5;
+            const color = colorDelGradiente(t);
+            // El radio comunica cuántas entregas respaldan el promedio (más chico = menos confiable).
+            const radio = Math.min(9 + Math.sqrt(z.entregas) * 2.5, 26);
+            return (
+              <CircleMarker
+                key={`zt-${i}`}
+                center={[z.lat, z.lng]}
+                radius={radio}
+                pathOptions={{ color, fillColor: color, fillOpacity: 0.55, weight: 1.5 }}
+              >
+                <Tooltip>{`${fmtMoney(z.ticket)} · ${z.entregas} entregas`}</Tooltip>
+                <Popup>
+                  <div className="text-[13px] leading-snug min-w-[170px]">
+                    <div className="font-semibold">Zona de ~1 km</div>
+                    <div className="mt-1.5 space-y-0.5">
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">Ticket mediano</span>
+                        <b>{fmtMoney(z.ticket)}</b>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">Entregas</span>
+                        <b>{z.entregas}</b>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">Facturación</span>
+                        <b>{fmtMoney(z.facturacion)}</b>
+                      </div>
+                    </div>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            );
+          })}
         {visible.map((l) => {
           const color = colorByBrand.get(l.idMarca) || GRIS;
           return (
@@ -443,6 +553,7 @@ export default function LocationsMap() {
               { k: "off", label: "Ninguno" },
               { k: "entregas", label: "Entregas" },
               { k: "facturacion", label: "Facturación" },
+              { k: "ticket", label: "Ticket" },
               { k: "lejanas", label: "Lejanas" },
             ] as { k: HeatMode; label: string }[]).map((m) => (
               <button
@@ -463,7 +574,35 @@ export default function LocationsMap() {
             <div className="text-[10px] text-slate-400 mt-1.5">cargando entregas…</div>
           )}
 
-          {heatDelivery && !heatLoading && heatPoints && heatVisiblePoints.length > 0 && (
+          {/* Ticket promedio: leyenda propia — es una escala fija de $, no un gradiente por vista */}
+          {heatMode === "ticket" && !heatLoading && heatPoints && (
+            <div className="mt-1.5">
+              {zonasTicket.length > 0 ? (
+                <>
+                  <div
+                    className="h-2 rounded-full border border-slate-200"
+                    style={{ background: HEAT_CSS_GRADIENT }}
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                    <span>{fmtMoney(ticketRango.min)}</span>
+                    <span>{fmtMoney(ticketRango.max)}+</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1 leading-snug">
+                    Cada círculo es una zona de ~1 km: el color es el ticket mediano y el tamaño,
+                    cuántas entregas lo respaldan. Solo zonas con {TICKET_MIN_ENTREGAS}+ entregas —{" "}
+                    {zonasTicket.length} de {heatVisibleRaw.length} entregas agrupadas.
+                  </div>
+                </>
+              ) : (
+                <div className="text-[10px] text-slate-400 leading-snug">
+                  Ninguna zona llega a {TICKET_MIN_ENTREGAS} entregas con los filtros actuales: no hay
+                  promedio que mostrar.
+                </div>
+              )}
+            </div>
+          )}
+
+          {heatMode !== "ticket" && heatDelivery && !heatLoading && heatPoints && heatVisiblePoints.length > 0 && (
             <div className="mt-1.5">
               <div
                 className="h-2 rounded-full border border-slate-200"
