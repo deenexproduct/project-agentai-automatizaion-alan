@@ -976,5 +976,176 @@ router.get('/product-metrics', async (req: Request, res: Response) => {
     }
 });
 
+// ══════════════════════════════════════════════════════════════
+// GET /efficiency — Eficiencia logística del delivery (panel de Ops)
+// ══════════════════════════════════════════════════════════════
+// Responde dos decisiones de Deenex como empresa: (1) ¿hace falta sumar operadores logísticos?
+// (2) ¿abrir más locales canibaliza o abarata? Todo se calcula cruzando la coordenada de ENTREGA
+// (coordinates.dropoff) con la del local → distancia real recorrida por pedido.
+//
+// Complementa (no duplica) la sección Delivery de deenex-data, que mide volumen, tiempos y desenlaces:
+// acá lo que se agrega es la dimensión GEOGRÁFICA (distancia, densidad de locales, ranking).
+//
+// HONESTIDAD DE LOS DATOS (verificado contra prod 2026-07-26):
+//  - `account.shippingCost` es lo que se COBRA de envío, NO la comisión del marketplace. El costo real
+//    de Rappi no está en la base → los ratios miden peso del envío sobre la comida, no margen.
+//  - `estadoDeOrden` distinto de ENTREGADO casi siempre es estado sin actualizar (pedidos viejos), no
+//    una falla: por eso solo se cuentan como falla CANCELADO y PICKUPFAILED.
+//  - El volumen es chico (~500 entregas históricas, mediana 4 por local) → se devuelve `n` en cada
+//    corte para que el front pueda avisar cuándo la muestra no alcanza.
+const EFF_MIN_PEDIDOS_LOCAL = 10;   // volumen mínimo para rankear un local
+const EFF_VECINO_KM = 2;            // radio para considerar "local hermano cerca"
+const EFF_FALLAS_REALES = ['CANCELADO', 'PICKUPFAILED'];
+
+function _haversineKm(aLat: number, aLng: number, bLat: number, bLng: number) {
+    const R = 6371, rad = (d: number) => (d * Math.PI) / 180;
+    const dLat = rad(bLat - aLat), dLng = rad(bLng - aLng);
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+}
+const _mediana = (arr: number[]) => {
+    if (!arr.length) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+};
+
+router.get('/efficiency', async (req: Request, res: Response) => {
+    try {
+        const Local = getDeenexLocalModel();
+        const Brand = getDeenexBrandModel();
+        const Order = getDeenexOrderModel();
+
+        // Ventana opcional (?from=YYYY-MM-DD&to=YYYY-MM-DD). Sin ventana = histórico completo, que es
+        // el default a propósito: con ~500 entregas totales, cortar por mes deja la muestra en nada.
+        const match: any = { paymentStatus: PAGADO_MATCH, type: { $regex: /^delivery/i }, 'coordinates.dropoff.lat': { $exists: true, $ne: null } };
+        if (req.query.from || req.query.to) {
+            match.created = {};
+            if (req.query.from) match.created.$gte = new Date(String(req.query.from));
+            if (req.query.to) match.created.$lte = new Date(String(req.query.to));
+        }
+
+        const [brands, locals, pedidos] = await Promise.all([
+            Brand.find().select('appName domain').lean(),
+            Local.find().select('nameLocal idMarca geoLocation statusLocal').lean(),
+            Order.collection.find(match, {
+                projection: { idLocal: 1, idMarca: 1, idCliente: 1, type: 1, coordinates: 1, account: 1, totalFacturado: 1, estadoDeOrden: 1, created: 1, update: 1 },
+            }).toArray(),
+        ]);
+
+        const brandName = new Map<string, string>(brands.map((b: any) => [String(b._id), b.appName || b.domain || '—']));
+        const localById = new Map<string, any>(locals.map((l: any) => [String(l._id), l]));
+
+        // ── Enriquecer cada pedido con distancia, canal, costos y tiempo ──
+        const rows: any[] = [];
+        for (const p of pedidos) {
+            const loc = localById.get(String(p.idLocal));
+            const geo = loc?.geoLocation;
+            if (!geo?.latitude || !geo?.longitude) continue;
+            const dist = _haversineKm(Number(geo.latitude), Number(geo.longitude), Number(p.coordinates.dropoff.lat), Number(p.coordinates.dropoff.lon));
+            if (!Number.isFinite(dist) || dist > 200) continue; // outlier de carga
+
+            const tipo = String(p.type || '').toLowerCase();
+            const canal = /rappi|pedidosya|pedidos_ya|mercado|uber|justo/.test(tipo) ? 'terceros' : 'propio';
+            const envio = Number(p.account?.shippingCost) || 0;
+            const bruto = Number(p.account?.totalinvoiced) || Number(p.totalFacturado) || 0;
+            const comida = Math.max(bruto - envio, 0);
+            // Tiempo de ciclo: created→update. Se acota a [5,180] min porque `update` se toca después por
+            // otros motivos (hay diferencias de meses) y arruinaría el promedio.
+            let mins: number | null = null;
+            if (p.created && p.update) {
+                const m = (new Date(p.update).getTime() - new Date(p.created).getTime()) / 60000;
+                if (m >= 5 && m <= 180) mins = m;
+            }
+            rows.push({ locId: String(p.idLocal), loc, canal, dist, envio, comida, mins, estado: p.estadoDeOrden, cliente: String(p.idCliente) });
+        }
+
+        const ratiosDe = (rs: any[]) => rs.filter((r) => r.envio > 0 && r.comida > 0).map((r) => r.envio / r.comida);
+        const resumenDe = (rs: any[]) => ({
+            n: rs.length,
+            distanciaMediana: Number(_mediana(rs.map((r) => r.dist)).toFixed(2)),
+            envioMediano: Math.round(_mediana(rs.map((r) => r.envio))),
+            pctEnvioSobreComida: Number((100 * _mediana(ratiosDe(rs))).toFixed(1)),
+            tiempoMediano: Math.round(_mediana(rs.filter((r) => r.mins != null).map((r) => r.mins))),
+            nConTiempo: rs.filter((r) => r.mins != null).length,
+            fallas: rs.filter((r) => EFF_FALLAS_REALES.includes(r.estado)).length,
+            gmv: Math.round(rs.reduce((a, r) => a + r.comida, 0)),
+        });
+
+        // ── 1) Canal: terceros vs propio ──
+        const canales = ['terceros', 'propio'].map((c) => ({ canal: c, ...resumenDe(rows.filter((r) => r.canal === c)) }));
+
+        // ── 2) El acantilado: costo y tiempo por rango de distancia ──
+        const RANGOS: Array<[number, number, string]> = [[0, 1, '0-1 km'], [1, 2, '1-2 km'], [2, 5, '2-5 km'], [5, Infinity, '+5 km']];
+        const porDistancia = RANGOS.map(([a, b, label]) => ({ rango: label, ...resumenDe(rows.filter((r) => r.dist >= a && r.dist < b)) }));
+
+        // ── 3) Densidad de locales: ¿los hermanos cerca canibalizan o abaratan? ──
+        const porLocal = new Map<string, any[]>();
+        for (const r of rows) {
+            if (!porLocal.has(r.locId)) porLocal.set(r.locId, []);
+            porLocal.get(r.locId)!.push(r);
+        }
+        const locales_ = Array.from(porLocal.entries()).map(([locId, rs]) => {
+            const loc = localById.get(locId);
+            const vecinos = locals.filter((o: any) => String(o._id) !== locId
+                && String(o.idMarca) === String(loc.idMarca)
+                && o.geoLocation?.latitude
+                && _haversineKm(Number(loc.geoLocation.latitude), Number(loc.geoLocation.longitude), Number(o.geoLocation.latitude), Number(o.geoLocation.longitude)) < EFF_VECINO_KM).length;
+            const base = resumenDe(rs);
+            return {
+                id: locId,
+                nombre: loc.nameLocal || 'Sin nombre',
+                marca: brandName.get(String(loc.idMarca)) || '—',
+                vecinosCerca: vecinos,
+                pctTerceros: Number((100 * rs.filter((r) => r.canal === 'terceros').length / rs.length).toFixed(0)),
+                clientes: new Set(rs.map((r) => r.cliente)).size,
+                ...base,
+            };
+        });
+
+        const GRUPOS: Array<[(v: number) => boolean, string]> = [
+            [(v) => v === 0, 'Aislado (0 hermanos a 2 km)'],
+            [(v) => v === 1, '1 hermano cerca'],
+            [(v) => v >= 2, '2 o más hermanos cerca'],
+        ];
+        const porDensidad = GRUPOS.map(([test, label]) => {
+            const g = locales_.filter((l) => test(l.vecinosCerca));
+            return {
+                grupo: label,
+                locales: g.length,
+                pedidosMedianaPorLocal: Math.round(_mediana(g.map((l) => l.n))),
+                distanciaMediana: Number(_mediana(g.map((l) => l.distanciaMediana)).toFixed(2)),
+                pctEnvioSobreComida: Number(_mediana(g.map((l) => l.pctEnvioSobreComida)).toFixed(1)),
+            };
+        });
+
+        // ── 4) Ranking (solo locales con volumen suficiente para no rankear ruido) ──
+        const rankeables = locales_.filter((l) => l.n >= EFF_MIN_PEDIDOS_LOCAL)
+            .sort((a, b) => a.pctEnvioSobreComida - b.pctEnvioSobreComida);
+
+        return res.json({
+            resumen: {
+                ...resumenDe(rows),
+                localesConEntregas: locales_.length,
+                localesRankeables: rankeables.length,
+                entregasLejanas: rows.filter((r) => r.dist >= 3).length,
+            },
+            canales,
+            porDistancia,
+            porDensidad,
+            ranking: rankeables,
+            umbrales: { minPedidosLocal: EFF_MIN_PEDIDOS_LOCAL, vecinoKm: EFF_VECINO_KM },
+            // Se declaran las limitaciones para que el front las muestre en vez de que alguien lea de más.
+            advertencias: {
+                costoEsCobrado: 'El costo de envío es lo que se cobra al cliente, NO la comisión del marketplace: los ratios miden peso del envío, no margen.',
+                fallasSubestimadas: 'Solo se cuentan como falla CANCELADO y PICKUPFAILED; el resto de los estados abiertos son pedidos sin actualizar.',
+                muestraChica: 'Volumen histórico bajo: cada corte trae su `n` para poder juzgar si el número es representativo.',
+            },
+        });
+    } catch (error: any) {
+        console.error('[DEENEX-MONITOR] Efficiency error:', error.message);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 export default router;
 // touch to trigger tsx watch
