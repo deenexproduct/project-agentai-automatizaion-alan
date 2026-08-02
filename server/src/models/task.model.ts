@@ -27,6 +27,7 @@ export interface ITask extends Document {
     contact?: mongoose.Types.ObjectId;
     deal?: mongoose.Types.ObjectId;
     company?: mongoose.Types.ObjectId;
+    goal?: mongoose.Types.ObjectId;
     dueDate?: Date;
     durationMinutes: number;
     completedAt?: Date;
