@@ -69,7 +69,15 @@ const CrmContactSchema = new Schema<ICrmContact>({
     },
     firstName: { type: String, trim: true },
     lastName: { type: String, trim: true },
-    email: { type: String, trim: true, lowercase: true },
+    email: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        validate: {
+            validator: (v: string) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+            message: 'El email no tiene un formato válido',
+        },
+    },
     phone: { type: String, trim: true },
     position: { type: String, trim: true },
     positions: [{ type: String, trim: true }],

@@ -91,10 +91,14 @@ const CompanySchema = new Schema<ICompany>({
     sector: { type: String, trim: true },
     website: { type: String, trim: true },
     description: { type: String },
-    localesCount: { type: Number, default: 1 },
-    franchiseCount: { type: Number, default: 0 },
-    ownedCount: { type: Number, default: 0 },
-    costPerLocation: { type: Number, default: 0 },
+    // `min: 0` no es cosmético: el deal automático calcula
+    // localesCount * costPerLocation y el Deal exige `value >= 0`, así que un
+    // número negativo hacía fallar la creación del deal en silencio y la
+    // empresa quedaba invisible en el pipeline.
+    localesCount: { type: Number, default: 1, min: [0, 'La cantidad de locales no puede ser negativa'] },
+    franchiseCount: { type: Number, default: 0, min: [0, 'La cantidad de franquicias no puede ser negativa'] },
+    ownedCount: { type: Number, default: 0, min: [0, 'La cantidad de locales propios no puede ser negativa'] },
+    costPerLocation: { type: Number, default: 0, min: [0, 'El costo por local no puede ser negativo'] },
     category: { type: String },
     partner: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner' },
     competitors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Competitor' }],

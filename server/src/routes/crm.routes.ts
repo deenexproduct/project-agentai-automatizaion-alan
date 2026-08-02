@@ -7,6 +7,23 @@ import { Task } from '../models/task.model';
 import { Activity } from '../models/activity.model';
 import { LinkedInContact } from '../models/linkedin-contact.model';
 import { linkedinService } from '../services/linkedin.service';
+import { sendValidationError } from '../utils/mongoose-errors';
+
+/** Escapa un texto para usarlo dentro de un RegExp sin que rompa la búsqueda. */
+function escaparRegex(texto: string): string {
+    return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * ¿La empresa referenciada existe?
+ *
+ * Sin este chequeo se podían crear contactos y deals apuntando a una empresa
+ * inexistente: quedaban huérfanos, invisibles o rotos en la UI.
+ */
+async function empresaExiste(companyId: unknown): Promise<boolean> {
+    if (!companyId || !mongoose.isValidObjectId(companyId as string)) return false;
+    return Boolean(await Company.exists({ _id: companyId as string }));
+}
 
 const router = Router();
 
@@ -166,14 +183,34 @@ router.get('/companies', async (req: Request, res: Response) => {
 router.post('/companies', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
+
+        // El índice userId+name del modelo NO es único ("uniqueness enforcement
+        // at app level") y nadie la sostenía: por eso en prod terminaron tres
+        // "Zamp" y dos "Grupo Madero".
+        const nombre = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+        if (nombre) {
+            const yaExiste = await Company.findOne({
+                userId,
+                name: new RegExp(`^${escaparRegex(nombre)}$`, 'i'),
+            }).lean();
+            if (yaExiste) {
+                return res.status(409).json({
+                    error: `Ya existe una empresa llamada "${yaExiste.name}"`,
+                    existingId: yaExiste._id,
+                });
+            }
+        }
+
         const company = await Company.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
 
         // ── Auto-create Deal in 'Lead Potencial' ──
         try {
             const validKeys = await PipelineConfig.getStageKeys(userId.toString());
             const firstStage = validKeys[0] || 'lead';
+            // Nunca negativo: el Deal exige `value >= 0` y si falla acá la
+            // empresa queda creada pero SIN deal, o sea invisible en el pipeline.
             const dealValue = (company.localesCount && company.costPerLocation)
-                ? Math.round((company.localesCount * company.costPerLocation) * 100) / 100
+                ? Math.max(0, Math.round((company.localesCount * company.costPerLocation) * 100) / 100)
                 : 0;
 
             await Deal.create({
@@ -193,6 +230,7 @@ router.post('/companies', async (req: Request, res: Response) => {
 
         res.status(201).json(company);
     } catch (err: any) {
+        if (sendValidationError(res, err)) return;
         console.error('CRM create company error:', err.message);
         res.status(500).json({ error: 'Failed to create company' });
     }
@@ -398,6 +436,15 @@ router.get('/contacts', async (req: Request, res: Response) => {
 router.post('/contacts', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
+
+        // El form manda `companies: []` y a veces `company: ''` cuando no se
+        // eligió ninguna: un string vacío llegaba a Mongoose como ObjectId inválido.
+        if (req.body?.company === '') delete req.body.company;
+
+        if (req.body?.company && !(await empresaExiste(req.body.company))) {
+            return res.status(400).json({ error: 'La empresa indicada no existe', fields: ['company'] });
+        }
+
         const contact = await CrmContact.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
 
         // Auto-prospect if LinkedIn URL is provided
@@ -461,6 +508,7 @@ router.post('/contacts', async (req: Request, res: Response) => {
 
         res.status(201).json(populatedContact);
     } catch (err: any) {
+        if (sendValidationError(res, err)) return;
         console.error('CRM create contact error:', err.message);
         res.status(500).json({ error: 'Failed to create contact' });
     }
@@ -804,9 +852,19 @@ router.post('/deals', async (req: Request, res: Response) => {
             return res.status(400).json({ error: `Invalid status "${status}". Valid: ${validKeys.join(', ')}` });
         }
 
+        // Un deal sin empresa (o apuntando a una borrada) se renderiza roto en
+        // el pipeline y no se puede abrir: es dato inválido, no un caso válido.
+        if (!req.body?.company) {
+            return res.status(400).json({ error: 'El deal necesita una empresa', fields: ['company'] });
+        }
+        if (!(await empresaExiste(req.body.company))) {
+            return res.status(400).json({ error: 'La empresa indicada no existe', fields: ['company'] });
+        }
+
         const deal = await Deal.create({ ...req.body, status, assignedTo: req.body.assignedTo || userId, userId });
         res.status(201).json(deal);
     } catch (err: any) {
+        if (sendValidationError(res, err)) return;
         console.error('CRM create deal error:', err.message);
         res.status(500).json({ error: 'Failed to create deal' });
     }
