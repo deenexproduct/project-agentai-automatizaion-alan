@@ -306,16 +306,32 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
         }));
     }, [stages, applyDealFilter]);
 
+    // Etapas para el drawer: memoizadas porque son dependencia de su useEffect de carga.
+    // Con un `.map()` inline el array cambiaba de identidad en cada render, el efecto
+    // se re-ejecutaba y volvía a pisar el formulario (y a re-pedir el deal).
+    const drawerStages = useMemo(
+        () => stages.map(s => ({ key: s.key, label: s.label })),
+        [stages]
+    );
+
     // Deep-linking effect
     useEffect(() => {
         if (urlDealId) {
-            setEditingDeal({ _id: urlDealId } as any);
+            // Abrir con el deal COMPLETO que ya está en el board: si abrimos con un stub
+            // `{_id}` el drawer se pinta vacío hasta que resuelve getDeal (1-8s) y parece
+            // que el lead "no tiene datos". El stub queda sólo como último recurso
+            // (deep-link directo, antes de que el pipeline termine de cargar).
+            setEditingDeal(prev => {
+                if (prev?._id === urlDealId && prev.title) return prev;
+                const fromBoard = stages.flatMap(s => s.deals).find(d => d._id === urlDealId);
+                return fromBoard ?? ({ _id: urlDealId } as any);
+            });
             setIsDrawerOpen(true);
         } else if (isDrawerOpen && editingDeal?._id) {
             setIsDrawerOpen(false);
             setEditingDeal(null);
         }
-    }, [urlDealId]);
+    }, [urlDealId, stages]);
 
     const loadPipeline = useCallback(async () => {
         setLoading(true);
@@ -462,6 +478,9 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
     const handleEditDeal = useCallback((deal: DealData, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        // Guardamos el deal completo ANTES de navegar: la tarjeta ya tiene los datos,
+        // no hay motivo para que el drawer espere a getDeal para mostrarlos.
+        setEditingDeal(deal);
         navigate(`${basePath}/${deal._id}`);
     }, [basePath, navigate]);
 
@@ -576,7 +595,7 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
             <DealFormDrawer
                 open={isDrawerOpen}
                 deal={editingDeal}
-                stages={stages.map(s => ({ key: s.key, label: s.label }))}
+                stages={drawerStages}
                 onClose={() => {
                     setIsDrawerOpen(false);
                     if (urlDealId) navigate(basePath);
