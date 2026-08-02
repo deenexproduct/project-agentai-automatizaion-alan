@@ -1,3 +1,4 @@
+import { mensajeDeError } from '../../lib/apiError';
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, User, Building2, Briefcase, Mail, Phone, Tag, AlertTriangle, Loader2, Camera, ImagePlus, Trash2, Trash } from 'lucide-react';
 import { ContactData, createContact, updateContact, deleteContact, getCompanies, CompanyData, getSystemConfig, getPartners, SystemConfig, PartnerData, addContactRole, addContactPosition, getContact } from '../../services/crm.service';
@@ -329,7 +330,7 @@ export default function ContactFormDrawer({ contact, open, onClose, onSaved }: P
             onClose();
         } catch (error) {
             console.error('Error saving contact:', error);
-            alert('Error al guardar el contacto');
+            alert(mensajeDeError(error, 'Error al guardar el contacto'));
         } finally {
             setSaving(false);
         }
