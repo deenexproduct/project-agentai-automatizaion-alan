@@ -32,6 +32,16 @@ router.get('/metrics', async (req: Request, res: Response) => {
 
         const nonFinalStages = config.stages.filter(s => !s.isFinal).map(s => s.key);
 
+        // Etapas ABIERTAS: no terminales y anteriores a la primera terminal.
+        // Las que quedan después del corte (pausado y cualquier otra que el
+        // usuario ponga al final) no son pipeline vivo. Se deriva de la config
+        // en vez de hardcodear la key 'pausado', que el usuario puede renombrar.
+        const ordenTerminales = config.stages.filter(s => s.isFinal).map(s => s.order);
+        const corteTerminal = ordenTerminales.length ? Math.min(...ordenTerminales) : Number.POSITIVE_INFINITY;
+        const openStageKeys = config.stages
+            .filter(s => !s.isFinal && s.order < corteTerminal)
+            .map(s => s.key);
+
         const [
             // 1. Locales y Empresas
             localesResult,
@@ -72,7 +82,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
             Deal.aggregate([
                 {
                     $match: {
-                        status: { $in: [...wonStageKeys, ...nonFinalStages.filter(s => s !== 'pausado')] }
+                        status: { $in: [...wonStageKeys, ...openStageKeys] }
                     }
                 },
                 { $group: { _id: "$currency", totalMensual: { $sum: "$value" } } }
@@ -240,7 +250,11 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 growthFromLastMonth
             },
             revenue: {
-                wonThisMonth: revenueThisMonth.map(r => ({ currency: r._id || 'USD', amount: r.totalMensual })),
+                // El nombre viejo era `wonThisMonth`, y el número no era lo ganado ni era
+                // del mes: incluye las etapas ganadas MÁS todo el pipeline abierto y no
+                // tiene filtro de fecha. La UI ya lo titula "Mensual Proyectado": el
+                // número estaba bien, mentía el nombre.
+                proyectado: revenueThisMonth.map(r => ({ currency: r._id || 'USD', amount: r.totalMensual })),
                 pipelineForecast: pipelineForecast.map(r => ({ currency: r._id || 'USD', amount: r.pipelineAsignado }))
             },
             traceability: {
