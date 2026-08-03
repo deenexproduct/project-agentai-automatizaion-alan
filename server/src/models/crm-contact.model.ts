@@ -172,6 +172,41 @@ CrmContactSchema.index({ userId: 1, createdAt: -1 });
 
 // ── Hooks ─────────────────────────────────────────────────────
 
+/**
+ * Mantiene alineados los pares duplicados del modelo cuando se escribe POR QUERY
+ * (`findOneAndUpdate`, `updateOne`, `updateMany`).
+ *
+ * El `pre('save')` de abajo es document middleware: Mongoose NO lo dispara en
+ * los updates por query, y ese es justamente el camino del PATCH de contactos
+ * (crm.routes.ts) y de otros 5 lugares. Sin este hook, mover un contacto de la
+ * empresa A a la B dejaba `companies[]` en B y `company` en A, y como todas las
+ * lecturas hacen `$or: [{company}, {companies}]`, el contacto quedaba colgando
+ * de LAS DOS empresas para siempre.
+ */
+CrmContactSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function (this: any, next) {
+    const update = this.getUpdate();
+    if (!update || Array.isArray(update)) return next();
+
+    // El update puede venir como { $set: {...} } o con los campos al tope.
+    const set = update.$set ?? update;
+    const tiene = (campo: string) => Object.prototype.hasOwnProperty.call(set, campo);
+
+    if (tiene('companies')) {
+        const arr: any[] = set.companies || [];
+        set.company = arr.length > 0 ? arr[0] : null;
+    } else if (tiene('company')) {
+        set.companies = set.company ? [set.company] : [];
+    }
+
+    if (tiene('positions')) {
+        const arr: any[] = set.positions || [];
+        set.position = arr.length > 0 ? arr.join(', ') : '';
+    }
+
+    this.setUpdate(update);
+    next();
+});
+
 CrmContactSchema.pre('save', function (next) {
     const contact = this as ICrmContact;
 
