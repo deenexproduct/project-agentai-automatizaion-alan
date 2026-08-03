@@ -9,6 +9,7 @@ import { CrmContact } from '../models/crm-contact.model';
 import { Company } from '../models/company.model';
 import { Goal } from '../models/goal.model';
 import { WeeklyReport } from '../models/weeklyReport.model';
+import { calcularTasaSemanal } from '../utils/completion-rate';
 
 const router = Router();
 
@@ -1544,10 +1545,14 @@ router.post('/reports/weekly', async (req: Request, res: Response) => {
             assignedTo: t.assignedTo ? { _id: t.assignedTo._id, name: t.assignedTo.name } : undefined,
         });
 
-        // Bug #2 fix: completionRate based on this week's tasks only
-        const completionRate = (tasksCompletedThisWeek.length + pendingTasks.length) > 0
-            ? Math.round((tasksCompletedThisWeek.length / (tasksCompletedThisWeek.length + pendingTasks.length)) * 100)
-            : 0;
+        // De las tareas que VENCÍAN esta semana, cuántas se completaron.
+        //
+        // Antes el denominador era "completadas esta semana + todo el backlog
+        // histórico pendiente", así que la tasa se aplastaba sola a medida que
+        // se acumulaba trabajo viejo. Medido contra los datos reales: la semana
+        // del 23/02 se completó el 100% de lo que vencía y puntuaba 9%; la del
+        // 02/03 fue 86% real y puntuaba 23%. Y este número pesa el 40% del score.
+        const completionRate = calcularTasaSemanal(allOpsTasks, weekStart, weekEnd);
 
         // ── 2. DAILY PRODUCTIVITY ─────────────────────
         const dailyProductivity: any[] = [];
