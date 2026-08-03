@@ -40,9 +40,10 @@ const DEFAULT_STAGES: IPipelineStage[] = [
     { key: 'seguimiento', label: 'Seguimiento', color: '#a855f7', order: 4, isFinal: false, isActive: true },
     { key: 'reuniones', label: 'Reuniones', color: '#ec4899', order: 5, isFinal: false, isActive: true },
     { key: 'negociacion', label: 'Negociación', color: '#f97316', order: 6, isFinal: false, isActive: true },
-    { key: 'ganado', label: 'Ganado', color: '#22c55e', order: 7, isFinal: true, isActive: true },
-    { key: 'perdido', label: 'Perdido', color: '#ef4444', order: 8, isFinal: true, isActive: true },
-    { key: 'pausado', label: 'Pausado', color: '#94a3b8', order: 9, isFinal: false, isActive: true },
+    { key: 'nurturing', label: 'Nurturing', color: '#14b8a6', order: 7, isFinal: false, isActive: true },
+    { key: 'ganado', label: 'Ganado', color: '#22c55e', order: 8, isFinal: true, isActive: true },
+    { key: 'perdido', label: 'Perdido', color: '#ef4444', order: 9, isFinal: true, isActive: true },
+    { key: 'pausado', label: 'Pausado', color: '#94a3b8', order: 10, isFinal: false, isActive: true },
 ];
 
 // ── Schema ────────────────────────────────────────────────────
