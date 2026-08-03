@@ -59,6 +59,30 @@ router.put('/pipeline/config', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Stage keys must be unique' });
         }
 
+        // Ninguna etapa con deals adentro puede quedar fuera del tablero: el
+        // Kanban arma las columnas solo con las activas, así que desactivarla o
+        // sacarla del array hace desaparecer esos deals de la vista sin ningún
+        // aviso. Siguen existiendo y siguen contando en las métricas, pero el
+        // equipo no los ve más.
+        const keysActivas = stages.filter((s: any) => s.isActive !== false).map((s: any) => s.key);
+        const atrapados = await Deal.find({ userId, status: { $nin: keysActivas } })
+            .select('status')
+            .lean();
+
+        if (atrapados.length > 0) {
+            const porEtapa = atrapados.reduce((acc: Record<string, number>, d: any) => {
+                acc[d.status] = (acc[d.status] || 0) + 1;
+                return acc;
+            }, {});
+            const detalle = Object.entries(porEtapa)
+                .map(([k, n]) => `${k} (${n})`)
+                .join(', ');
+            return res.status(400).json({
+                error: `No se puede guardar: quedarían deals fuera del tablero en ${detalle}. Movelos a otra etapa primero.`,
+                stagesConDeals: Object.entries(porEtapa).map(([key, deals]) => ({ key, deals })),
+            });
+        }
+
         const config = await PipelineConfig.getOrCreate(userId);
         config.stages = stages;
         if (name) config.name = name;
