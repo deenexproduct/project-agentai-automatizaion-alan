@@ -10,6 +10,7 @@ import { Company } from '../models/company.model';
 import { Goal } from '../models/goal.model';
 import { WeeklyReport } from '../models/weeklyReport.model';
 import { calcularTasaSemanal } from '../utils/completion-rate';
+import { promedioDiasPorEtapa } from '../utils/stage-duration';
 
 const router = Router();
 
@@ -421,9 +422,32 @@ router.get('/stats', async (req: Request, res: Response) => {
             }
         }
 
+        // Cuánto TARDA el proceso en cada etapa: tramos cerrados del historial.
+        // Antes esto medía `ahora - entrada` sobre los deals que HOY están
+        // parados ahí, o sea la antigüedad de lo estancado, no la duración. Una
+        // etapa por la que todo fluye rápido casi desaparecía (sus deals ya se
+        // habían ido y no contaban) y una con un solo deal olvidado marcaba su
+        // antigüedad completa.
+        const duracionPorEtapa = promedioDiasPorEtapa(
+            opsDeals.map((d: any) => ({
+                entrada: d.opsStartDate || d.createdAt,
+                historial: d.opsStatusHistory || [],
+            }))
+        );
         const avgDaysPerStage: Record<string, number> = {};
+        const muestrasPorEtapa: Record<string, number> = {};
+        for (const [etapa, v] of Object.entries(duracionPorEtapa)) {
+            avgDaysPerStage[etapa] = v.dias;
+            muestrasPorEtapa[etapa] = v.muestras;
+        }
+
+        // Antigüedad de lo que está parado HOY. Es otra métrica y otro uso, así
+        // que va con su propio nombre en vez de mezclarse con la de arriba.
+        const diasEstancadoPorEtapa: Record<string, number> = {};
         for (const [stage, days] of Object.entries(daysPerStage)) {
-            avgDaysPerStage[stage] = days.length > 0 ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0;
+            diasEstancadoPorEtapa[stage] = days.length > 0
+                ? Math.round(days.reduce((a, b) => a + b, 0) / days.length)
+                : 0;
         }
 
         const activeDeals = opsDeals.filter((d: any) => !finalStageKeys.includes(d.opsStatus)).length;
@@ -497,6 +521,8 @@ router.get('/stats', async (req: Request, res: Response) => {
                 completedDeals,
                 byStatus,
                 avgDaysPerStage,
+                muestrasPorEtapa,
+                diasEstancadoPorEtapa,
                 avgDaysSinceStart,
             },
             revenue: {
