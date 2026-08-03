@@ -5,6 +5,7 @@ import { Activity } from '../models/activity.model';
 import { CrmContact } from '../models/crm-contact.model';
 import { Task } from '../models/task.model';
 import { PipelineConfig } from '../models/pipeline-config.model';
+import { calcularTasaSemanal } from '../utils/completion-rate';
 
 const router = Router();
 
@@ -62,8 +63,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
 
             // 5. Tareas
             overdueTasksCount,
-            completedTasksThisWeek,
-            totalTasksThisWeek,
+            tareasQueVencianEnLaVentana,
             totalTasksAllTime,
 
             // 6. Win Rate and Funnel
@@ -116,16 +116,14 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 dueDate: { $lt: now },
                 status: { $in: ["pending", "in_progress"] }
             }),
-            Task.countDocuments({
-                completedAt: { $gte: weekAgo },
-                status: "completed"
-            }),
-            Task.countDocuments({
-                $or: [
-                    { createdAt: { $gte: weekAgo } },
-                    { dueDate: { $gte: weekAgo, $lte: now } }
-                ]
-            }),
+            // Población sobre la que se mide el cumplimiento: las tareas que
+            // VENCÍAN en la ventana. Antes el numerador eran "completadas en los
+            // últimos 7 días" y el denominador "creadas O con vencimiento en los
+            // últimos 7 días": dos poblaciones distintas, así que el porcentaje
+            // podía superar el 100%.
+            Task.find({ dueDate: { $gte: weekAgo, $lte: now } })
+                .select('status dueDate')
+                .lean(),
             Task.countDocuments({}),
 
             // 6. Win Rate and Funnel
@@ -241,7 +239,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
             };
         }).sort((a, b) => a.step - b.step);
 
-        const completionRate = totalTasksThisWeek > 0 ? (completedTasksThisWeek / totalTasksThisWeek) * 100 : 0;
+        const completionRate = calcularTasaSemanal(tareasQueVencianEnLaVentana as any[], weekAgo, now);
 
         res.json({
             companies: {
