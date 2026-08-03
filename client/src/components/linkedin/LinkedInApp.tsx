@@ -77,6 +77,8 @@ interface SidebarItem {
   Icon: React.ElementType;
   label: string;
   disabled?: boolean;
+  /** No se muestra en el menú. La pantalla sigue existiendo y se puede entrar por URL. */
+  hidden?: boolean;
   accentColor?: string;
 }
 
@@ -98,18 +100,21 @@ const linkedinGroup: SidebarItem[] = [
     id: "prospecting-crm",
     Icon: Target,
     label: "Prospecting CRM",
+    hidden: true,
     accentColor: "#3b82f6",
   },
   {
     id: "prospecting",
     Icon: Target,
     label: "Prospecting Bots",
+    hidden: true,
     accentColor: "#3b82f6",
   },
   {
     id: "publicaciones",
     Icon: Sparkles,
     label: "Publicaciones AI",
+    hidden: true,
     accentColor: "#3b82f6",
   },
   {
@@ -219,7 +224,7 @@ export default function LinkedInApp() {
           </div>
 
           {/* CRM Group */}
-          {crmGroup.map((item) => (
+          {crmGroup.filter((item) => !item.hidden).map((item) => (
             <SidebarButton
               key={item.id}
               {...item}
@@ -233,7 +238,7 @@ export default function LinkedInApp() {
           />
 
           {/* LinkedIn Group */}
-          {linkedinGroup.map((item) => (
+          {linkedinGroup.filter((item) => !item.hidden).map((item) => (
             <SidebarButton
               key={item.id}
               {...item}
@@ -248,7 +253,7 @@ export default function LinkedInApp() {
           />
 
           {/* WhatsApp Group */}
-          {whatsappGroup.map((item) => (
+          {whatsappGroup.filter((item) => !item.hidden).map((item) => (
             <SidebarButton
               key={item.id}
               {...item}
@@ -263,7 +268,7 @@ export default function LinkedInApp() {
           />
 
           {/* Audio Group */}
-          {audioGroup.map((item) => (
+          {audioGroup.filter((item) => !item.hidden).map((item) => (
             <SidebarButton
               key={item.id}
               {...item}
@@ -278,7 +283,7 @@ export default function LinkedInApp() {
           />
 
           {/* Extension Group */}
-          {extensionGroup.map((item) => (
+          {extensionGroup.filter((item) => !item.hidden).map((item) => (
             <SidebarButton
               key={item.id}
               {...item}
@@ -307,7 +312,7 @@ export default function LinkedInApp() {
 
         {/* Bottom: Back button & Config */}
         <div className="flex flex-col items-center gap-2 pt-4 border-t border-white/10 w-full mt-auto mb-4">
-          {bottomGroup.map((item) => (
+          {bottomGroup.filter((item) => !item.hidden).map((item) => (
             <SidebarButton
               key={item.id}
               {...item}
