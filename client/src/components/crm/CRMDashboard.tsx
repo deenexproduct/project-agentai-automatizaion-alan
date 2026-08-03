@@ -103,8 +103,8 @@ export default function CRMDashboard() {
                 <StatCard
                     title="Mensual Proyectado"
                     value={
-                        (stats.revenue?.wonThisMonth || []).length > 0
-                            ? (stats.revenue?.wonThisMonth || []).map(r => `${r.currency || '$'} ${r.amount.toLocaleString()}`).join(' + ')
+                        (stats.revenue?.proyectado || []).length > 0
+                            ? (stats.revenue?.proyectado || []).map(r => `${r.currency || '$'} ${r.amount.toLocaleString()}`).join(' + ')
                             : '$0'
                     }
                     icon={Briefcase}
@@ -117,8 +117,8 @@ export default function CRMDashboard() {
                 <StatCard
                     title="Mensual Estimado"
                     value={
-                        (stats.revenue?.wonThisMonth || []).length > 0
-                            ? (stats.revenue?.wonThisMonth || []).map(r => `${r.currency || '$'} ${Math.round(r.amount * (estimatedSuccessRate / 100)).toLocaleString()}`).join(' + ')
+                        (stats.revenue?.proyectado || []).length > 0
+                            ? (stats.revenue?.proyectado || []).map(r => `${r.currency || '$'} ${Math.round(r.amount * (estimatedSuccessRate / 100)).toLocaleString()}`).join(' + ')
                             : '$0'
                     }
                     icon={Briefcase}

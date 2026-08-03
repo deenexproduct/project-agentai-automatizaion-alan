@@ -32,6 +32,16 @@ router.get('/metrics', async (req: Request, res: Response) => {
 
         const nonFinalStages = config.stages.filter(s => !s.isFinal).map(s => s.key);
 
+        // Etapas ABIERTAS: no terminales y anteriores a la primera terminal.
+        // Las que quedan después del corte (pausado y cualquier otra que el
+        // usuario ponga al final) no son pipeline vivo. Se deriva de la config
+        // en vez de hardcodear la key 'pausado', que el usuario puede renombrar.
+        const ordenTerminales = config.stages.filter(s => s.isFinal).map(s => s.order);
+        const corteTerminal = ordenTerminales.length ? Math.min(...ordenTerminales) : Number.POSITIVE_INFINITY;
+        const openStageKeys = config.stages
+            .filter(s => !s.isFinal && s.order < corteTerminal)
+            .map(s => s.key);
+
         const [
             // 1. Locales y Empresas
             localesResult,
@@ -72,7 +82,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
             Deal.aggregate([
                 {
                     $match: {
-                        status: { $in: [...wonStageKeys, ...nonFinalStages.filter(s => s !== 'pausado')] }
+                        status: { $in: [...wonStageKeys, ...openStageKeys] }
                     }
                 },
                 { $group: { _id: "$currency", totalMensual: { $sum: "$value" } } }
@@ -147,6 +157,18 @@ router.get('/metrics', async (req: Request, res: Response) => {
         const reunionesOrder = getStageOrder('reuniones');
         const negociacionOrder = getStageOrder('negociacion');
 
+        // Sólo las etapas ANTERIORES a la primera terminal representan avance.
+        // Sin este corte, perdido y pausado —que están al final del orden— dan
+        // un `order` más alto que negociación, así que perder un deal en "lead"
+        // lo contaba como si hubiera recorrido el embudo entero: las tasas de
+        // conversión SUBÍAN cuanto peor le iba al equipo.
+        const ordenesFinales = config.stages.filter(s => s.isFinal).map(s => s.order);
+        const corteFinal = ordenesFinales.length ? Math.min(...ordenesFinales) : Number.POSITIVE_INFINITY;
+        const esEtapaDeAvance = (stageKey: string): boolean => {
+            const stage = config.stages.find(s => s.key === stageKey);
+            return !!stage && !stage.isFinal && stage.order < corteFinal;
+        };
+
         deals.forEach((deal: any) => {
             if (wonStageKeys.includes(deal.status)) wonDeals++;
             if (lostStageKeys.includes(deal.status)) lostDeals++;
@@ -169,6 +191,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
 
             // Determine the furthest stage this deal ever reached
             const maxOrderTouched = Array.from(touchedStages).reduce((max, stageKey) => {
+                if (!esEtapaDeAvance(stageKey)) return max;
                 const stageDef = config.stages.find(s => s.key === stageKey);
                 return Math.max(max, stageDef ? stageDef.order : 0);
             }, 0);
@@ -227,7 +250,11 @@ router.get('/metrics', async (req: Request, res: Response) => {
                 growthFromLastMonth
             },
             revenue: {
-                wonThisMonth: revenueThisMonth.map(r => ({ currency: r._id || 'USD', amount: r.totalMensual })),
+                // El nombre viejo era `wonThisMonth`, y el número no era lo ganado ni era
+                // del mes: incluye las etapas ganadas MÁS todo el pipeline abierto y no
+                // tiene filtro de fecha. La UI ya lo titula "Mensual Proyectado": el
+                // número estaba bien, mentía el nombre.
+                proyectado: revenueThisMonth.map(r => ({ currency: r._id || 'USD', amount: r.totalMensual })),
                 pipelineForecast: pipelineForecast.map(r => ({ currency: r._id || 'USD', amount: r.pipelineAsignado }))
             },
             traceability: {

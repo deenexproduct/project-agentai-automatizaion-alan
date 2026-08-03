@@ -1,3 +1,4 @@
+import { mensajeDeError } from '../../lib/apiError';
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, DollarSign, Calendar, Building2, User, Briefcase, MessageCircle, Mail, History, FileText, ListTodo, CheckSquare, Plus, ChevronRight, Check, UserPlus, XCircle, Phone, Linkedin, Users, Send, Loader2, Clock, AlertTriangle } from 'lucide-react';
 import { DealData, getDeal, createDeal, updateDeal, getCompanies, getContacts, CompanyData, ContactData, getTasks, TaskData, updateCompany, updateTask, getDealActivities, createActivity, ActivityData, getTeamUsers, TeamUser } from '../../services/crm.service';
@@ -329,7 +330,7 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             onClose();
         } catch (error) {
             console.error('Error saving deal:', error);
-            alert('Error al guardar la oportunidad');
+            alert(mensajeDeError(error, 'Error al guardar la oportunidad'));
         } finally {
             setSaving(false);
         }

@@ -33,6 +33,23 @@ function getCurrentUserId(): string | null {
     } catch { return null; }
 }
 
+/**
+ * Suma los locales de un conjunto de deals contando cada empresa UNA sola vez.
+ *
+ * Los locales son un atributo de la EMPRESA, no del deal. Sumarlos por deal
+ * hacía que una empresa con dos oportunidades aportara el doble de sus locales
+ * al total del tablero (y a la proyección que se calcula sobre ese número).
+ */
+function sumarLocales(deals: DealData[]): number {
+    const empresasContadas = new Set<string>();
+    return deals.reduce((total, d) => {
+        const id = d.company?._id;
+        if (!id || empresasContadas.has(id)) return total;
+        empresasContadas.add(id);
+        return total + (d.company?.localesCount || 0);
+    }, 0);
+}
+
 // Tipos de filtros rápidos disponibles
 type QuickFilter = 'focus_hoy' | 'huerfanos' | 'mios' | null;
 
@@ -220,7 +237,7 @@ function DroppableColumn({
                         </div>
                         <div className="flex items-center justify-center gap-1 px-1.5 text-[10px] font-bold text-blue-700 bg-blue-50/90 py-1" title="Cantidad de Locales">
                             <Building2 size={10} />
-                            {stage.deals.reduce((sum, d) => sum + (d.company?.localesCount || 0), 0).toLocaleString()}
+                            {sumarLocales(stage.deals).toLocaleString()}
                         </div>
                     </div>
                 </div>
@@ -306,16 +323,32 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
         }));
     }, [stages, applyDealFilter]);
 
+    // Etapas para el drawer: memoizadas porque son dependencia de su useEffect de carga.
+    // Con un `.map()` inline el array cambiaba de identidad en cada render, el efecto
+    // se re-ejecutaba y volvía a pisar el formulario (y a re-pedir el deal).
+    const drawerStages = useMemo(
+        () => stages.map(s => ({ key: s.key, label: s.label })),
+        [stages]
+    );
+
     // Deep-linking effect
     useEffect(() => {
         if (urlDealId) {
-            setEditingDeal({ _id: urlDealId } as any);
+            // Abrir con el deal COMPLETO que ya está en el board: si abrimos con un stub
+            // `{_id}` el drawer se pinta vacío hasta que resuelve getDeal (1-8s) y parece
+            // que el lead "no tiene datos". El stub queda sólo como último recurso
+            // (deep-link directo, antes de que el pipeline termine de cargar).
+            setEditingDeal(prev => {
+                if (prev?._id === urlDealId && prev.title) return prev;
+                const fromBoard = stages.flatMap(s => s.deals).find(d => d._id === urlDealId);
+                return fromBoard ?? ({ _id: urlDealId } as any);
+            });
             setIsDrawerOpen(true);
         } else if (isDrawerOpen && editingDeal?._id) {
             setIsDrawerOpen(false);
             setEditingDeal(null);
         }
-    }, [urlDealId]);
+    }, [urlDealId, stages]);
 
     const loadPipeline = useCallback(async () => {
         setLoading(true);
@@ -462,6 +495,9 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
     const handleEditDeal = useCallback((deal: DealData, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        // Guardamos el deal completo ANTES de navegar: la tarjeta ya tiene los datos,
+        // no hay motivo para que el drawer espere a getDeal para mostrarlos.
+        setEditingDeal(deal);
         navigate(`${basePath}/${deal._id}`);
     }, [basePath, navigate]);
 
@@ -494,7 +530,7 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
                         </div>
                         <div className="px-3 py-1.5 bg-blue-50/80 border border-blue-100 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] rounded-[12px] text-[12px] font-bold text-blue-700 flex items-center gap-1.5 transition-all hover:bg-blue-100/80 whitespace-nowrap">
                             <Building2 size={14} strokeWidth={2.5} className="text-blue-500" />
-                            {filteredStages.reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.company?.localesCount || 0), 0), 0).toLocaleString()} <span className="text-blue-500/70 font-medium">locales</span>
+                            {sumarLocales(filteredStages.flatMap(stage => stage.deals)).toLocaleString()} <span className="text-blue-500/70 font-medium">locales</span>
                         </div>
                     </div>
                     {/* Filtros rápidos del pipeline */}
@@ -576,7 +612,7 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
             <DealFormDrawer
                 open={isDrawerOpen}
                 deal={editingDeal}
-                stages={stages.map(s => ({ key: s.key, label: s.label }))}
+                stages={drawerStages}
                 onClose={() => {
                     setIsDrawerOpen(false);
                     if (urlDealId) navigate(basePath);

@@ -9,3 +9,6 @@ _archive/
 work_agent/
 .gemini/
 client/vite.config.local.ts
+server/.env
+server/.env.*
+server/data/prospecting-state.json

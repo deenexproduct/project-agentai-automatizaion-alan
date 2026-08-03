@@ -224,7 +224,7 @@ export type DashboardStats = {
         growthFromLastMonth: number;
     };
     revenue: {
-        wonThisMonth: { currency: string; amount: number }[];
+        proyectado: { currency: string; amount: number }[];
         pipelineForecast: { currency: string; amount: number }[];
     };
     traceability: {

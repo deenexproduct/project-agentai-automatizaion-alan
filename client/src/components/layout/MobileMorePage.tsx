@@ -30,9 +30,9 @@ const sections: { title: string; items: MoreItem[] }[] = [
     {
         title: 'LinkedIn',
         items: [
-            { id: 'prospecting-crm', Icon: Target, label: 'Prospecting CRM', accentColor: '#3b82f6', accentBg: 'rgba(59, 130, 246, 0.1)' },
-            { id: 'prospecting', Icon: Target, label: 'Prospecting Bots', accentColor: '#3b82f6', accentBg: 'rgba(59, 130, 246, 0.1)' },
-            { id: 'publicaciones', Icon: Sparkles, label: 'Publicaciones AI', accentColor: '#3b82f6', accentBg: 'rgba(59, 130, 246, 0.1)' },
+            // Prospecting CRM, Prospecting Bots y Publicaciones AI quedan ocultas
+            // del menú (igual que en el sidebar de escritorio). Las pantallas siguen
+            // existiendo y se puede entrar por URL.
             { id: 'comments', Icon: MessageSquare, label: 'Comentarios', accentColor: '#3b82f6', accentBg: 'rgba(59, 130, 246, 0.1)', disabled: true },
             { id: 'requests', Icon: Users, label: 'Solicitudes', accentColor: '#3b82f6', accentBg: 'rgba(59, 130, 246, 0.1)', disabled: true },
         ],

@@ -1,3 +1,4 @@
+import { mensajeDeError } from '../../lib/apiError';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Building2, MapPin, Globe, Users, DollarSign, Calendar, Upload, Loader2, Phone, Mail, FileText, CheckCircle2, ChevronRight, Hash, Building, Briefcase, ChevronDown, User, Network, MessageSquare, Linkedin, Trash2, ShieldCheck, Swords, Search, AlignLeft, AlertTriangle, GitBranch, Clock, ImagePlus, TrendingUp, History, Camera, CheckSquare, Save, Monitor } from 'lucide-react';
@@ -388,7 +389,7 @@ export default function CompanyFormDrawer({ company, open, onClose, onSaved }: P
             onClose();
         } catch (error) {
             console.error('Error saving company:', error);
-            alert('Error al guardar la empresa');
+            alert(mensajeDeError(error, 'Error al guardar la empresa'));
         } finally {
             setSaving(false);
         }
