@@ -974,11 +974,15 @@ router.patch('/deals/:id', async (req: Request, res: Response) => {
                 changedBy: (req as any).user._id,
             });
 
-            // Auto-set closedAt for final statuses
+            // Sella la fecha de cierre al entrar a una etapa terminal, y LA LIMPIA
+            // al reabrir: antes sólo se seteaba, así que un deal perdido que volvía
+            // a negociación arrastraba para siempre la fecha en que se había cerrado.
             const config = await PipelineConfig.getOrCreate(userId);
             const targetStage = config.stages.find(s => s.key === req.body.status);
-            if (targetStage?.isFinal && !deal.closedAt) {
-                deal.closedAt = new Date();
+            if (targetStage?.isFinal) {
+                if (!deal.closedAt) deal.closedAt = new Date();
+            } else if (deal.closedAt) {
+                deal.closedAt = undefined;
             }
 
             // Auto-activate in ops pipeline when deal is moved to 'ganado'
