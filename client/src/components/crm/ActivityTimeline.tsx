@@ -1,5 +1,5 @@
 import { ActivityData } from '../../services/crm.service';
-import { Phone, MessageCircle, Linkedin, Mail, Users, FileText, CheckCircle2, Activity, Briefcase, Building2, CheckSquare } from 'lucide-react';
+import { ArrowRight, Phone, MessageCircle, Linkedin, Mail, Users, FileText, CheckCircle2, Activity, Briefcase, Building2, CheckSquare } from 'lucide-react';
 
 interface ActivityTimelineProps {
     activities: (ActivityData & { source?: string })[];
@@ -168,6 +168,12 @@ function getIconConfig(type: string) {
             bg: 'bg-amber-500',
             badgeInfo: 'text-amber-700 bg-amber-100',
             label: 'Nueva Tarea'
+        };
+        case 'stage_change': return {
+            icon: <ArrowRight size={14} className="text-white" />,
+            bg: 'bg-sky-500',
+            badgeInfo: 'text-sky-700 bg-sky-100',
+            label: 'Cambio de Etapa'
         };
         default: return {
             icon: <Activity size={14} className="text-slate-600" />,

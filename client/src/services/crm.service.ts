@@ -208,7 +208,7 @@ export type TaskData = {
 
 export type ActivityData = {
     _id: string;
-    type: 'call' | 'whatsapp' | 'linkedin_message' | 'email' | 'meeting' | 'note' | 'task_completed';
+    type: 'call' | 'whatsapp' | 'linkedin_message' | 'email' | 'meeting' | 'note' | 'task_completed' | 'stage_change';
     description: string;
     contact?: { _id: string; fullName: string; profilePhotoUrl?: string };
     deal?: { _id: string; title: string };

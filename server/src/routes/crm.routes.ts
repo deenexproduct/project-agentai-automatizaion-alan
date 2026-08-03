@@ -979,6 +979,27 @@ router.patch('/deals/:id', async (req: Request, res: Response) => {
             // a negociación arrastraba para siempre la fecha en que se había cerrado.
             const config = await PipelineConfig.getOrCreate(userId);
             const targetStage = config.stages.find(s => s.key === req.body.status);
+
+            // El movimiento queda en `statusHistory`, pero el timeline del deal
+            // se arma con Activities: sin esto mostraba llamadas y mails y no
+            // mostraba "pasó de Reuniones a Negociación". El dato existía y no
+            // se veía en ningún lado.
+            const etiqueta = (key: string) =>
+                config.stages.find(s => s.key === key)?.label || key;
+            try {
+                await Activity.create({
+                    type: 'stage_change',
+                    description: `${etiqueta(previousStatus)} → ${etiqueta(req.body.status)}`,
+                    deal: deal._id,
+                    company: deal.company,
+                    createdBy: (req as any).user._id,
+                    userId,
+                });
+            } catch (actErr: any) {
+                // Que falle el registro no puede impedir que el deal se mueva.
+                console.error('No se pudo registrar el cambio de etapa:', actErr.message);
+            }
+
             if (targetStage?.isFinal) {
                 if (!deal.closedAt) deal.closedAt = new Date();
             } else if (deal.closedAt) {
