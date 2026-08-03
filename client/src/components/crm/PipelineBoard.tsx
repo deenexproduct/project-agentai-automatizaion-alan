@@ -33,6 +33,23 @@ function getCurrentUserId(): string | null {
     } catch { return null; }
 }
 
+/**
+ * Suma los locales de un conjunto de deals contando cada empresa UNA sola vez.
+ *
+ * Los locales son un atributo de la EMPRESA, no del deal. Sumarlos por deal
+ * hacía que una empresa con dos oportunidades aportara el doble de sus locales
+ * al total del tablero (y a la proyección que se calcula sobre ese número).
+ */
+function sumarLocales(deals: DealData[]): number {
+    const empresasContadas = new Set<string>();
+    return deals.reduce((total, d) => {
+        const id = d.company?._id;
+        if (!id || empresasContadas.has(id)) return total;
+        empresasContadas.add(id);
+        return total + (d.company?.localesCount || 0);
+    }, 0);
+}
+
 // Tipos de filtros rápidos disponibles
 type QuickFilter = 'focus_hoy' | 'huerfanos' | 'mios' | null;
 
@@ -220,7 +237,7 @@ function DroppableColumn({
                         </div>
                         <div className="flex items-center justify-center gap-1 px-1.5 text-[10px] font-bold text-blue-700 bg-blue-50/90 py-1" title="Cantidad de Locales">
                             <Building2 size={10} />
-                            {stage.deals.reduce((sum, d) => sum + (d.company?.localesCount || 0), 0).toLocaleString()}
+                            {sumarLocales(stage.deals).toLocaleString()}
                         </div>
                     </div>
                 </div>
@@ -513,7 +530,7 @@ export default function PipelineBoard({ urlDealId, platform }: { urlDealId?: str
                         </div>
                         <div className="px-3 py-1.5 bg-blue-50/80 border border-blue-100 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] rounded-[12px] text-[12px] font-bold text-blue-700 flex items-center gap-1.5 transition-all hover:bg-blue-100/80 whitespace-nowrap">
                             <Building2 size={14} strokeWidth={2.5} className="text-blue-500" />
-                            {filteredStages.reduce((acc, stage) => acc + stage.deals.reduce((sum, d) => sum + (d.company?.localesCount || 0), 0), 0).toLocaleString()} <span className="text-blue-500/70 font-medium">locales</span>
+                            {sumarLocales(filteredStages.flatMap(stage => stage.deals)).toLocaleString()} <span className="text-blue-500/70 font-medium">locales</span>
                         </div>
                     </div>
                     {/* Filtros rápidos del pipeline */}
