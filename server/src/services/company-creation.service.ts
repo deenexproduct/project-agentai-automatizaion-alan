@@ -64,6 +64,7 @@ export async function crearEmpresaConDeal(
             assignedTo: empresa.assignedTo || userId,
             userId,
         });
+        console.log(`✅ Auto-created Deal for company "${empresa.name}" in stage "${firstStage}"`);
         dealId = String(deal._id);
     } catch (dealErr: any) {
         console.error(`⚠️ Auto-create Deal failed for company ${empresa._id}:`, dealErr.message);
