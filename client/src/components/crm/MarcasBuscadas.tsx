@@ -11,6 +11,7 @@ export default function MarcasBuscadas() {
     const [cargando, setCargando] = useState(true);
     const [nombre, setNombre] = useState('');
     const [porQue, setPorQue] = useState('');
+    const [manoEnCurso, setManoEnCurso] = useState<string | null>(null);
 
     const cargar = async () => {
         setCargando(true);
@@ -32,6 +33,18 @@ export default function MarcasBuscadas() {
     const accion = async (fn: () => Promise<unknown>, fallback: string) => {
         try { await fn(); await cargar(); }
         catch (err) { alert(mensajeDeError(err, fallback)); }
+    };
+
+    // Un click en Aceptar dispara la creación de una empresa en el CRM (chequear-y-después-crear
+    // sobre un índice no único): un segundo click mientras el primero sigue en vuelo puede crear
+    // dos empresas y dos oportunidades duplicadas para la misma marca. Se deshabilitan ambos
+    // botones de la fila mientras la petición está pendiente, y se libera siempre en `finally`
+    // (incluso si falla) para no dejar la fila trabada.
+    const accionMano = async (manoId: string, fn: () => Promise<unknown>, fallback: string) => {
+        setManoEnCurso(manoId);
+        try { await fn(); await cargar(); }
+        catch (err) { alert(mensajeDeError(err, fallback)); }
+        finally { setManoEnCurso(null); }
     };
 
     const visibles = marcas.filter(m => m.estado === 'buscando' || m.estado === 'con_manos');
@@ -89,11 +102,13 @@ export default function MarcasBuscadas() {
                                         </div>
                                         <div className="flex gap-1 shrink-0">
                                             <button title="Aceptar y pasar al CRM"
-                                                onClick={() => accion(() => aceptarMano(m._id, mano._id), 'No se pudo aceptar')}
-                                                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700"><Check size={14} /></button>
+                                                disabled={manoEnCurso === mano._id}
+                                                onClick={() => accionMano(mano._id, () => aceptarMano(m._id, mano._id), 'No se pudo aceptar')}
+                                                className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"><Check size={14} /></button>
                                             <button title="Descartar"
-                                                onClick={() => accion(() => descartarMano(m._id, mano._id), 'No se pudo descartar')}
-                                                className="p-1.5 rounded-lg bg-slate-50 text-slate-500"><X size={14} /></button>
+                                                disabled={manoEnCurso === mano._id}
+                                                onClick={() => accionMano(mano._id, () => descartarMano(m._id, mano._id), 'No se pudo descartar')}
+                                                className="p-1.5 rounded-lg bg-slate-50 text-slate-500 disabled:opacity-40 disabled:cursor-not-allowed"><X size={14} /></button>
                                         </div>
                                     </div>
                                 ))}
