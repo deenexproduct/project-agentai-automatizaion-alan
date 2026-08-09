@@ -108,8 +108,18 @@ router.post('/:id/manos/:manoId/descartar', async (req: Request, res: Response) 
         const marca = await MarcaBuscada.findOne({ _id: req.params.id, userId });
         if (!marca) return res.status(404).json({ error: 'Marca no encontrada' });
 
+        // Marca ya ascendida: descartar acá dejaría una empresa en el CRM sin
+        // ninguna mano aceptada que la respalde.
+        if (marca.estado === 'ascendida') {
+            return res.status(409).json({ error: 'Esta marca ya fue ascendida a empresa, no se puede descartar ninguna de sus manos' });
+        }
+
         const mano = marca.manos.find((m: any) => String(m._id) === String(req.params.manoId));
         if (!mano) return res.status(404).json({ error: 'Mano no encontrada' });
+
+        if (mano.estado !== 'ofrecida') {
+            return res.status(409).json({ error: 'Esa mano ya fue resuelta' });
+        }
 
         // Cambia el estado, NO se borra el registro ni su fecha.
         mano.estado = 'descartada';

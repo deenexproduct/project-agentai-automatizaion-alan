@@ -1,5 +1,4 @@
 import { MarcaBuscada } from '../models/marca-buscada.model';
-import { Company } from '../models/company.model';
 import { crearEmpresaConDeal } from './company-creation.service';
 
 export interface ResultadoAscenso {
@@ -25,6 +24,9 @@ export async function ascenderMarca(
 
     const mano = marca.manos.find((m: any) => String(m._id) === String(manoId));
     if (!mano) throw Object.assign(new Error('Mano no encontrada'), { http: 404 });
+    if (mano.estado !== 'ofrecida') {
+        throw Object.assign(new Error('Esta mano ya fue resuelta'), { http: 409 });
+    }
 
     const { empresa, dealId, duplicada } = await crearEmpresaConDeal(
         { name: marca.nombre, description: marca.porQue, partner: mano.partnerId },
@@ -36,8 +38,6 @@ export async function ascenderMarca(
         return { companyId: duplicada._id, duplicada };
     }
 
-    await Company.updateOne({ _id: empresa._id }, { $set: { partner: mano.partnerId } });
-
     mano.estado = 'aceptada';
     for (const otra of marca.manos) {
         // `levantadaEn` NO se toca: es la prueba ante una discusión por comisiones.
@@ -47,7 +47,18 @@ export async function ascenderMarca(
     }
     marca.estado = 'ascendida';
     marca.companyId = empresa._id;
-    await marca.save();
+    try {
+        await marca.save();
+    } catch (saveErr: any) {
+        // La empresa (y su deal) ya quedaron creados en el paso anterior: si el
+        // save de acá falla, queda una empresa en el CRM sin su marca ascendida
+        // apuntándola. Se deja rastro para poder reconciliar a mano.
+        console.error(
+            `[ascenso-marca] Empresa ${empresa._id} creada pero la marca ${marcaId} no pudo marcarse como ascendida:`,
+            saveErr.message
+        );
+        throw saveErr;
+    }
 
     return { companyId: String(empresa._id), dealId };
 }

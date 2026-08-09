@@ -100,20 +100,60 @@ describe('aceptar una mano', () => {
         expect(res.body.existingId).toBeTruthy();
         expect((await MarcaBuscada.findById(m._id))!.estado).toBe('con_manos');
     });
+
+    it('no deja re-aceptar una mano previamente descartada', async () => {
+        const m = await marcaConDosManos();
+        const manoId = m.manos[0]._id;
+        await request(app).post(`/api/marcas-buscadas/${m._id}/manos/${manoId}/descartar`);
+
+        const res = await request(app).post(`/api/marcas-buscadas/${m._id}/manos/${manoId}/aceptar`);
+
+        expect(res.status).toBe(409);
+        expect(await Company.countDocuments({ name: /havanna/i })).toBe(0);
+    });
 });
 
 describe('descartar una mano', () => {
     it('la marca vuelve a buscando si no quedan manos ofrecidas', async () => {
+        const levantadaEn = new Date('2026-01-15');
         const m = await MarcaBuscada.create({
             nombre: 'Sola', userId: USER_ID, estado: 'con_manos',
-            manos: [{ partnerId: PARTNER_A, partnerNombre: 'Marcos', levantadaEn: new Date(), estado: 'ofrecida' }],
+            manos: [{ partnerId: PARTNER_A, partnerNombre: 'Marcos', levantadaEn, estado: 'ofrecida' }],
         } as any);
+        const original = m.manos[0].levantadaEn;
 
         await request(app).post(`/api/marcas-buscadas/${m._id}/manos/${m.manos[0]._id}/descartar`);
 
         const leida = await MarcaBuscada.findById(m._id);
         expect(leida!.estado).toBe('buscando');
         expect(leida!.manos[0].estado).toBe('descartada');
-        expect(leida!.manos[0].levantadaEn).toBeInstanceOf(Date);
+        expect(new Date(leida!.manos[0].levantadaEn).toISOString()).toBe(new Date(original).toISOString());
+    });
+
+    it('no deja descartar ninguna mano si la marca ya está ascendida', async () => {
+        const m = await MarcaBuscada.create({
+            nombre: 'Ascendida', userId: USER_ID, estado: 'ascendida', companyId: new mongoose.Types.ObjectId(),
+            manos: [{ partnerId: PARTNER_A, partnerNombre: 'Marcos', levantadaEn: new Date('2026-01-10'), estado: 'aceptada' }],
+        } as any);
+
+        const res = await request(app).post(`/api/marcas-buscadas/${m._id}/manos/${m.manos[0]._id}/descartar`);
+
+        expect(res.status).toBe(409);
+        const leida = await MarcaBuscada.findById(m._id);
+        expect(leida!.manos[0].estado).toBe('aceptada');
+    });
+
+    it('no deja descartar una mano que ya fue resuelta', async () => {
+        const m = await MarcaBuscada.create({
+            nombre: 'ConManoResuelta', userId: USER_ID, estado: 'con_manos',
+            manos: [
+                { partnerId: PARTNER_A, partnerNombre: 'Marcos', levantadaEn: new Date('2026-01-10'), estado: 'descartada' },
+                { partnerId: PARTNER_B, partnerNombre: 'Gabriel', levantadaEn: new Date('2026-01-12'), estado: 'ofrecida' },
+            ],
+        } as any);
+
+        const res = await request(app).post(`/api/marcas-buscadas/${m._id}/manos/${m.manos[0]._id}/descartar`);
+
+        expect(res.status).toBe(409);
     });
 });
