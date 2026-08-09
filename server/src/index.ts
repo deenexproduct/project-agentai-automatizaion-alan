@@ -26,6 +26,7 @@ import eventFairRoutes from './routes/event-fair.routes';
 import calendarRoutes from './routes/calendar.routes';
 import opsRoutes from './routes/ops.routes';
 import deenexMonitoringRoutes from './routes/deenex-monitoring.routes';
+import marcasBuscadasRoutes from './routes/marcas-buscadas.routes';
 import { authMiddleware } from './middleware/auth.middleware';
 import { whatsappService } from './services/whatsapp.service';
 import { validateEncryptionKey } from './utils/crypto.service';
@@ -363,6 +364,7 @@ app.use('/api/event-fairs', authMiddleware, eventFairRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/ops', opsRoutes);
 app.use('/api/deenex-monitoring', deenexMonitoringRoutes);
+app.use('/api/marcas-buscadas', authMiddleware, marcasBuscadasRoutes);
 logger.info('⚙️ System Config, Partners, Competitors, POS Systems, Event Fairs, Ops & Deenex Monitoring routes mounted');
 
 // Start server
