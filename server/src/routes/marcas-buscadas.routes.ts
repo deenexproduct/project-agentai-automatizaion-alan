@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { MarcaBuscada, normalizarNombre } from '../models/marca-buscada.model';
 import { sendValidationError } from '../utils/mongoose-errors';
+import { ascenderMarca } from '../services/ascenso-marca.service';
 
 const router = Router();
 
@@ -78,6 +79,50 @@ router.delete('/:id', async (req: Request, res: Response) => {
         if (sendValidationError(res, err)) return;
         console.error('marcas-buscadas delete error:', err.message);
         res.status(500).json({ error: 'No se pudo borrar la marca' });
+    }
+});
+
+router.post('/:id/manos/:manoId/aceptar', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id;
+        const r = await ascenderMarca(req.params.id, req.params.manoId, userId);
+
+        if (r.duplicada) {
+            return res.status(409).json({
+                error: `"${r.duplicada.name}" ya existe en tu CRM`,
+                existingId: r.duplicada._id,
+            });
+        }
+        res.json(r);
+    } catch (err: any) {
+        if (err.http) return res.status(err.http).json({ error: err.message });
+        if (sendValidationError(res, err)) return;
+        console.error('ascenso error:', err.message);
+        res.status(500).json({ error: 'No se pudo ascender la marca' });
+    }
+});
+
+router.post('/:id/manos/:manoId/descartar', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id;
+        const marca = await MarcaBuscada.findOne({ _id: req.params.id, userId });
+        if (!marca) return res.status(404).json({ error: 'Marca no encontrada' });
+
+        const mano = marca.manos.find((m: any) => String(m._id) === String(req.params.manoId));
+        if (!mano) return res.status(404).json({ error: 'Mano no encontrada' });
+
+        // Cambia el estado, NO se borra el registro ni su fecha.
+        mano.estado = 'descartada';
+        if (!marca.manos.some((m) => m.estado === 'ofrecida') && marca.estado === 'con_manos') {
+            marca.estado = 'buscando';
+        }
+        await marca.save();
+
+        res.json({ ok: true });
+    } catch (err: any) {
+        if (sendValidationError(res, err)) return;
+        console.error('descartar mano error:', err.message);
+        res.status(500).json({ error: 'No se pudo descartar' });
     }
 });
 

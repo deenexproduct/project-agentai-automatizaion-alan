@@ -14,6 +14,9 @@ export function normalizarNombre(nombre: string): string {
 }
 
 export interface IMano {
+    // Mongoose lo asigna solo (ManoSchema tiene `{ _id: true }`); se declara acá
+    // para que el ascenso pueda identificar cada mano por su id.
+    _id: mongoose.Types.ObjectId;
     partnerId: mongoose.Types.ObjectId;
     partnerNombre: string;
     comentario?: string;
