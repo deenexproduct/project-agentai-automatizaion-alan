@@ -27,6 +27,7 @@ import calendarRoutes from './routes/calendar.routes';
 import opsRoutes from './routes/ops.routes';
 import deenexMonitoringRoutes from './routes/deenex-monitoring.routes';
 import marcasBuscadasRoutes from './routes/marcas-buscadas.routes';
+import partnerPortalRoutes from './routes/partner-portal.routes';
 import { authMiddleware } from './middleware/auth.middleware';
 import { whatsappService } from './services/whatsapp.service';
 import { validateEncryptionKey } from './utils/crypto.service';
@@ -327,6 +328,10 @@ app.put('/api/settings', (req, res) => {
 
 // Mount Auth routes
 app.use('/api/auth', authRoutes);
+
+// Portal del partner: público a propósito, el token de la URL es la
+// credencial. NO lleva authMiddleware.
+app.use('/api/portal', partnerPortalRoutes);
 
 // Mount WhatsApp routes
 app.use('/api/whatsapp', authMiddleware, whatsappRoutes);
