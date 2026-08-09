@@ -8,6 +8,9 @@ export interface IPartner extends Document {
     notes?: string;
     assignedTo?: mongoose.Types.ObjectId;
     userId: string;
+    accessToken?: string;
+    accessTokenActivo: boolean;
+    ultimoAccesoEn?: Date;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -20,6 +23,9 @@ const PartnerSchema = new Schema({
     notes: { type: String },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
+    accessToken: { type: String, index: true, sparse: true },
+    accessTokenActivo: { type: Boolean, default: true },
+    ultimoAccesoEn: { type: Date },
 }, { timestamps: true });
 
 export const Partner = mongoose.model<IPartner>('Partner', PartnerSchema);
