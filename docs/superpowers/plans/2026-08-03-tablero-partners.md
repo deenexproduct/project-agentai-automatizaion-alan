@@ -201,7 +201,10 @@ const MarcaBuscadaSchema = new Schema<IMarcaBuscada>({
 // "Zamp" en la colección de empresas.
 MarcaBuscadaSchema.index({ userId: 1, nombreNormalizado: 1 }, { unique: true });
 
-MarcaBuscadaSchema.pre('save', function (next) {
+// `pre('validate')` y NO `pre('save')`: Mongoose corre la validación ANTES de
+// los hooks de save, así que un `nombreNormalizado` requerido que se llena en
+// `pre('save')` falla siempre.
+MarcaBuscadaSchema.pre('validate', function (next) {
     if (this.isModified('nombre')) this.nombreNormalizado = normalizarNombre(this.nombre);
     next();
 });
