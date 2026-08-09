@@ -30,6 +30,7 @@ import PlatformSwitcher from "../common/PlatformSwitcher";
 import ProspectingPage from "./ProspectingPage";
 import CRMDashboard from "../crm/CRMDashboard";
 import PipelineBoard from "../crm/PipelineBoard";
+import MarcasBuscadas from "../crm/MarcasBuscadas";
 import CompanyList from "../crm/CompanyList";
 import ContactList from "../crm/ContactList";
 import ContactDrawerV2 from "./ContactDrawerV2";
@@ -52,6 +53,7 @@ import MetricsDashboard from "../monitoring/MetricsDashboard";
 type SidebarTab =
   | "dashboard"
   | "pipeline"
+  | "marcas-buscadas"
   | "companies"
   | "contacts"
   | "tasks"
@@ -85,6 +87,7 @@ interface SidebarItem {
 const crmGroup: SidebarItem[] = [
   { id: "dashboard", Icon: LayoutDashboard, label: "Dashboard CRM" },
   { id: "pipeline", Icon: Columns3, label: "Pipeline Deals" },
+  { id: "marcas-buscadas", Icon: Target, label: "Marcas Buscadas" },
   { id: "tasks", Icon: CheckSquare, label: "Tareas y Actividad" },
   { id: "calendar", Icon: CalendarIcon, label: "Calendario y Citas" },
   { id: "companies", Icon: Building2, label: "Empresas" },
@@ -417,6 +420,7 @@ export default function LinkedInApp() {
         >
           {activeTab === "dashboard" && <CRMDashboard />}
           {activeTab === "pipeline" && <PipelineBoard urlDealId={id} />}
+          {activeTab === "marcas-buscadas" && <MarcasBuscadas />}
           {activeTab === "companies" && <CompanyList urlCompanyId={id} />}
           {activeTab === "contacts" && <ContactList urlContactId={id} />}
           {activeTab === "partners" && <PartnerList />}
