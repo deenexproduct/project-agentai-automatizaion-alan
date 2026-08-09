@@ -8,6 +8,7 @@ import { ToastContainer } from './components/ui/ToastContainer.tsx'
 import { AuthProvider, useAuth } from './contexts/AuthContext.tsx'
 import AuthPage from './components/auth/AuthPage.tsx'
 import PublicReport from './components/ops/PublicReport.tsx'
+import PortalPartner from './components/public/PortalPartner.tsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.tsx'
 import './index.css'
 
@@ -28,6 +29,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Routes>
                         <Route path="/login" element={<AuthPage />} />
                         <Route path="/public/report/:token" element={<PublicReport />} />
+                        <Route path="/partners/:token" element={<PortalPartner />} />
                         <Route path="/linkedin/:tab?/:id?" element={<ProtectedRoute platform="comercial"><LinkedInApp /></ProtectedRoute>} />
                         <Route path="/ops/:tab?/:id?" element={<ProtectedRoute platform="operaciones"><OpsApp /></ProtectedRoute>} />
                         <Route path="/calendar" element={<Navigate to="/linkedin/calendar" replace />} />
