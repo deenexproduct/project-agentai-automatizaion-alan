@@ -8,19 +8,47 @@ export default function PortalPartner() {
     const [tablero, setTablero] = useState<TableroPublico | null>(null);
     const [error, setError] = useState(false);
     const [comentarios, setComentarios] = useState<Record<string, string>>({});
+    const [erroresMarca, setErroresMarca] = useState<Record<string, string>>({});
+    const [enviandoId, setEnviandoId] = useState<string | null>(null);
 
-    const cargar = async () => {
+    // Carga inicial: acá sí corresponde tratar cualquier falla como "el link
+    // no es válido", porque todavía no sabemos si el token es correcto.
+    const cargarInicial = async () => {
         try { setTablero(await getTablero(token!)); }
         catch { setError(true); }
     };
-    useEffect(() => { cargar(); }, [token]);
+    useEffect(() => { cargarInicial(); }, [token]);
+
+    // Recarga después de levantar la mano: el token ya se probó válido (la
+    // mano se registró), así que un blip de red acá NO debe pisar la
+    // pantalla con "Este link no es válido." Si falla, dejamos el tablero
+    // como estaba y avisamos en la tarjeta de la marca en cuestión.
+    const recargar = async (marcaId: string) => {
+        try {
+            setTablero(await getTablero(token!));
+        } catch {
+            setErroresMarca(prev => ({
+                ...prev,
+                [marcaId]: 'Tu mano quedó registrada, pero no pudimos actualizar la lista. Recargá la página para verla.',
+            }));
+        }
+    };
 
     const enviar = async (marcaId: string) => {
+        setEnviandoId(marcaId);
+        setErroresMarca(prev => ({ ...prev, [marcaId]: '' }));
         try {
             await levantarMano(token!, marcaId, comentarios[marcaId] || '');
             setComentarios(prev => ({ ...prev, [marcaId]: '' }));
-            await cargar();
-        } catch { alert('No se pudo registrar. Probá de nuevo.'); }
+            await recargar(marcaId);
+        } catch (err) {
+            setErroresMarca(prev => ({
+                ...prev,
+                [marcaId]: err instanceof Error ? err.message : 'No se pudo registrar. Probá de nuevo.',
+            }));
+        } finally {
+            setEnviandoId(null);
+        }
     };
 
     if (error) return <div className="p-10 text-center text-slate-500">Este link no es válido.</div>;
@@ -59,10 +87,14 @@ export default function PortalPartner() {
                                 placeholder="¿Cómo llegás? (opcional)"
                                 className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-sm" />
                             <button onClick={() => enviar(m._id)}
-                                className="px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-semibold flex items-center justify-center gap-2">
+                                disabled={enviandoId === m._id}
+                                className="px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
                                 <Hand size={15} /> Llego a esta
                             </button>
                         </div>
+                        {erroresMarca[m._id] && (
+                            <p className="text-xs text-red-600 mt-2">{erroresMarca[m._id]}</p>
+                        )}
                     </div>
                 ))}
             </div>

@@ -30,9 +30,26 @@ export interface TableroPublico {
     marcas: MarcaPublica[];
 }
 
+/**
+ * Extrae el mensaje de error real que manda el servidor (`{ error: string }`,
+ * ver partner-portal.routes.ts) para no perderlo detrás de un texto fijo. El
+ * body de una respuesta fallida no siempre es JSON válido (puede ser un 502
+ * de un proxy, por ejemplo), así que el parseo va en su propio try/catch: si
+ * falla, caemos al `fallback`.
+ */
+async function mensajeDeError(res: Response, fallback: string): Promise<string> {
+    try {
+        const data = await res.json();
+        if (data && typeof data.error === 'string' && data.error.trim()) return data.error;
+    } catch {
+        // Body no-JSON: nos quedamos con el fallback.
+    }
+    return fallback;
+}
+
 export async function getTablero(token: string): Promise<TableroPublico> {
     const res = await fetch(`${BASE}/portal/${token}`);
-    if (!res.ok) throw new Error('No encontrado');
+    if (!res.ok) throw new Error(await mensajeDeError(res, 'No encontrado'));
     return res.json();
 }
 
@@ -42,6 +59,6 @@ export async function levantarMano(token: string, marcaId: string, comentario: s
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comentario }),
     });
-    if (!res.ok) throw new Error('No se pudo registrar');
+    if (!res.ok) throw new Error(await mensajeDeError(res, 'No se pudo registrar'));
     return res.json();
 }
