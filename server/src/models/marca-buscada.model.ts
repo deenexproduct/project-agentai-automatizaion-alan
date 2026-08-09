@@ -51,7 +51,7 @@ const MarcaBuscadaSchema = new Schema<IMarcaBuscada>({
     estado: { type: String, enum: ESTADOS_MARCA, default: 'buscando', index: true },
     manos: { type: [ManoSchema], default: [] },
     companyId: { type: Schema.Types.ObjectId, ref: 'Company', default: null },
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true, collection: 'marcas_buscadas' });
 
 // Sin este índice se repiten las marcas. Es el mismo agujero que dejó tres
