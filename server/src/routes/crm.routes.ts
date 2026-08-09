@@ -8,11 +8,7 @@ import { Activity } from '../models/activity.model';
 import { LinkedInContact } from '../models/linkedin-contact.model';
 import { linkedinService } from '../services/linkedin.service';
 import { sendValidationError } from '../utils/mongoose-errors';
-
-/** Escapa un texto para usarlo dentro de un RegExp sin que rompa la búsqueda. */
-function escaparRegex(texto: string): string {
-    return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { crearEmpresaConDeal } from '../services/company-creation.service';
 
 /**
  * ¿La empresa referenciada existe?
@@ -207,52 +203,16 @@ router.get('/companies', async (req: Request, res: Response) => {
 router.post('/companies', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
+        const { empresa, duplicada } = await crearEmpresaConDeal(req.body, userId);
 
-        // El índice userId+name del modelo NO es único ("uniqueness enforcement
-        // at app level") y nadie la sostenía: por eso en prod terminaron tres
-        // "Zamp" y dos "Grupo Madero".
-        const nombre = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-        if (nombre) {
-            const yaExiste = await Company.findOne({
-                userId,
-                name: new RegExp(`^${escaparRegex(nombre)}$`, 'i'),
-            }).lean();
-            if (yaExiste) {
-                return res.status(409).json({
-                    error: `Ya existe una empresa llamada "${yaExiste.name}"`,
-                    existingId: yaExiste._id,
-                });
-            }
-        }
-
-        const company = await Company.create({ ...req.body, assignedTo: req.body.assignedTo || userId, userId });
-
-        // ── Auto-create Deal in 'Lead Potencial' ──
-        try {
-            const validKeys = await PipelineConfig.getStageKeys(userId.toString());
-            const firstStage = validKeys[0] || 'lead';
-            // Nunca negativo: el Deal exige `value >= 0` y si falla acá la
-            // empresa queda creada pero SIN deal, o sea invisible en el pipeline.
-            const dealValue = (company.localesCount && company.costPerLocation)
-                ? Math.max(0, Math.round((company.localesCount * company.costPerLocation) * 100) / 100)
-                : 0;
-
-            await Deal.create({
-                title: company.name,
-                status: firstStage,
-                company: company._id,
-                value: dealValue,
-                currency: 'USD',
-                assignedTo: company.assignedTo || userId,
-                userId,
+        if (duplicada) {
+            return res.status(409).json({
+                error: `Ya existe una empresa llamada "${duplicada.name}"`,
+                existingId: duplicada._id,
             });
-            console.log(`✅ Auto-created Deal for company "${company.name}" in stage "${firstStage}"`);
-        } catch (dealErr: any) {
-            console.error(`⚠️ Auto-create Deal failed for company ${company._id}:`, dealErr.message);
-            // Don't fail the company creation if auto-deal fails
         }
 
-        res.status(201).json(company);
+        res.status(201).json(empresa);
     } catch (err: any) {
         if (sendValidationError(res, err)) return;
         console.error('CRM create company error:', err.message);
