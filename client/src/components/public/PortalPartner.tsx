@@ -172,6 +172,13 @@ function TarjetaMarca({ marca, yo, onEnviar, enviando, error }: {
             ? 'bg-emerald-50/40 border-emerald-200/70'
             : 'bg-white/80 border-slate-200/60 shadow-sm shadow-slate-200/50'}`}>
 
+            {marca.situacion?.tipo === 'en_pipeline' && (
+                <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full mb-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {marca.situacion.etiqueta}
+                </p>
+            )}
+
             <div className="flex items-start justify-between gap-3">
                 <h2 className="text-lg font-bold text-slate-800 leading-snug">{marca.nombre}</h2>
                 {marca.categoria && (

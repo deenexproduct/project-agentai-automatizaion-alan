@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { MarcaBuscada } from '../models/marca-buscada.model';
 import { Partner } from '../models/partner.model';
+import { Deal } from '../models/deal.model';
+import { PipelineConfig } from '../models/pipeline-config.model';
 
 /**
  * Portal del partner: se monta SIN authMiddleware y NO se aplica auth a sí
@@ -36,7 +38,15 @@ router.get('/:token', async (req: Request, res: Response) => {
         if (!partner) return res.status(404).json({ error: 'No encontrado' });
 
         const marcas = await MarcaBuscada.find({
-            estado: { $in: ['buscando', 'con_manos'] },
+            // Las ascendidas siguen visibles para quien puso la mano: es la
+            // única forma de que el partner sepa qué pasó con la marca que
+            // trajo. Las archivadas no vuelven nunca.
+            $and: [{
+                $or: [
+                    { estado: { $in: ['buscando', 'con_manos'] } },
+                    { estado: 'ascendida', 'manos.partnerId': partner._id },
+                ],
+            }],
             $or: [
                 // Las de quien cargó al partner, salvo que estén dirigidas a
                 // otros. Sin `partners` (o con la lista vacía) son para todos;
@@ -59,6 +69,31 @@ router.get('/:token', async (req: Request, res: Response) => {
 
         await Partner.updateOne({ _id: partner._id }, { $set: { ultimoAccesoEn: new Date() } });
 
+        // Para las que ya ascendieron, la etapa real del pipeline: es lo que
+        // le dice al partner si la marca que trajo avanzó o está frenada.
+        const idsEmpresa = marcas.filter(m => m.companyId).map(m => m.companyId);
+        const [deals, config] = await Promise.all([
+            idsEmpresa.length ? Deal.find({ company: { $in: idsEmpresa } }, { company: 1, status: 1 }).lean() : [],
+            PipelineConfig.getOrCreate(String(partner.userId)),
+        ]);
+        const etapaDeEmpresa = new Map<string, string>(
+            deals.map((d: any) => [String(d.company), String(d.status)] as [string, string]));
+        const etiquetaDeEtapa = new Map<string, string>(
+            (config?.stages || []).map((e: any) => [String(e.key), String(e.label)] as [string, string]));
+
+        const situacionDe = (m: any) => {
+            if (m.estado !== 'ascendida') {
+                return { tipo: 'buscando', etiqueta: 'Buscando llegada' };
+            }
+            const etapa = etapaDeEmpresa.get(String(m.companyId));
+            return {
+                tipo: 'en_pipeline',
+                // Sin deal (o con una etapa que ya no está en la configuración)
+                // igual decimos algo: el partner tiene que ver que avanzó.
+                etiqueta: (etapa && etiquetaDeEtapa.get(etapa)) || 'En el pipeline',
+            };
+        };
+
         res.json({
             partner: { nombre: partner.name },
             marcas: marcas.map((m: any) => ({
@@ -66,6 +101,7 @@ router.get('/:token', async (req: Request, res: Response) => {
                 nombre: m.nombre,
                 porQue: m.porQue,
                 categoria: m.categoria,
+                situacion: situacionDe(m),
                 manos: (m.manos || []).filter((x: any) => x.estado !== 'descartada').map(manoPublica),
             })),
         });

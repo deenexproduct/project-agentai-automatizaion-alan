@@ -18,11 +18,19 @@ export interface ManoPublica {
     levantadaEn: string;
     estado: string;
 }
+export interface SituacionMarca {
+    /** `buscando` = todavía se busca llegada; `en_pipeline` = ya es una empresa del CRM. */
+    tipo: 'buscando' | 'en_pipeline';
+    /** Texto listo para mostrar: "Buscando llegada" o la etapa real ("Coordinando"). */
+    etiqueta: string;
+}
+
 export interface MarcaPublica {
     _id: string;
     nombre: string;
     porQue?: string;
     categoria?: string;
+    situacion?: SituacionMarca;
     manos: ManoPublica[];
 }
 export interface TableroPublico {
