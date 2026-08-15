@@ -172,13 +172,17 @@ describe('cuál mano es la suya', () => {
         expect(res.body.marcas[0].otrasManos).toBe(1);
     });
 
-    it('una mano descartada no la cuenta como respondida: vuelve a pedirle', async () => {
+    it('una mano descartada sobre una marca que YA ascendió baja al fondo', async () => {
+        // Acá la marca entró por otro lado: la tarjeta solo informa. Dejarla
+        // arriba le pide una acción que no existe. El caso opuesto —descartada
+        // sobre una marca todavía viva, donde sí puede volver a ofrecerse— está
+        // en portal-ciclo-mano.integration.test.ts.
         const p = await crearPartner();
         await enPipeline('Descartada, muy frenada', 300, p._id, {
             manos: [{ partnerId: p._id, partnerNombre: 'Juani', estado: 'descartada', levantadaEn: new Date() }],
         });
         await enPipeline('Sin responder', 5, p._id);
 
-        expect(await ordenDelPortal()).toEqual(['Descartada, muy frenada', 'Sin responder']);
+        expect(await ordenDelPortal()).toEqual(['Sin responder', 'Descartada, muy frenada']);
     });
 });

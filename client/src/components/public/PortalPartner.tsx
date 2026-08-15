@@ -92,7 +92,7 @@ export default function PortalPartner() {
     if (!tablero) {
         return (
             <Fondo>
-                <div className="max-w-2xl mx-auto flex flex-col gap-4 pt-4" aria-busy="true" aria-label="Cargando">
+                <div className="max-w-3xl mx-auto flex flex-col gap-4 pt-4" aria-busy="true" aria-label="Cargando">
                     <div className="h-12 w-12 bg-slate-200/70 rounded-2xl animate-pulse" />
                     <div className="h-8 w-56 bg-slate-200/70 rounded-lg animate-pulse" />
                     <div className="h-4 w-80 max-w-full bg-slate-200/50 rounded animate-pulse" />
@@ -106,11 +106,12 @@ export default function PortalPartner() {
 
     return (
         <Fondo>
-            <div className="max-w-2xl mx-auto flex flex-col gap-4">
-                <header className="pt-1">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-500 shadow-lg shadow-violet-500/20 flex items-center justify-center mb-5">
+            <div className="max-w-3xl mx-auto flex flex-col gap-4">
+                <header className="pt-1 sm:flex sm:items-start sm:gap-5">
+                    <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-500 shadow-lg shadow-violet-500/20 flex items-center justify-center mb-5 sm:mb-0 sm:mt-1">
                         <img src="/isotipo.png" alt="Deenex" className="w-7 h-7 object-contain" />
                     </div>
+                    <div className="min-w-0">
 
                     <h1 className="text-[28px] leading-tight font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600">
                         Hola, {primerNombre(tablero.partner.nombre)}
@@ -142,6 +143,7 @@ export default function PortalPartner() {
                             )}
                         </div>
                     )}
+                </div>
                 </header>
 
                 {ordenadas.length === 0 ? (
@@ -235,81 +237,137 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
     // se lee.
     const leGanaronDeMano = descartada && marca.situacion?.tipo === 'en_pipeline';
 
+    /**
+     * El desenlace, o la decisión que le pedimos. En pantalla grande va a la
+     * derecha, a la altura del nombre: la tarjeta se lee como una fila —"qué
+     * es" a la izquierda, "qué hago" a la derecha— en vez de apilar todo contra
+     * el margen izquierdo dejando media tarjeta vacía.
+     */
+    const acciones = ofrecida || aceptada ? (
+        <div className="flex items-start gap-2.5 sm:w-[15.5rem]">
+            <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
+                <Check size={12} className="text-white" strokeWidth={3} />
+            </span>
+            <div className="min-w-0">
+                <p className="text-sm font-semibold text-emerald-800">
+                    {aceptada ? 'Vamos con vos' : 'Levantaste la mano'}
+                </p>
+                {miMano?.comentario && <p className="text-xs text-emerald-700/80 mt-0.5 break-words">“{miMano.comentario}”</p>}
+                <p className="text-[11px] text-emerald-600/70 mt-0.5">
+                    {aceptada
+                        ? 'Seguimos por acá. Arriba ves en qué anda.'
+                        : 'Te escribimos para coordinar.'}
+                </p>
+            </div>
+        </div>
+    ) : leGanaronDeMano ? (
+        <p className="text-sm text-slate-500 sm:w-[15.5rem]">
+            Entramos por otro lado, pero gracias por ofrecerte. Arriba ves en qué anda.
+        </p>
+    ) : marca.noLlego ? (
+        <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:gap-0">
+            <p className="text-sm text-slate-500 sm:text-right">Dijiste que no llegás a esta.</p>
+            <button
+                onClick={() => setAbierta(true)}
+                className="shrink-0 text-xs font-semibold text-violet-600 underline underline-offset-2 min-h-[44px] px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+            >
+                Me acordé de alguien
+            </button>
+        </div>
+    ) : (
+        <div className="flex flex-col gap-2 sm:items-end">
+            {/* Se ofreció y no seguimos con eso. Callarlo y volver a
+                preguntarle lo mismo es lo que hace que un partner deje
+                de contestar. */}
+            {descartada && (
+                <p className="text-xs text-slate-500 sm:text-right sm:max-w-[15.5rem]">
+                    Ya te habías ofrecido; por ahora fuimos por otro lado. Si cambió algo, avisanos.
+                </p>
+            )}
+            <div className="flex gap-2">
+                <button
+                    onClick={() => setAbierta(true)}
+                    className="flex-1 sm:flex-none min-h-[44px] px-5 sm:px-6 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+                >
+                    <Hand size={15} /> Llego a esta
+                </button>
+                {/* Decir que no es información: distingue al que miró y no puede
+                    del que nunca entró. Por eso está, y por eso es discreto. */}
+                <button
+                    onClick={onNoLlego}
+                    className="shrink-0 min-h-[44px] px-4 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium whitespace-nowrap transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                >
+                    No llego
+                </button>
+            </div>
+        </div>
+    );
+
     return (
-        <article className={`backdrop-blur-xl rounded-[1.75rem] border p-5 sm:p-6 transition-colors duration-300 ${aceptada || ofrecida
+        <article className={`backdrop-blur-xl rounded-[1.75rem] border p-5 sm:px-7 sm:py-6 transition-colors duration-300 ${aceptada || ofrecida
             ? 'bg-emerald-50/40 border-emerald-200/70'
             : marca.noLlego || leGanaronDeMano
                 ? 'bg-slate-50/50 border-slate-200/40'
                 : 'bg-white/80 border-slate-200/60 shadow-sm shadow-slate-200/50'}`}>
 
-            {marca.situacion && (
-                <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full mb-2.5">
-                    {/* Ámbar cuando lleva más de un mes sin moverse: es la señal
-                        de que hace falta un empujón. Hueco si todavía ni entramos. */}
-                    <span className={`w-1.5 h-1.5 rounded-full ${marca.situacion.tipo !== 'en_pipeline'
-                        ? 'border border-slate-400'
-                        : (marca.situacion.diasQuieto ?? 0) > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                    {marca.situacion.etiqueta}
-                    {haceCuanto(marca.situacion.diasQuieto) && (
-                        <span className="font-normal text-slate-400">· sin moverse {haceCuanto(marca.situacion.diasQuieto)}</span>
+            <div className="sm:flex sm:items-start sm:justify-between sm:gap-8">
+                <div className="min-w-0 sm:flex-1">
+                    {marca.situacion && (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full mb-2.5">
+                            {/* Ámbar cuando lleva más de un mes sin moverse: es la señal
+                                de que hace falta un empujón. Hueco si todavía ni entramos. */}
+                            <span className={`w-1.5 h-1.5 rounded-full ${marca.situacion.tipo !== 'en_pipeline'
+                                ? 'border border-slate-400'
+                                : (marca.situacion.diasQuieto ?? 0) > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                            {marca.situacion.etiqueta}
+                            {haceCuanto(marca.situacion.diasQuieto) && (
+                                <span className="font-normal text-slate-500">· sin moverse {haceCuanto(marca.situacion.diasQuieto)}</span>
+                            )}
+                        </p>
                     )}
-                </p>
-            )}
 
-            <div className="flex items-start justify-between gap-3">
-                <h2 className="text-lg font-bold text-slate-800 leading-snug">{marca.nombre}</h2>
-                {marca.categoria && (
-                    <span className="shrink-0 text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-100 px-2.5 py-1 rounded-full">
-                        {marca.categoria}
-                    </span>
-                )}
+                    {/* La categoría al lado del nombre y no contra el borde: con
+                        la tarjeta ancha, pegada a la derecha quedaba flotando
+                        sola a media pantalla del nombre al que califica. */}
+                    <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1">
+                        <h2 className="text-lg font-bold text-slate-800 leading-snug">{marca.nombre}</h2>
+                        {marca.categoria && (
+                            <span className="shrink-0 text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-100 px-2.5 py-1 rounded-full">
+                                {marca.categoria}
+                            </span>
+                        )}
+                    </div>
+
+                    {marca.porQue && <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{marca.porQue}</p>}
+
+                    {otros > 0 && (
+                        <p className="text-xs text-slate-500 mt-2.5">
+                            {otros === 1
+                                ? 'Otro partner también se ofreció. Igual nos sirve tener más de una puerta.'
+                                : `Otros ${otros} también se ofrecieron. Igual nos sirve tener más de una puerta.`}
+                        </p>
+                    )}
+                </div>
+
+                {/* Con el campo abierto las acciones bajan a ocupar el ancho: en
+                    una columna de 250px no se escribe cómodo. */}
+                {!abierta && <div className="mt-4 sm:mt-0 sm:shrink-0">{acciones}</div>}
             </div>
 
-            {marca.porQue && <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{marca.porQue}</p>}
-
-            {otros > 0 && (
-                <p className="text-xs text-slate-500 mt-3.5">
-                    {otros === 1
-                        ? 'Otro partner también se ofreció. Igual nos sirve tener más de una puerta.'
-                        : `Otros ${otros} también se ofrecieron. Igual nos sirve tener más de una puerta.`}
-                </p>
-            )}
-
-            {ofrecida || aceptada ? (
-                <div className="mt-4 flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check size={12} className="text-white" strokeWidth={3} />
-                    </span>
-                    <div>
-                        <p className="text-sm font-semibold text-emerald-800">
-                            {aceptada ? 'Vamos con vos' : 'Levantaste la mano'}
-                        </p>
-                        {miMano?.comentario && <p className="text-xs text-emerald-700/80 mt-0.5">“{miMano.comentario}”</p>}
-                        <p className="text-[11px] text-emerald-600/70 mt-0.5">
-                            {aceptada
-                                ? 'Seguimos por acá. Arriba ves en qué anda.'
-                                : 'Te escribimos para coordinar.'}
-                        </p>
-                    </div>
-                </div>
-            ) : leGanaronDeMano ? (
-                <p className="mt-4 text-sm text-slate-400">
-                    Entramos por otro lado, pero gracias por ofrecerte. Arriba ves en qué anda.
-                </p>
-            ) : abierta ? (
-                <div className="mt-4 flex flex-col gap-2.5">
+            {abierta && (
+                <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
                     <input
                         autoFocus
                         value={comentario}
                         onChange={e => setComentario(e.target.value)}
                         placeholder="¿Cómo llegás? (opcional)"
-                        className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 outline-none transition-all focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+                        className="w-full sm:flex-1 min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 outline-none transition-all focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 sm:shrink-0">
                         <button
                             onClick={() => onEnviar(comentario)}
                             disabled={enviando}
-                            className="flex-1 min-h-[44px] px-5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+                            className="flex-1 sm:flex-none min-h-[44px] px-5 sm:px-6 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
                         >
                             <Hand size={15} /> {enviando ? 'Enviando…' : 'Confirmar'}
                         </button>
@@ -321,43 +379,6 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
                         >
                             <X size={16} />
                         </button>
-                    </div>
-                </div>
-            ) : marca.noLlego ? (
-                <div className="mt-4 flex items-center justify-between gap-3">
-                    <p className="text-sm text-slate-500">Dijiste que no llegás a esta.</p>
-                    <button
-                        onClick={() => setAbierta(true)}
-                        className="shrink-0 text-xs font-semibold text-violet-600 underline underline-offset-2 min-h-[44px] px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
-                    >
-                        Me acordé de alguien
-                    </button>
-                </div>
-            ) : (
-                <div className="mt-4 flex flex-col gap-2">
-                    {/* Se ofreció y no seguimos con eso. Callarlo y volver a
-                        preguntarle lo mismo es lo que hace que un partner deje
-                        de contestar. */}
-                    {descartada && (
-                        <p className="text-xs text-slate-400">
-                            Ya te habías ofrecido; por ahora fuimos por otro lado. Si cambió algo, avisanos.
-                        </p>
-                    )}
-                    <div className="flex gap-2">
-                    <button
-                        onClick={() => setAbierta(true)}
-                        className="flex-1 sm:flex-none min-h-[44px] px-5 sm:px-7 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
-                    >
-                        <Hand size={15} /> Llego a esta
-                    </button>
-                    {/* Decir que no es información: distingue al que miró y no puede
-                        del que nunca entró. Por eso está, y por eso es discreto. */}
-                    <button
-                        onClick={onNoLlego}
-                        className="shrink-0 min-h-[44px] px-4 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-                    >
-                        No llego
-                    </button>
                     </div>
                 </div>
             )}
