@@ -7,6 +7,8 @@ import {
 interface MobileMorePageProps {
     activeTab: string;
     onClose: () => void;
+    /** Manos de partners esperando respuesta. Se muestra sobre Marcas Buscadas. */
+    pendientes?: number;
 }
 
 interface MoreItem {
@@ -22,6 +24,10 @@ const sections: { title: string; items: MoreItem[] }[] = [
     {
         title: 'CRM',
         items: [
+            // Faltaba: en el celular esta pantalla no tenía ninguna puerta de
+            // entrada, solo se llegaba tipeando la URL. Va primera porque es la
+            // única del grupo donde alguien puede estar esperando respuesta.
+            { id: 'marcas-buscadas', Icon: Target, label: 'Marcas Buscadas', accentColor: '#7c3aed', accentBg: 'rgba(124, 58, 237, 0.1)' },
             { id: 'companies', Icon: Building2, label: 'Empresas', accentColor: '#7c3aed', accentBg: 'rgba(124, 58, 237, 0.1)' },
             { id: 'contacts', Icon: User, label: 'Contactos', accentColor: '#7c3aed', accentBg: 'rgba(124, 58, 237, 0.1)' },
             { id: 'partners', Icon: Handshake, label: 'Partners Oficiales', accentColor: '#7c3aed', accentBg: 'rgba(124, 58, 237, 0.1)' },
@@ -55,7 +61,7 @@ const sections: { title: string; items: MoreItem[] }[] = [
     },
 ];
 
-export default function MobileMorePage({ activeTab, onClose }: MobileMorePageProps) {
+export default function MobileMorePage({ activeTab, onClose, pendientes = 0 }: MobileMorePageProps) {
     const navigate = useNavigate();
 
     const handleNavigate = (id: string) => {
@@ -156,6 +162,14 @@ export default function MobileMorePage({ activeTab, onClose }: MobileMorePagePro
                                         >
                                             {item.label}
                                         </span>
+                                        {item.id === 'marcas-buscadas' && pendientes > 0 && (
+                                            <span
+                                                className="text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0"
+                                                style={{ background: '#f43f5e', color: '#fff' }}
+                                            >
+                                                {pendientes}
+                                            </span>
+                                        )}
                                         {item.disabled && (
                                             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 text-slate-400">
                                                 Pronto

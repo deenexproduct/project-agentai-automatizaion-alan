@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "partners-back",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "server",
+      "port": 3020
+    },
+    {
+      "name": "partners-front",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5260"],
+      "cwd": "client",
+      "port": 5260
+    }
+  ]
+}

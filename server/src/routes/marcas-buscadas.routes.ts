@@ -26,6 +26,44 @@ router.get('/', async (req: Request, res: Response) => {
     }
 });
 
+/**
+ * Cuántas manos están esperando respuesta. Va al badge del menú.
+ *
+ * El número se limpia cuando ACTUÁS (aceptás o descartás la mano), no cuando
+ * mirás: un badge que se apaga con solo abrir la pantalla te deja igual de
+ * desinformado, pero convencido de que ya lo viste.
+ *
+ * Se cuentan manos y no marcas —dos partners ofreciéndose por Havanna son dos
+ * conversaciones— y las propuestas van aparte: una marca que trajo el partner
+ * guarda su ofrecimiento adentro como una mano, así que sumarlas juntas
+ * contaría el mismo hecho dos veces.
+ */
+router.get('/pendientes', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id;
+        const [fila] = await MarcaBuscada.aggregate([
+            // Las archivadas y las ascendidas quedan afuera: esa conversación
+            // ya se cerró o siguió en el pipeline.
+            { $match: { userId, estado: { $in: ['buscando', 'con_manos'] } } },
+            { $unwind: '$manos' },
+            // El $unwind no filtra: sin esto entran las descartadas del mismo
+            // documento que tiene una ofrecida.
+            { $match: { 'manos.estado': 'ofrecida' } },
+            {
+                $group: {
+                    _id: null,
+                    propuestas: { $sum: { $cond: [{ $eq: ['$origen', 'partner'] }, 1, 0] } },
+                    manos: { $sum: { $cond: [{ $eq: ['$origen', 'partner'] }, 0, 1] } },
+                },
+            },
+        ]);
+        res.json({ manos: fila?.manos ?? 0, propuestas: fila?.propuestas ?? 0 });
+    } catch (err: any) {
+        console.error('marcas-buscadas pendientes error:', err.message);
+        res.status(500).json({ error: 'No se pudo contar lo pendiente' });
+    }
+});
+
 router.post('/', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;

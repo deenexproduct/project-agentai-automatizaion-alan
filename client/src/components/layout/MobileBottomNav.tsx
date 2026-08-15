@@ -4,6 +4,8 @@ import { LayoutDashboard, Columns3, CheckSquare, Calendar as CalendarIcon, Menu 
 interface MobileBottomNavProps {
     activeTab: string;
     onMoreClick: () => void;
+    /** Cosas esperando respuesta adentro de "Más". Sin esto quedan invisibles. */
+    pendientes?: number;
 }
 
 const primaryTabs = [
@@ -13,7 +15,7 @@ const primaryTabs = [
     { id: 'calendar', Icon: CalendarIcon, label: 'Agenda' },
 ];
 
-export default function MobileBottomNav({ activeTab, onMoreClick }: MobileBottomNavProps) {
+export default function MobileBottomNav({ activeTab, onMoreClick, pendientes = 0 }: MobileBottomNavProps) {
     const navigate = useNavigate();
     const isPrimaryActive = primaryTabs.some(t => t.id === activeTab);
 
@@ -163,6 +165,15 @@ export default function MobileBottomNav({ activeTab, onMoreClick }: MobileBottom
                         >
                             Más
                         </span>
+                        {pendientes > 0 && (
+                            <span
+                                aria-label={`${pendientes} esperando respuesta`}
+                                className="absolute top-0.5 right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center z-20"
+                                style={{ background: '#f43f5e', color: '#fff' }}
+                            >
+                                {pendientes > 9 ? '9+' : pendientes}
+                            </span>
+                        )}
 
                         {!isPrimaryActive && (
                             <div

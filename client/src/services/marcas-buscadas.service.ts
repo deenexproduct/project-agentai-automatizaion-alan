@@ -37,3 +37,14 @@ export const descartarMano = async (marcaId: string, manoId: string) =>
 /** Cambia a qué partners se les muestra la marca. Lista vacía = a todos. */
 export const dirigirMarca = async (id: string, partners: string[]) =>
     (await api.patch(`/marcas-buscadas/${id}`, { partners })).data;
+
+export interface Pendientes {
+    /** Partners que se ofrecieron por una marca nuestra y esperan respuesta. */
+    manos: number;
+    /** Marcas que trajo un partner y todavía no miramos. */
+    propuestas: number;
+}
+
+/** Lo que está esperando una respuesta nuestra. Alimenta el badge del menú. */
+export const getPendientes = async (): Promise<Pendientes> =>
+    (await api.get<Pendientes>('/marcas-buscadas/pendientes')).data;
