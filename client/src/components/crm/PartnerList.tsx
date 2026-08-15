@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Handshake, Mail, MessageCircle, Building2, User } from 'lucide-react';
-import { PartnerData, getPartners, deletePartner } from '../../services/crm.service';
+import { Search, Plus, Edit2, Trash2, Handshake, Mail, MessageCircle, Building2, User, Link2, Copy, Check, Unlink } from 'lucide-react';
+import { PartnerData, getPartners, deletePartner, generarLinkPartner, revocarLinkPartner } from '../../services/crm.service';
+import { mensajeDeError } from '../../lib/apiError';
 import PartnerFormDrawer from './PartnerFormDrawer';
 import PremiumHeader from './PremiumHeader';
 import OwnerAvatar from '../common/OwnerAvatar';
 
 export default function PartnerList() {
     const [partners, setPartners] = useState<PartnerData[]>([]);
+    const [linkCopiado, setLinkCopiado] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
@@ -38,6 +40,30 @@ export default function PartnerList() {
     const openEditDrawer = (p: PartnerData) => {
         setEditingPartner(p);
         setIsDrawerOpen(true);
+    };
+
+    const copiarLink = async (partner: PartnerData) => {
+        try {
+            // Si todavía no tiene, se genera en el mismo gesto: el usuario
+            // quiere el link, no administrar tokens.
+            const url = partner.linkPortal ?? (await generarLinkPartner(partner._id)).url;
+            await navigator.clipboard.writeText(url);
+            setLinkCopiado(partner._id);
+            setTimeout(() => setLinkCopiado(null), 2000);
+            if (!partner.linkPortal) loadPartners();
+        } catch (e) {
+            alert(mensajeDeError(e, 'No se pudo generar el link'));
+        }
+    };
+
+    const revocarLink = async (partner: PartnerData) => {
+        if (!confirm(`¿Revocar el link de ${partner.name}? El que ya tiene deja de funcionar.`)) return;
+        try {
+            await revocarLinkPartner(partner._id);
+            loadPartners();
+        } catch (e) {
+            alert(mensajeDeError(e, 'No se pudo revocar el link'));
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -164,6 +190,26 @@ export default function PartnerList() {
 
                                         <td className="px-6 py-5 text-right">
                                             <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => copiarLink(partner)}
+                                                    title={partner.linkPortal ? 'Copiar el link del portal' : 'Generar el link del portal'}
+                                                    className={`w-9 h-9 flex items-center justify-center rounded-[10px] border transition-all shadow-sm ${linkCopiado === partner._id
+                                                        ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                                                        : partner.linkPortal
+                                                            ? 'text-violet-600 bg-violet-50 border-violet-200 hover:bg-violet-100'
+                                                            : 'text-slate-400 bg-white border-slate-200 hover:text-violet-600 hover:bg-violet-50 hover:border-violet-200'}`}
+                                                >
+                                                    {linkCopiado === partner._id ? <Check size={15} /> : partner.linkPortal ? <Copy size={15} /> : <Link2 size={15} />}
+                                                </button>
+                                                {partner.linkPortal && (
+                                                    <button
+                                                        onClick={() => revocarLink(partner)}
+                                                        title="Revocar el link"
+                                                        className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-amber-600 bg-white hover:bg-amber-50 rounded-[10px] border border-slate-200 hover:border-amber-200 transition-all shadow-sm"
+                                                    >
+                                                        <Unlink size={15} />
+                                                    </button>
+                                                )}
                                                 <button onClick={() => openEditDrawer(partner)} className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-violet-600 bg-white hover:bg-violet-50 rounded-[10px] border border-slate-200 hover:border-violet-200 transition-all shadow-sm">
                                                     <Edit2 size={15} />
                                                 </button>
