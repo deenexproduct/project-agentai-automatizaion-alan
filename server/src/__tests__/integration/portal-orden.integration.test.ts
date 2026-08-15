@@ -156,7 +156,7 @@ describe('cuál mano es la suya', () => {
         const res = await request(app).get(`/api/portal/${TOKEN}`);
 
         expect(res.body.marcas[0].miMano.comentario).toBe('Conozco al gerente');
-        expect(res.body.marcas[0].manos).toHaveLength(0);
+        expect(res.body.marcas[0].otrasManos).toBe(0);
     });
 
     it('la de otro partner con MI MISMO nombre no se confunde con la mía', async () => {
@@ -169,7 +169,7 @@ describe('cuál mano es la suya', () => {
         const res = await request(app).get(`/api/portal/${TOKEN}`);
 
         expect(res.body.marcas[0].miMano).toBeNull();
-        expect(res.body.marcas[0].manos).toHaveLength(1);
+        expect(res.body.marcas[0].otrasManos).toBe(1);
     });
 
     it('una mano descartada no la cuenta como respondida: vuelve a pedirle', async () => {

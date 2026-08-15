@@ -38,11 +38,16 @@ export interface MarcaPublica {
     /** La mano de ESTE partner, si se ofreció. La resuelve el servidor por id:
      *  deducirla acá comparando nombres se rompe con dos partners homónimos. */
     miMano?: ManoPublica | null;
-    /** Las manos de los OTROS partners. La propia va en `miMano`. */
-    manos: ManoPublica[];
+    /** Cuántos OTROS partners se ofrecieron. Solo el número: son competidores
+     *  entre sí, y el nombre y el comentario del rival no son asunto suyo. */
+    otrasManos: number;
 }
 export interface TableroPublico {
-    partner: { nombre: string };
+    partner: {
+        nombre: string;
+        /** Comisión pactada, en %. Sólo viaja si hay una acordada. */
+        comision?: number;
+    };
     marcas: MarcaPublica[];
 }
 

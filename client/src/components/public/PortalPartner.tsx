@@ -22,13 +22,16 @@ export default function PortalPartner() {
     // mano se registró), así que un blip de red acá NO debe pisar la
     // pantalla con "Este link no es válido." Si falla, dejamos el tablero
     // como estaba y avisamos en la tarjeta de la marca en cuestión.
-    const recargar = async (marcaId: string) => {
+    const recargar = async (marcaId: string, queHizo = 'Tu mano quedó registrada') => {
         try {
             setTablero(await getTablero(token!));
         } catch {
             setErroresMarca(prev => ({
                 ...prev,
-                [marcaId]: 'Tu mano quedó registrada, pero no pudimos actualizar la lista. Recargá la página para verla.',
+                // El texto tiene que decir lo que REALMENTE pasó: cuando esto se
+                // usaba también para "No llego", le afirmábamos que había
+                // levantado la mano justo cuando había dicho lo contrario.
+                [marcaId]: `${queHizo}, pero no pudimos actualizar la lista. Recargá la página para verla.`,
             }));
         }
     };
@@ -53,7 +56,7 @@ export default function PortalPartner() {
         setErroresMarca(prev => ({ ...prev, [marcaId]: '' }));
         try {
             await marcarSinLlegada(token!, marcaId);
-            await recargar(marcaId);
+            await recargar(marcaId, 'Lo anotamos');
         } catch (err) {
             setErroresMarca(prev => ({
                 ...prev,
@@ -68,11 +71,10 @@ export default function PortalPartner() {
     // dentro de cada grupo se respeta el orden que vino.
     const ordenadas = useMemo(() => {
         if (!tablero) return [];
-        const respondida = (m: MarcaPublica) => Boolean(m.noLlego || m.miMano);
         return [...tablero.marcas].sort((a, b) => Number(respondida(a)) - Number(respondida(b)));
     }, [tablero]);
 
-    const pendientes = ordenadas.filter(m => !m.noLlego && !m.miMano).length;
+    const pendientes = ordenadas.filter(m => !respondida(m)).length;
 
     if (error) {
         return (
@@ -117,6 +119,14 @@ export default function PortalPartner() {
                         Estas son las empresas donde nos podés dar una mano. Si tenés cómo acercarte
                         a alguna, avisanos y te escribimos.
                     </p>
+                    {/* Lo que gana. Ocultarlo no lo hace más barato, solo hace
+                        que se pregunte para qué está haciendo esto. */}
+                    {!!tablero.partner.comision && (
+                        <p className="text-slate-500 text-[15px] mt-1.5 max-w-lg leading-relaxed">
+                            Por cada una que cierre, te llevás el{' '}
+                            <strong className="text-slate-700 font-semibold">{tablero.partner.comision}%</strong>.
+                        </p>
+                    )}
 
                     {ordenadas.length > 0 && (
                         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -128,7 +138,7 @@ export default function PortalPartner() {
                             {/* Con tres o cuatro tarjetas el orden se ve solo. De ahí
                                 para arriba conviene decirlo: es una recomendación. */}
                             {pendientes > 1 && ordenadas.length > 4 && (
-                                <p className="text-xs text-slate-400">Arriba están las más frenadas.</p>
+                                <p className="text-xs text-slate-500">Arriba están las más frenadas.</p>
                             )}
                         </div>
                     )}
@@ -152,12 +162,29 @@ export default function PortalPartner() {
                     ))
                 )}
 
-                <Proponer token={token!} onListo={cargarInicial} />
+                <Proponer token={token!} onListo={() => recargar('propuesta', 'Anotamos tu marca')} />
 
                 <p className="text-center text-[11px] text-slate-400 pt-4 pb-8">Deenex</p>
             </div>
         </Fondo>
     );
+}
+
+/**
+ * Si el partner ya contestó esta marca. Tiene que decir lo MISMO que el
+ * servidor, que es quien ordena la lista: una mano descartada NO cuenta como
+ * respondida —pasamos de su ofrecimiento, puede volver a ofrecerse— y si acá
+ * dijéramos que sí, la tarjeta se iría al fondo mientras el servidor la manda
+ * arriba.
+ */
+function respondida(m: MarcaPublica): boolean {
+    if (m.noLlego) return true;
+    if (!m.miMano) return false;
+    // Descartada sobre una marca viva: puede volver a ofrecerse, sigue
+    // pendiente. Descartada sobre una que ya ascendió: entramos por otro lado
+    // y la tarjeta solo informa, así que no le pedimos nada.
+    if (m.miMano.estado !== 'descartada') return true;
+    return m.situacion?.tipo === 'en_pipeline';
 }
 
 /** "Gabriel Francisco Chayle" → "Gabriel". Un saludo, no un encabezado de factura. */
@@ -196,12 +223,22 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
     const [comentario, setComentario] = useState('');
 
     const miMano = marca.miMano;
-    const otros = marca.manos;
+    const otros = marca.otrasManos ?? 0;
+
+    // Cuatro desenlaces distintos, y al partner le importan cosas distintas en
+    // cada uno. Antes había dos: "levantaste la mano" y nada.
+    const ofrecida = miMano?.estado === 'ofrecida';
+    const aceptada = miMano?.estado === 'aceptada';
+    const descartada = miMano?.estado === 'descartada';
+    // Si la marca ya está en el pipeline y su mano quedó descartada, no es que
+    // pasamos de él: entramos por otro lado. Decirlo cambia por completo cómo
+    // se lee.
+    const leGanaronDeMano = descartada && marca.situacion?.tipo === 'en_pipeline';
 
     return (
-        <article className={`backdrop-blur-xl rounded-[1.75rem] border p-5 sm:p-6 transition-colors duration-300 ${miMano
+        <article className={`backdrop-blur-xl rounded-[1.75rem] border p-5 sm:p-6 transition-colors duration-300 ${aceptada || ofrecida
             ? 'bg-emerald-50/40 border-emerald-200/70'
-            : marca.noLlego
+            : marca.noLlego || leGanaronDeMano
                 ? 'bg-slate-50/50 border-slate-200/40'
                 : 'bg-white/80 border-slate-200/60 shadow-sm shadow-slate-200/50'}`}>
 
@@ -230,34 +267,35 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
 
             {marca.porQue && <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{marca.porQue}</p>}
 
-            {otros.length > 0 && (
-                <div className="flex items-center gap-2 mt-3.5">
-                    <div className="flex -space-x-1.5">
-                        {otros.slice(0, 4).map((x, i) => (
-                            <span key={i}
-                                title={x.partnerNombre}
-                                className="w-6 h-6 rounded-full bg-slate-200 border-2 border-white text-[10px] font-bold text-slate-600 flex items-center justify-center">
-                                {(x.partnerNombre || '?').trim().charAt(0).toUpperCase()}
-                            </span>
-                        ))}
-                    </div>
-                    <p className="text-xs text-slate-400">
-                        {otros.length === 1 ? 'ya levantó la mano' : 'ya levantaron la mano'}
-                    </p>
-                </div>
+            {otros > 0 && (
+                <p className="text-xs text-slate-500 mt-3.5">
+                    {otros === 1
+                        ? 'Otro partner también se ofreció. Igual nos sirve tener más de una puerta.'
+                        : `Otros ${otros} también se ofrecieron. Igual nos sirve tener más de una puerta.`}
+                </p>
             )}
 
-            {miMano ? (
+            {ofrecida || aceptada ? (
                 <div className="mt-4 flex items-start gap-2.5">
                     <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 mt-0.5">
                         <Check size={12} className="text-white" strokeWidth={3} />
                     </span>
                     <div>
-                        <p className="text-sm font-semibold text-emerald-800">Levantaste la mano</p>
-                        {miMano.comentario && <p className="text-xs text-emerald-700/80 mt-0.5">“{miMano.comentario}”</p>}
-                        <p className="text-[11px] text-emerald-600/70 mt-0.5">Te escribimos para coordinar.</p>
+                        <p className="text-sm font-semibold text-emerald-800">
+                            {aceptada ? 'Vamos con vos' : 'Levantaste la mano'}
+                        </p>
+                        {miMano?.comentario && <p className="text-xs text-emerald-700/80 mt-0.5">“{miMano.comentario}”</p>}
+                        <p className="text-[11px] text-emerald-600/70 mt-0.5">
+                            {aceptada
+                                ? 'Seguimos por acá. Arriba ves en qué anda.'
+                                : 'Te escribimos para coordinar.'}
+                        </p>
                     </div>
                 </div>
+            ) : leGanaronDeMano ? (
+                <p className="mt-4 text-sm text-slate-400">
+                    Entramos por otro lado, pero gracias por ofrecerte. Arriba ves en qué anda.
+                </p>
             ) : abierta ? (
                 <div className="mt-4 flex flex-col gap-2.5">
                     <input
@@ -287,7 +325,7 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
                 </div>
             ) : marca.noLlego ? (
                 <div className="mt-4 flex items-center justify-between gap-3">
-                    <p className="text-sm text-slate-400">Dijiste que no llegás a esta.</p>
+                    <p className="text-sm text-slate-500">Dijiste que no llegás a esta.</p>
                     <button
                         onClick={() => setAbierta(true)}
                         className="shrink-0 text-xs font-semibold text-violet-600 underline underline-offset-2 min-h-[44px] px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
@@ -296,7 +334,16 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
                     </button>
                 </div>
             ) : (
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-col gap-2">
+                    {/* Se ofreció y no seguimos con eso. Callarlo y volver a
+                        preguntarle lo mismo es lo que hace que un partner deje
+                        de contestar. */}
+                    {descartada && (
+                        <p className="text-xs text-slate-400">
+                            Ya te habías ofrecido; por ahora fuimos por otro lado. Si cambió algo, avisanos.
+                        </p>
+                    )}
+                    <div className="flex gap-2">
                     <button
                         onClick={() => setAbierta(true)}
                         className="flex-1 sm:flex-none min-h-[44px] px-5 sm:px-7 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
@@ -311,6 +358,7 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
                     >
                         No llego
                     </button>
+                    </div>
                 </div>
             )}
 

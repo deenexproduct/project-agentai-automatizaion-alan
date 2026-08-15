@@ -129,8 +129,14 @@ router.get('/:token', async (req: Request, res: Response) => {
         const salida = marcas.map((m: any) => {
             const situacion = situacionDe(m);
             const noLlego = (m.sinLlegada || []).some((x: any) => String(x) === String(partner._id));
-            const yaSeOfrecio = (m.manos || []).some((x: any) =>
-                String(x.partnerId) === String(partner._id) && x.estado !== 'descartada');
+            const miManoCruda = (m.manos || []).find((x: any) => String(x.partnerId) === String(partner._id));
+            // "Respondida" es "no hay nada más que pueda hacer acá". Una mano
+            // descartada sobre una marca que sigue viva NO lo es: puede volver
+            // a ofrecerse. Pero si la marca ya ascendió con otro partner, la
+            // tarjeta solo informa — dejarla arriba le pide una acción que no
+            // existe y le infla el contador de pendientes.
+            const yaSeOfrecio = !!miManoCruda && (
+                miManoCruda.estado !== 'descartada' || m.estado === 'ascendida');
             return {
                 _id: m._id,
                 nombre: m.nombre,
@@ -141,12 +147,21 @@ router.get('/:token', async (req: Request, res: Response) => {
                 // Separadas a propósito: el cliente no tiene que deducir cuál
                 // mano es la suya comparando nombres — dos partners homónimos
                 // se pisarían, y el nombre es dato editable.
+                // La propia viaja SIEMPRE, descartada incluida: si pasamos de su
+                // ofrecimiento y la escondemos, la tarjeta le vuelve a preguntar
+                // lo mismo como si nunca hubiera contestado. Se ofreció, lo
+                // ignoramos y encima se lo preguntamos de nuevo — así se pierde
+                // un partner.
                 miMano: (m.manos || [])
-                    .filter((x: any) => String(x.partnerId) === String(partner._id) && x.estado !== 'descartada')
+                    .filter((x: any) => String(x.partnerId) === String(partner._id))
                     .map(manoPublica)[0] ?? null,
-                manos: (m.manos || [])
-                    .filter((x: any) => String(x.partnerId) !== String(partner._id) && x.estado !== 'descartada')
-                    .map(manoPublica),
+                // De los OTROS solo el número. Los partners compiten entre sí
+                // por la misma comisión: mandarles el nombre y el comentario
+                // textual del rival es filtrarle a un tercero con quién
+                // hablamos y qué relación tiene. Saber que no está solo le
+                // alcanza, y eso es un entero.
+                otrasManos: (m.manos || []).filter((x: any) =>
+                    String(x.partnerId) !== String(partner._id) && x.estado !== 'descartada').length,
                 _respondida: noLlego || yaSeOfrecio,
                 _quieto: diasSinNovedad(m, situacion),
             };
@@ -159,7 +174,10 @@ router.get('/:token', async (req: Request, res: Response) => {
             Number(a._respondida) - Number(b._respondida) || b._quieto - a._quieto);
 
         res.json({
-            partner: { nombre: partner.name },
+            partner: {
+                nombre: partner.name,
+                ...(partner.commissionPercentage ? { comision: partner.commissionPercentage } : {}),
+            },
             marcas: salida.map(({ _respondida, _quieto, ...m }) => m),
         });
     } catch (err: any) {
@@ -185,8 +203,13 @@ router.post('/:token/marcas/:id/mano', async (req: Request, res: Response) => {
             $and: [
                 alcanceDelPartner(partner),
                 {
+                    // Los mismos tres casos que el listado, ni uno menos: si el
+                    // portal la muestra, el botón la tiene que abrir. Faltaba
+                    // el de la mano propia, y por eso una marca que ascendió
+                    // con otro partner le devolvía 404 en rojo al tocarla.
                     $or: [
                         { estado: { $in: ['buscando', 'con_manos'] } },
+                        { estado: 'ascendida', 'manos.partnerId': partner._id },
                         { estado: 'ascendida', partners: partner._id },
                     ],
                 },

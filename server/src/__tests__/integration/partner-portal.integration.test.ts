@@ -114,19 +114,25 @@ describe('portal del partner', () => {
         expect((await MarcaBuscada.findById(ajena._id))!.manos).toHaveLength(0);
     });
 
-    it('deja ver quién más levantó la mano', async () => {
+    it('dice CUÁNTOS más levantaron la mano, pero no quiénes', async () => {
+        // Antes este test pedía lo contrario: que viajara `partnerNombre`. Se
+        // dio vuelta a propósito. Los partners compiten entre sí por la misma
+        // comisión, así que el nombre y el comentario del otro no son asunto
+        // suyo; que no está solo, sí le sirve saberlo.
         await crearPartner('tok-123');
         const m = await MarcaBuscada.create({
             nombre: 'Havanna', userId: USER_ID,
             manos: [{
                 partnerId: new mongoose.Types.ObjectId(), partnerNombre: 'Gabriel',
-                levantadaEn: new Date(), estado: 'ofrecida',
+                comentario: 'Le vendo hace años', levantadaEn: new Date(), estado: 'ofrecida',
             }],
         } as any);
 
         const res = await request(app).get('/api/portal/tok-123');
 
         const marca = res.body.marcas.find((x: any) => String(x._id) === String(m._id));
-        expect(marca.manos[0].partnerNombre).toBe('Gabriel');
+        expect(marca.otrasManos).toBe(1);
+        expect(JSON.stringify(res.body)).not.toContain('Gabriel');
+        expect(JSON.stringify(res.body)).not.toContain('Le vendo hace años');
     });
 });
