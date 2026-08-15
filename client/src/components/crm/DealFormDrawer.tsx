@@ -1,4 +1,5 @@
 import { mensajeDeError } from '../../lib/apiError';
+import { getPartners, getPartnersDelDeal, compartirDeal, PartnerData } from '../../services/crm.service';
 import { useState, useEffect, useRef } from 'react';
 import { X, Save, DollarSign, Calendar, Building2, User, Briefcase, MessageCircle, Mail, History, FileText, ListTodo, CheckSquare, Plus, ChevronRight, Check, UserPlus, XCircle, Phone, Linkedin, Users, Send, Loader2, Clock, AlertTriangle } from 'lucide-react';
 import { DealData, getDeal, createDeal, updateDeal, getCompanies, getContacts, CompanyData, ContactData, getTasks, TaskData, updateCompany, updateTask, getDealActivities, createActivity, ActivityData, getTeamUsers, TeamUser } from '../../services/crm.service';
@@ -69,6 +70,8 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
     const [actOutcome, setActOutcome] = useState('');
     const [actContactId, setActContactId] = useState('');
     const [savingActivity, setSavingActivity] = useState(false);
+    const [partnersDisponibles, setPartnersDisponibles] = useState<PartnerData[]>([]);
+    const [partnersCompartidos, setPartnersCompartidos] = useState<string[]>([]);
     const [currentDealData, setCurrentDealData] = useState<DealData | null>(deal || null);
 
     const drawerRef = useRef<HTMLDivElement>(null);
@@ -110,6 +113,14 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
             }
 
             setNotes((deal as any).notes?.length ? (deal as any).notes[0].text : '');
+
+            // Con quién está compartido este deal, y qué partners existen
+            Promise.all([getPartners(), getPartnersDelDeal(deal._id)])
+                .then(([lista, actual]) => {
+                    setPartnersDisponibles(lista.partners);
+                    setPartnersCompartidos(actual.partners);
+                })
+                .catch(() => { });
 
             // Load tasks
             getTasks({ deal: deal._id, limit: 50 }).then(res => setDealTasks(res.tasks)).catch(() => { });
@@ -760,6 +771,48 @@ export default function DealFormDrawer({ deal, open, stages, onClose, onSaved }:
                                         </div>
                                     </div>
                                 </div>
+
+                                {deal?._id && partnersDisponibles.length > 0 && (
+                                    <div className="space-y-2 mt-4 pt-4 border-t border-slate-200/50">
+                                        <label className="text-[13px] font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                            Qué partners lo ven
+                                        </label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {partnersDisponibles.map(p => {
+                                                const activo = partnersCompartidos.includes(p._id);
+                                                return (
+                                                    <button
+                                                        key={p._id}
+                                                        type="button"
+                                                        onClick={async () => {
+                                                            const previos = partnersCompartidos;
+                                                            const nuevos = activo
+                                                                ? previos.filter(x => x !== p._id)
+                                                                : [...previos, p._id];
+                                                            setPartnersCompartidos(nuevos);
+                                                            try {
+                                                                await compartirDeal(deal._id!, nuevos);
+                                                            } catch (e) {
+                                                                setPartnersCompartidos(previos);
+                                                                alert(mensajeDeError(e, 'No se pudo cambiar quién lo ve'));
+                                                            }
+                                                        }}
+                                                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-full border transition-all ${activo
+                                                            ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-500/20'
+                                                            : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300 hover:text-violet-600'}`}
+                                                    >
+                                                        {p.name}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-[11px] text-slate-400">
+                                            {partnersCompartidos.length === 0
+                                                ? 'Ningún partner lo ve.'
+                                                : 'Lo ven en su portal con la etapa actual y pueden ofrecerse a acercarte.'}
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* Responsable Selector */}
                                 <div className="space-y-2 mt-4 pt-4 border-t border-slate-200/50">

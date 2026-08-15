@@ -45,6 +45,9 @@ router.get('/:token', async (req: Request, res: Response) => {
                 $or: [
                     { estado: { $in: ['buscando', 'con_manos'] } },
                     { estado: 'ascendida', 'manos.partnerId': partner._id },
+                    // Y las empresas del pipeline que le marcamos explícitamente:
+                    // es el caso de "compartir un deal" desde el CRM.
+                    { estado: 'ascendida', partners: partner._id },
                 ],
             }],
             $or: [
@@ -126,7 +129,13 @@ router.post('/:token/marcas/:id/mano', async (req: Request, res: Response) => {
         const marca = await MarcaBuscada.findOne({
             _id: req.params.id,
             userId: partner.userId,
-            estado: { $in: ['buscando', 'con_manos'] },
+            $or: [
+                { estado: { $in: ['buscando', 'con_manos'] } },
+                // También sobre un deal del pipeline que le compartimos: si lo
+                // ve en su portal tiene que poder ofrecerse, si no el botón
+                // está de adorno.
+                { estado: 'ascendida', partners: partner._id },
+            ],
         });
         if (!marca) return res.status(404).json({ error: 'No encontrado' });
 

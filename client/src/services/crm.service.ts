@@ -428,3 +428,10 @@ export const deleteEvent = async (id: string): Promise<{ success: boolean }> =>
 
 export const syncGoogleEvents = async (start: string, end: string): Promise<{ success: boolean; message?: string }> =>
     (await api.post('/calendar/events/sync', { start, end })).data;
+
+// Compartir un deal del pipeline con partners: lo ven en su portal con la
+// etapa real y pueden ofrecerse.
+export const getPartnersDelDeal = async (dealId: string) =>
+    (await api.get<{ partners: string[] }>(`/crm/deals/${dealId}/compartir`)).data;
+export const compartirDeal = async (dealId: string, partners: string[]) =>
+    (await api.post(`/crm/deals/${dealId}/compartir`, { partners })).data;

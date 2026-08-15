@@ -3,6 +3,7 @@ import { PipelineConfig } from '../models/pipeline-config.model';
 import { Company } from '../models/company.model';
 import { CrmContact } from '../models/crm-contact.model';
 import { Deal } from '../models/deal.model';
+import { MarcaBuscada, normalizarNombre } from '../models/marca-buscada.model';
 import { Task } from '../models/task.model';
 import { Activity } from '../models/activity.model';
 import { LinkedInContact } from '../models/linkedin-contact.model';
@@ -851,6 +852,73 @@ router.post('/deals', async (req: Request, res: Response) => {
         if (sendValidationError(res, err)) return;
         console.error('CRM create deal error:', err.message);
         res.status(500).json({ error: 'Failed to create deal' });
+    }
+});
+
+
+// ── GET /deals/:id/compartir — a quiénes se les está mostrando hoy ──
+router.get('/deals/:id/compartir', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id;
+        if (!mongoose.isValidObjectId(req.params.id)) return res.json({ partners: [] });
+
+        const deal = await Deal.findById(req.params.id, { company: 1 }).lean();
+        if (!deal?.company) return res.json({ partners: [] });
+
+        const marca = await MarcaBuscada.findOne({ userId, companyId: deal.company }, { partners: 1 }).lean();
+        res.json({ partners: (marca?.partners || []).map(String) });
+    } catch (err: any) {
+        console.error('CRM leer compartidos error:', err.message);
+        res.status(500).json({ error: 'No se pudo leer con quién está compartido' });
+    }
+});
+
+// ── POST /deals/:id/compartir — a qué partners se les muestra este deal ──
+//
+// Se apoya en `MarcaBuscada` con `companyId`: esa forma ya significa "una
+// empresa del CRM que le mostramos a un partner", y el portal ya sabe
+// resolverle la etapa real. Inventar una segunda maquinaria para lo mismo
+// habría dejado dos fuentes de verdad.
+router.post('/deals/:id/compartir', async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user._id;
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            return res.status(400).json({ error: 'El ID no tiene un formato válido' });
+        }
+
+        // Sin filtro por dueño, igual que el tablero de deals (GET /deals no
+        // filtra por userId): si lo ves en el pipeline, lo podés compartir.
+        const deal = await Deal.findById(req.params.id).populate('company', 'name');
+        if (!deal) return res.status(404).json({ error: 'Deal no encontrado' });
+
+        const empresa: any = deal.company;
+        if (!empresa?._id) return res.status(400).json({ error: 'El deal no tiene empresa' });
+
+        const partners: string[] = Array.isArray(req.body?.partners) ? req.body.partners : [];
+        const nombre = empresa.name || deal.title;
+
+        // Una sola marca por empresa: compartir de nuevo actualiza, no duplica.
+        const marca = await MarcaBuscada.findOne({ userId, companyId: empresa._id });
+        if (marca) {
+            marca.partners = partners as any;
+            await marca.save();
+            return res.json({ _id: marca._id, partners });
+        }
+
+        const creada = await MarcaBuscada.create({
+            nombre,
+            nombreNormalizado: normalizarNombre(nombre),
+            // Ya es empresa nuestra: nace ascendida, no "buscando llegada".
+            estado: 'ascendida',
+            companyId: empresa._id,
+            partners,
+            userId,
+        });
+        res.json({ _id: creada._id, partners });
+    } catch (err: any) {
+        if (sendValidationError(res, err)) return;
+        console.error('CRM compartir deal error:', err.message);
+        res.status(500).json({ error: 'No se pudo compartir el deal' });
     }
 });
 
