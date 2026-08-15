@@ -23,6 +23,8 @@ export interface SituacionMarca {
     tipo: 'buscando' | 'en_pipeline';
     /** Texto listo para mostrar: "Buscando llegada" o la etapa real ("Coordinando"). */
     etiqueta: string;
+    /** Días sin movimiento del deal. Es lo que le dice al partner si hace falta empujar. */
+    diasQuieto?: number;
 }
 
 export interface MarcaPublica {
@@ -31,6 +33,8 @@ export interface MarcaPublica {
     porQue?: string;
     categoria?: string;
     situacion?: SituacionMarca;
+    /** El partner ya dijo que no llega a esta. */
+    noLlego?: boolean;
     manos: ManoPublica[];
 }
 export interface TableroPublico {
@@ -79,4 +83,10 @@ export async function proponerMarca(token: string, nombre: string, porQue: strin
         body: JSON.stringify({ nombre, porQue }),
     });
     if (!res.ok) throw new Error(await mensajeDeError(res, 'No se pudo proponer la marca'));
+}
+
+/** El partner avisa que no tiene llegada. Se puede revertir ofreciéndose después. */
+export async function marcarSinLlegada(token: string, marcaId: string): Promise<void> {
+    const res = await fetch(`${BASE}/portal/${token}/marcas/${marcaId}/no-llego`, { method: 'POST' });
+    if (!res.ok) throw new Error(await mensajeDeError(res, 'No se pudo registrar'));
 }

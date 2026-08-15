@@ -22,6 +22,31 @@ async function partnerDelToken(token: string) {
     return Partner.findOne({ accessToken: token, accessTokenActivo: true });
 }
 
+
+/**
+ * Qué marcas puede ver Y tocar este partner. Una sola definición para el
+ * listado y para las acciones: cuando estaban separadas, el partner veía en su
+ * portal deals sobre los que después recibía 404 al ofrecerse.
+ */
+function alcanceDelPartner(partner: any) {
+    return {
+        $or: [
+            // Las de quien lo cargó, salvo que estén dirigidas a otros.
+            {
+                userId: partner.userId,
+                $or: [
+                    { partners: { $exists: false } },
+                    { partners: { $size: 0 } },
+                    { partners: partner._id },
+                ],
+            },
+            // Y las que le dirigimos explícitamente, sin importar quién las
+            // cargó: a los partners los dio de alta cada uno el que lo trajo.
+            { partners: partner._id },
+        ],
+    };
+}
+
 /** Sólo estos campos de la mano salen al portal. `partnerId` no se expone. */
 const manoPublica = (m: any) => ({
     partnerNombre: m.partnerNombre,
@@ -38,35 +63,17 @@ router.get('/:token', async (req: Request, res: Response) => {
         if (!partner) return res.status(404).json({ error: 'No encontrado' });
 
         const marcas = await MarcaBuscada.find({
-            // Las ascendidas siguen visibles para quien puso la mano: es la
-            // única forma de que el partner sepa qué pasó con la marca que
-            // trajo. Las archivadas no vuelven nunca.
-            $and: [{
-                $or: [
-                    { estado: { $in: ['buscando', 'con_manos'] } },
-                    { estado: 'ascendida', 'manos.partnerId': partner._id },
-                    // Y las empresas del pipeline que le marcamos explícitamente:
-                    // es el caso de "compartir un deal" desde el CRM.
-                    { estado: 'ascendida', partners: partner._id },
-                ],
-            }],
-            $or: [
-                // Las de quien cargó al partner, salvo que estén dirigidas a
-                // otros. Sin `partners` (o con la lista vacía) son para todos;
-                // las cargadas antes de existir el campo ni siquiera lo tienen.
+            $and: [
+                alcanceDelPartner(partner),
                 {
-                    userId: partner.userId,
+                    // Las ascendidas siguen visibles para quien puso la mano o
+                    // para quien se las compartimos. Las archivadas no vuelven.
                     $or: [
-                        { partners: { $exists: false } },
-                        { partners: { $size: 0 } },
-                        { partners: partner._id },
+                        { estado: { $in: ['buscando', 'con_manos'] } },
+                        { estado: 'ascendida', 'manos.partnerId': partner._id },
+                        { estado: 'ascendida', partners: partner._id },
                     ],
                 },
-                // Y las que le dirigieron explícitamente, sin importar quién las
-                // cargó: a los partners los dio de alta cada uno el que lo trajo,
-                // así que sin esta rama asignarle una marca a Juani no le mostraba
-                // nada — lo peor de los dos mundos.
-                { partners: partner._id },
             ],
         }).sort({ createdAt: -1 }).lean();
 
@@ -76,9 +83,19 @@ router.get('/:token', async (req: Request, res: Response) => {
         // le dice al partner si la marca que trajo avanzó o está frenada.
         const idsEmpresa = marcas.filter(m => m.companyId).map(m => m.companyId);
         const [deals, config] = await Promise.all([
-            idsEmpresa.length ? Deal.find({ company: { $in: idsEmpresa } }, { company: 1, status: 1 }).lean() : [],
+            idsEmpresa.length ? Deal.find({ company: { $in: idsEmpresa } }, { company: 1, status: 1, statusHistory: 1, updatedAt: 1 }).lean() : [],
             PipelineConfig.getOrCreate(String(partner.userId)),
         ]);
+        // Cuánto hace que el deal no se mueve: es lo que le dice al partner si
+        // hace falta que empuje. La etapa sola no significa nada para él.
+        const diasSinMoverse = (d: any): number => {
+            const ultimo = (d.statusHistory || [])[d.statusHistory?.length - 1];
+            const desde = ultimo?.changedAt || d.updatedAt;
+            return desde ? Math.round((Date.now() - new Date(desde).getTime()) / 864e5) : 0;
+        };
+        const quietoDeEmpresa = new Map<string, number>(
+            deals.map((d: any) => [String(d.company), diasSinMoverse(d)] as [string, number]));
+
         const etapaDeEmpresa = new Map<string, string>(
             deals.map((d: any) => [String(d.company), String(d.status)] as [string, string]));
         const etiquetaDeEtapa = new Map<string, string>(
@@ -94,6 +111,7 @@ router.get('/:token', async (req: Request, res: Response) => {
                 // Sin deal (o con una etapa que ya no está en la configuración)
                 // igual decimos algo: el partner tiene que ver que avanzó.
                 etiqueta: (etapa && etiquetaDeEtapa.get(etapa)) || 'En el pipeline',
+                diasQuieto: quietoDeEmpresa.get(String(m.companyId)),
             };
         };
 
@@ -105,6 +123,7 @@ router.get('/:token', async (req: Request, res: Response) => {
                 porQue: m.porQue,
                 categoria: m.categoria,
                 situacion: situacionDe(m),
+                noLlego: (m.sinLlegada || []).some((x: any) => String(x) === String(partner._id)),
                 manos: (m.manos || []).filter((x: any) => x.estado !== 'descartada').map(manoPublica),
             })),
         });
@@ -128,13 +147,14 @@ router.post('/:token/marcas/:id/mano', async (req: Request, res: Response) => {
         // sólo conocer su ObjectId.
         const marca = await MarcaBuscada.findOne({
             _id: req.params.id,
-            userId: partner.userId,
-            $or: [
-                { estado: { $in: ['buscando', 'con_manos'] } },
-                // También sobre un deal del pipeline que le compartimos: si lo
-                // ve en su portal tiene que poder ofrecerse, si no el botón
-                // está de adorno.
-                { estado: 'ascendida', partners: partner._id },
+            $and: [
+                alcanceDelPartner(partner),
+                {
+                    $or: [
+                        { estado: { $in: ['buscando', 'con_manos'] } },
+                        { estado: 'ascendida', partners: partner._id },
+                    ],
+                },
             ],
         });
         if (!marca) return res.status(404).json({ error: 'No encontrado' });
@@ -143,6 +163,12 @@ router.post('/:token/marcas/:id/mano', async (req: Request, res: Response) => {
         const yaLevantada = marca.manos.find(
             (m) => String(m.partnerId) === String(partner._id) && m.estado !== 'descartada'
         );
+
+        // Ofrecerse y "no llego" son excluyentes: si ahora llega, deja de estar
+        // en la lista de los que no.
+        marca.sinLlegada = (marca.sinLlegada || []).filter(
+            (x: any) => String(x) !== String(partner._id)
+        ) as any;
 
         if (yaLevantada) {
             yaLevantada.comentario = comentario;
@@ -225,6 +251,31 @@ router.post('/:token/marcas', async (req: Request, res: Response) => {
     } catch (err: any) {
         console.error('portal proponer marca error:', err.message);
         res.status(500).json({ error: 'No se pudo proponer la marca' });
+    }
+});
+
+/**
+ * POST /:token/marcas/:id/no-llego — el partner dice que no tiene llegada.
+ *
+ * Es información, no ausencia de ella: separa al que miró y no puede del que
+ * nunca entró. Y se puede volver atrás — ofrecerse después lo saca de la lista.
+ */
+router.post('/:token/marcas/:id/no-llego', async (req: Request, res: Response) => {
+    try {
+        const partner = await partnerDelToken(req.params.token);
+        if (!partner) return res.status(404).json({ error: 'No encontrado' });
+        if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'No encontrado' });
+
+        const r = await MarcaBuscada.updateOne(
+            { _id: req.params.id, ...alcanceDelPartner(partner) },
+            { $addToSet: { sinLlegada: partner._id } },
+        );
+        if (!r.matchedCount) return res.status(404).json({ error: 'No encontrado' });
+
+        res.json({ ok: true });
+    } catch (err: any) {
+        console.error('portal no-llego error:', err.message);
+        res.status(500).json({ error: 'No se pudo registrar' });
     }
 });
 

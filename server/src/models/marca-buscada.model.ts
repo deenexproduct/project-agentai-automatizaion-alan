@@ -34,6 +34,8 @@ export interface IMarcaBuscada extends Document {
     origen: 'propio' | 'partner';
     /** Quién la propuso, si vino de un partner. */
     propuestaPor?: mongoose.Types.ObjectId | null;
+    /** Partners que dijeron explícitamente que no llegan a esta marca. */
+    sinLlegada: mongoose.Types.ObjectId[];
     /** A qué partners se les muestra. Vacío = a todos. */
     partners: mongoose.Types.ObjectId[];
     manos: IMano[];
@@ -53,6 +55,10 @@ const ManoSchema = new Schema<IMano>({
 }, { _id: true });
 
 const MarcaBuscadaSchema = new Schema<IMarcaBuscada>({
+    // "No llego a esta" es un dato, no la ausencia de uno: separa al partner
+    // que miró y no puede del que nunca entró. No va en `manos` porque una
+    // mano es una oferta, y esto es lo contrario.
+    sinLlegada: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Partner' }],
     // Una marca propuesta por un partner no es lo mismo que una que buscamos
     // nosotros: se revisa distinto y define a quién le corresponde la comisión.
     origen: { type: String, enum: ['propio', 'partner'], default: 'propio', index: true },
