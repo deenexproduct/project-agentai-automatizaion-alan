@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MobileBottomNav from "../layout/MobileBottomNav";
 import MobileMorePage from "../layout/MobileMorePage";
 import { useNavigate, useParams } from "react-router-dom";
@@ -30,6 +30,8 @@ import PlatformSwitcher from "../common/PlatformSwitcher";
 import ProspectingPage from "./ProspectingPage";
 import CRMDashboard from "../crm/CRMDashboard";
 import PipelineBoard from "../crm/PipelineBoard";
+import MarcasBuscadas from "../crm/MarcasBuscadas";
+import { getPendientes } from "../../services/marcas-buscadas.service";
 import CompanyList from "../crm/CompanyList";
 import ContactList from "../crm/ContactList";
 import ContactDrawerV2 from "./ContactDrawerV2";
@@ -52,6 +54,7 @@ import MetricsDashboard from "../monitoring/MetricsDashboard";
 type SidebarTab =
   | "dashboard"
   | "pipeline"
+  | "marcas-buscadas"
   | "companies"
   | "contacts"
   | "tasks"
@@ -85,6 +88,7 @@ interface SidebarItem {
 const crmGroup: SidebarItem[] = [
   { id: "dashboard", Icon: LayoutDashboard, label: "Dashboard CRM" },
   { id: "pipeline", Icon: Columns3, label: "Pipeline Deals" },
+  { id: "marcas-buscadas", Icon: Target, label: "Marcas Buscadas" },
   { id: "tasks", Icon: CheckSquare, label: "Tareas y Actividad" },
   { id: "calendar", Icon: CalendarIcon, label: "Calendario y Citas" },
   { id: "companies", Icon: Building2, label: "Empresas" },
@@ -176,6 +180,7 @@ export default function LinkedInApp() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [showMore, setShowMore] = useState(false);
+  const [manosPendientes, setManosPendientes] = useState(0);
 
   const hasBothPlatforms =
     user?.platforms?.includes("comercial") &&
@@ -183,6 +188,18 @@ export default function LinkedInApp() {
 
   // Default to 'dashboard' if no tab or invalid tab is provided
   const activeTab = (tab as SidebarTab) || "dashboard";
+
+  // Cuántos partners se ofrecieron y esperan respuesta. Se recuenta al cambiar
+  // de pestaña: así, apenas aceptás o descartás una mano, el número baja sin
+  // recargar. Si falla, el badge se apaga en vez de romper el menú — es un
+  // adorno informativo, no puede tumbar la navegación.
+  useEffect(() => {
+    let vigente = true;
+    getPendientes()
+      .then(p => { if (vigente) setManosPendientes(p.manos + p.propuestas); })
+      .catch(() => { if (vigente) setManosPendientes(0); });
+    return () => { vigente = false; };
+  }, [activeTab]);
 
   return (
     <div
@@ -229,6 +246,7 @@ export default function LinkedInApp() {
               key={item.id}
               {...item}
               active={activeTab === item.id}
+              badge={item.id === "marcas-buscadas" ? manosPendientes : undefined}
               onClick={() => !item.disabled && navigate(`/linkedin/${item.id}`)}
             />
           ))}
@@ -347,39 +365,41 @@ export default function LinkedInApp() {
                 ? "Dashboard CRM"
                 : activeTab === "pipeline"
                   ? "Pipeline de Ventas"
-                  : activeTab === "companies"
-                    ? "Directorio de Empresas"
-                    : activeTab === "contacts"
-                      ? "Agenda de Contactos"
-                      : activeTab === "partners"
-                        ? "Partners Oficiales"
-                        : activeTab === "competitors"
-                          ? "Competidores"
-                          : activeTab === "pos-systems"
-                            ? "Sistemas POS"
-                            : activeTab === "events"
-                              ? "Eventos y Ferias"
-                              : activeTab === "tasks"
-                                ? "Centro de Tareas"
-                                : activeTab === "calendar"
-                                  ? "Calendario y Citas"
-                                  : activeTab === "prospecting-crm"
-                                    ? "Prospecting CRM"
-                                    : activeTab === "publicaciones"
-                                      ? "Publicaciones AI"
-                                      : activeTab === "prospecting"
-                                        ? "Prospecting Bots"
-                                        : activeTab === "voice"
-                                          ? "Transcriptor de Audio"
-                                          : activeTab === "whatsapp"
-                                            ? "WhatsApp Scheduler"
-                                            : activeTab === "extension"
-                                              ? "Extensión Deenex"
-                                              : activeTab === "team"
-                                                ? "Equipo y Permisos"
-                                                : activeTab === "profile"
-                                                  ? "Mi Perfil"
-                                                  : "Configuración"}
+                  : activeTab === "marcas-buscadas"
+                    ? "Marcas Buscadas"
+                    : activeTab === "companies"
+                      ? "Directorio de Empresas"
+                      : activeTab === "contacts"
+                        ? "Agenda de Contactos"
+                        : activeTab === "partners"
+                          ? "Partners Oficiales"
+                          : activeTab === "competitors"
+                            ? "Competidores"
+                            : activeTab === "pos-systems"
+                              ? "Sistemas POS"
+                              : activeTab === "events"
+                                ? "Eventos y Ferias"
+                                : activeTab === "tasks"
+                                  ? "Centro de Tareas"
+                                  : activeTab === "calendar"
+                                    ? "Calendario y Citas"
+                                    : activeTab === "prospecting-crm"
+                                      ? "Prospecting CRM"
+                                      : activeTab === "publicaciones"
+                                        ? "Publicaciones AI"
+                                        : activeTab === "prospecting"
+                                          ? "Prospecting Bots"
+                                          : activeTab === "voice"
+                                            ? "Transcriptor de Audio"
+                                            : activeTab === "whatsapp"
+                                              ? "WhatsApp Scheduler"
+                                              : activeTab === "extension"
+                                                ? "Extensión Deenex"
+                                                : activeTab === "team"
+                                                  ? "Equipo y Permisos"
+                                                  : activeTab === "profile"
+                                                    ? "Mi Perfil"
+                                                    : "Configuración"}
             </h1>
           </div>
 
@@ -398,6 +418,7 @@ export default function LinkedInApp() {
             activeTab === "extension" ||
             activeTab === "dashboard" ||
             activeTab === "pipeline" ||
+            activeTab === "marcas-buscadas" ||
             activeTab === "companies" ||
             activeTab === "contacts" ||
             activeTab === "partners" ||
@@ -417,6 +438,7 @@ export default function LinkedInApp() {
         >
           {activeTab === "dashboard" && <CRMDashboard />}
           {activeTab === "pipeline" && <PipelineBoard urlDealId={id} />}
+          {activeTab === "marcas-buscadas" && <MarcasBuscadas />}
           {activeTab === "companies" && <CompanyList urlCompanyId={id} />}
           {activeTab === "contacts" && <ContactList urlContactId={id} />}
           {activeTab === "partners" && <PartnerList />}
@@ -440,6 +462,7 @@ export default function LinkedInApp() {
       {/* ── Mobile Bottom Nav ──────────────────────── */}
       <MobileBottomNav
         activeTab={activeTab}
+        pendientes={manosPendientes}
         onMoreClick={() => setShowMore(true)}
       />
 
@@ -447,6 +470,7 @@ export default function LinkedInApp() {
       {showMore && (
         <MobileMorePage
           activeTab={activeTab}
+          pendientes={manosPendientes}
           onClose={() => setShowMore(false)}
         />
       )}
@@ -463,6 +487,7 @@ function SidebarButton({
   disabled,
   onClick,
   accentColor,
+  badge,
 }: {
   Icon: React.ElementType;
   label: string;
@@ -470,6 +495,8 @@ function SidebarButton({
   disabled?: boolean;
   onClick: () => void;
   accentColor?: string;
+  /** Cuántas cosas esperan respuesta acá. 0 o undefined no muestra nada. */
+  badge?: number;
 }) {
   const [hovered, setHovered] = useState(false);
   const accent = accentColor || "#7c3aed";
@@ -510,6 +537,18 @@ function SidebarButton({
           size={20}
           color={active ? "#e9d5ff" : disabled ? "#6b7280" : accentLight}
         />
+        {/* El número no se apaga al mirar la pantalla: se apaga cuando la mano
+            se acepta o se descarta. Un badge que se limpia con un vistazo te
+            deja igual de desinformado, pero convencido de que ya lo viste. */}
+        {!!badge && badge > 0 && (
+          <span
+            aria-label={`${badge} esperando respuesta`}
+            className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
+            style={{ background: "#f43f5e", color: "#fff", boxShadow: "0 0 0 2px rgba(26,5,51,0.95)" }}
+          >
+            {badge > 9 ? "9+" : badge}
+          </span>
+        )}
       </button>
 
       {/* Tooltip */}
@@ -525,6 +564,9 @@ function SidebarButton({
           }}
         >
           {label}
+          {!!badge && badge > 0 && (
+            <span style={{ color: "#fda4af" }}> · {badge} esperando</span>
+          )}
         </div>
       )}
     </div>

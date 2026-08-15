@@ -35,6 +35,10 @@ export type PartnerData = {
     createdAt?: string;
     companiesCount?: number;
     contactsCount?: number;
+    /** Si ya tiene link de acceso al portal, activo. */
+    tieneLink?: boolean;
+    /** URL lista para copiarle al partner; null si no tiene link activo. */
+    linkPortal?: string | null;
 };
 
 export interface ICompetitorNote {
@@ -334,6 +338,13 @@ export const createPartner = async (data: Partial<PartnerData>) => (await api.po
 export const updatePartner = async (id: string, data: Partial<PartnerData>) => (await api.patch<PartnerData>(`/partners/${id}`, data)).data;
 export const deletePartner = async (id: string) => (await api.delete(`/partners/${id}`)).data;
 
+// Link de acceso al portal del partner: se genera acá y se le pasa por
+// WhatsApp (los partners no tienen email cargado).
+export const generarLinkPartner = async (id: string) =>
+    (await api.post<{ accessToken: string; url: string }>(`/partners/${id}/access-link`)).data;
+export const revocarLinkPartner = async (id: string) =>
+    (await api.delete(`/partners/${id}/access-link`)).data;
+
 // Competitors
 export const getCompetitors = async () => (await api.get<{ competitors: CompetitorData[] }>('/competitors')).data;
 export const getCompetitorCompanies = async (id: string) => (await api.get<{ companies: CompanyData[] }>(`/competitors/${id}/companies`)).data;
@@ -417,3 +428,10 @@ export const deleteEvent = async (id: string): Promise<{ success: boolean }> =>
 
 export const syncGoogleEvents = async (start: string, end: string): Promise<{ success: boolean; message?: string }> =>
     (await api.post('/calendar/events/sync', { start, end })).data;
+
+// Compartir un deal del pipeline con partners: lo ven en su portal con la
+// etapa real y pueden ofrecerse.
+export const getPartnersDelDeal = async (dealId: string) =>
+    (await api.get<{ partners: string[] }>(`/crm/deals/${dealId}/compartir`)).data;
+export const compartirDeal = async (dealId: string, partners: string[]) =>
+    (await api.post(`/crm/deals/${dealId}/compartir`, { partners })).data;

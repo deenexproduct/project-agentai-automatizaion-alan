@@ -88,7 +88,7 @@ const COLORS = [PALETTE.indigo, PALETTE.sky, PALETTE.emerald, PALETTE.amber, PAL
 // DESIGN COMPONENTS (matching DeenexMonitoring)
 // ══════════════════════════════════════════════════════════════
 
-const Card = ({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) => (
+const Card = ({ children, className = '', style, onClick }: { children: React.ReactNode; className?: string; style?: React.CSSProperties; onClick?: () => void }) => (
     <div className={`rounded-3xl p-7 ${className}`}
         onClick={onClick}
         style={{
@@ -96,6 +96,7 @@ const Card = ({ children, className = '', onClick }: { children: React.ReactNode
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(255,255,255,0.7)',
             boxShadow: '0 1px 2px rgba(0,0,0,0.03), 0 4px 24px rgba(99,102,241,0.04)',
+            ...style,
         }}>
         {children}
     </div>
