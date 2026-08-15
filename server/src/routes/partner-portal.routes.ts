@@ -36,8 +36,25 @@ router.get('/:token', async (req: Request, res: Response) => {
         if (!partner) return res.status(404).json({ error: 'No encontrado' });
 
         const marcas = await MarcaBuscada.find({
-            userId: partner.userId,
             estado: { $in: ['buscando', 'con_manos'] },
+            $or: [
+                // Las de quien cargó al partner, salvo que estén dirigidas a
+                // otros. Sin `partners` (o con la lista vacía) son para todos;
+                // las cargadas antes de existir el campo ni siquiera lo tienen.
+                {
+                    userId: partner.userId,
+                    $or: [
+                        { partners: { $exists: false } },
+                        { partners: { $size: 0 } },
+                        { partners: partner._id },
+                    ],
+                },
+                // Y las que le dirigieron explícitamente, sin importar quién las
+                // cargó: a los partners los dio de alta cada uno el que lo trajo,
+                // así que sin esta rama asignarle una marca a Juani no le mostraba
+                // nada — lo peor de los dos mundos.
+                { partners: partner._id },
+            ],
         }).sort({ createdAt: -1 }).lean();
 
         await Partner.updateOne({ _id: partner._id }, { $set: { ultimoAccesoEn: new Date() } });

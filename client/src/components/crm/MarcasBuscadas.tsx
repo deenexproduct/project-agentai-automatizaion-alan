@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Hand, Check, X } from 'lucide-react';
+import { Plus, Hand, Check, X, Users } from 'lucide-react';
 import {
     getMarcasBuscadas, crearMarcaBuscada, archivarMarca, aceptarMano, descartarMano,
-    MarcaBuscadaData,
+    dirigirMarca, MarcaBuscadaData,
 } from '../../services/marcas-buscadas.service';
+import { getPartners, PartnerData } from '../../services/crm.service';
 import { mensajeDeError } from '../../lib/apiError';
 
 export default function MarcasBuscadas() {
@@ -12,11 +13,30 @@ export default function MarcasBuscadas() {
     const [nombre, setNombre] = useState('');
     const [porQue, setPorQue] = useState('');
     const [manoEnCurso, setManoEnCurso] = useState<string | null>(null);
+    const [partners, setPartners] = useState<PartnerData[]>([]);
+    // A quién se le va a mostrar la marca que estoy por agregar.
+    const [dirigidaA, setDirigidaA] = useState<string[]>([]);
 
     const cargar = async () => {
         setCargando(true);
-        try { setMarcas((await getMarcasBuscadas()).marcas); }
-        finally { setCargando(false); }
+        try {
+            const [m, p] = await Promise.all([getMarcasBuscadas(), getPartners()]);
+            setMarcas(m.marcas);
+            setPartners(p.partners);
+        } finally { setCargando(false); }
+    };
+
+    const alternarDestino = async (marca: MarcaBuscadaData, partnerId: string) => {
+        const actuales = (marca.partners || []).map(x => x._id);
+        const nuevos = actuales.includes(partnerId)
+            ? actuales.filter(x => x !== partnerId)
+            : [...actuales, partnerId];
+        try {
+            await dirigirMarca(marca._id, nuevos);
+            await cargar();
+        } catch (e) {
+            alert(mensajeDeError(e, 'No se pudo cambiar a quién se le muestra'));
+        }
     };
     useEffect(() => { cargar(); }, []);
 
@@ -24,7 +44,12 @@ export default function MarcasBuscadas() {
         e.preventDefault();
         if (!nombre.trim()) return;
         try {
-            await crearMarcaBuscada({ nombre: nombre.trim(), porQue: porQue.trim() || undefined });
+            await crearMarcaBuscada({
+                nombre: nombre.trim(),
+                porQue: porQue.trim() || undefined,
+                partners: dirigidaA.length ? dirigidaA : undefined,
+            });
+            setDirigidaA([]);
             setNombre(''); setPorQue('');
             await cargar();
         } catch (err) { alert(mensajeDeError(err, 'No se pudo agregar la marca')); }
@@ -65,6 +90,26 @@ export default function MarcasBuscadas() {
                         <Plus size={16} /> Agregar
                     </button>
                 </div>
+
+                {partners.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <Users size={13} /> ¿A quién se la mostramos?
+                        </span>
+                        {partners.map(p => (
+                            <ChipPartner
+                                key={p._id}
+                                nombre={p.name}
+                                activo={dirigidaA.includes(p._id)}
+                                onClick={() => setDirigidaA(prev =>
+                                    prev.includes(p._id) ? prev.filter(x => x !== p._id) : [...prev, p._id])}
+                            />
+                        ))}
+                        <span className="text-[11px] text-slate-400">
+                            {dirigidaA.length === 0 ? 'Sin elegir ninguno, la ven todos.' : `Sólo ${dirigidaA.length} de ${partners.length}.`}
+                        </span>
+                    </div>
+                )}
             </form>
 
             {cargando ? (
@@ -81,6 +126,21 @@ export default function MarcasBuscadas() {
                             <div>
                                 <h3 className="font-bold text-slate-800">{m.nombre}</h3>
                                 {m.porQue && <p className="text-sm text-slate-500 mt-1">{m.porQue}</p>}
+                                {partners.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                                        <span className="text-[11px] text-slate-400 mr-0.5">
+                                            {(m.partners?.length || 0) === 0 ? 'La ven todos:' : 'Se la mostramos a:'}
+                                        </span>
+                                        {partners.map(p => (
+                                            <ChipPartner
+                                                key={p._id}
+                                                nombre={p.name}
+                                                activo={(m.partners || []).some(x => x._id === p._id)}
+                                                onClick={() => alternarDestino(m, p._id)}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <button onClick={() => accion(() => archivarMarca(m._id), 'No se pudo archivar')}
                                 className="text-xs text-slate-400 hover:text-slate-600">Archivar</button>
@@ -118,5 +178,20 @@ export default function MarcasBuscadas() {
                 );
             })}
         </div>
+    );
+}
+
+/** Chip para elegir a qué partner se le muestra una marca. */
+function ChipPartner({ nombre, activo, onClick }: { nombre: string; activo: boolean; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-all ${activo
+                ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-500/20'
+                : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300 hover:text-violet-600'}`}
+        >
+            {nombre}
+        </button>
     );
 }

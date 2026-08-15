@@ -1,5 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { MarcaBuscada, normalizarNombre } from '../models/marca-buscada.model';
+// El listado hace populate de `partners`: importar el modelo acá lo deja
+// registrado siempre, sin depender de que alguien más lo haya importado antes.
+import '../models/partner.model';
 import { sendValidationError } from '../utils/mongoose-errors';
 import { ascenderMarca } from '../services/ascenso-marca.service';
 
@@ -7,12 +10,14 @@ const router = Router();
 
 // Sólo estos campos se pueden escribir desde el cliente. Sin whitelist, un
 // PATCH podría pisar `manos`, `companyId` o `userId`.
-const CAMPOS_EDITABLES = ['nombre', 'porQue', 'categoria', 'estado'] as const;
+const CAMPOS_EDITABLES = ['nombre', 'porQue', 'categoria', 'estado', 'partners'] as const;
 
 router.get('/', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user._id;
-        const marcas = await MarcaBuscada.find({ userId }).sort({ createdAt: -1 }).lean();
+        const marcas = await MarcaBuscada.find({ userId })
+            .populate('partners', 'name')
+            .sort({ createdAt: -1 }).lean();
         res.json({ marcas });
     } catch (err: any) {
         console.error('marcas-buscadas list error:', err.message);
