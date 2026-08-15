@@ -21,6 +21,8 @@ import express, { NextFunction, Request, Response } from 'express';
 import partnerRoutes from '../../routes/partner.routes';
 import partnerPortalRoutes from '../../routes/partner-portal.routes';
 import { Partner } from '../../models/partner.model';
+import { Company } from '../../models/company.model';
+import { CrmContact } from '../../models/crm-contact.model';
 import '../../models/user.model';
 
 let mongo: MongoMemoryServer;
@@ -142,5 +144,22 @@ describe('el listado dice quién tiene link', () => {
         expect(a.linkPortal).toContain('/partners/');
         expect(b.tieneLink).toBe(false);
         expect(b.linkPortal).toBeNull();
+    });
+});
+
+describe('los contadores del listado cuentan de verdad', () => {
+    it('cuenta las empresas y los contactos vinculados al partner', async () => {
+        const p = await crearPartner('Con Cartera');
+        await Company.create({ name: 'Empresa Del Partner', partner: p._id, userId: USER, assignedTo: USER });
+        await Company.create({ name: 'Otra Del Partner', partner: p._id, userId: USER, assignedTo: USER });
+        await CrmContact.create({ fullName: 'Lead Del Partner', partner: p._id, userId: USER, assignedTo: USER });
+        // Ruido: no son de este partner y no deben contarse.
+        await Company.create({ name: 'Ajena', userId: USER, assignedTo: USER });
+
+        const res = await request(app).get('/api/partners');
+        const fila = (res.body.partners ?? res.body).find((x: any) => x.name === 'Con Cartera');
+
+        expect(fila.companiesCount).toBe(2);
+        expect(fila.contactsCount).toBe(1);
     });
 });

@@ -21,7 +21,7 @@ router.get('/', async (req: Request, res: Response) => {
             { $match: {} },
             {
                 $lookup: {
-                    from: 'companies',
+                    from: 'crm_companies',
                     localField: '_id',
                     foreignField: 'partner',
                     as: 'companies'
@@ -29,7 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
             },
             {
                 $lookup: {
-                    from: 'crmcontacts',
+                    from: 'crm_contacts',
                     localField: '_id',
                     foreignField: 'partner',
                     as: 'contacts'
