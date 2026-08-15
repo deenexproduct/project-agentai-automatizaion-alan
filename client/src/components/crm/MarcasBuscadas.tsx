@@ -125,6 +125,11 @@ export default function MarcasBuscadas() {
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <h3 className="font-bold text-slate-800">{m.nombre}</h3>
+                                {m.origen === 'partner' && (
+                                    <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full mt-2">
+                                        Te la propuso {m.propuestaPor?.name ?? 'un partner'}
+                                    </p>
+                                )}
                                 {m.porQue && <p className="text-sm text-slate-500 mt-1">{m.porQue}</p>}
                                 {partners.length > 0 && (
                                     <div className="flex flex-wrap items-center gap-1.5 mt-3">

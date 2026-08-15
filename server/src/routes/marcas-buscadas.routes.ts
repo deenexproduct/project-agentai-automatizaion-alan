@@ -17,6 +17,7 @@ router.get('/', async (req: Request, res: Response) => {
         const userId = (req as any).user._id;
         const marcas = await MarcaBuscada.find({ userId })
             .populate('partners', 'name')
+            .populate('propuestaPor', 'name')
             .sort({ createdAt: -1 }).lean();
         res.json({ marcas });
     } catch (err: any) {

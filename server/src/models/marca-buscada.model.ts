@@ -30,6 +30,10 @@ export interface IMarcaBuscada extends Document {
     porQue?: string;
     categoria?: string;
     estado: typeof ESTADOS_MARCA[number];
+    /** `propio` = la cargamos nosotros; `partner` = la propuso un partner. */
+    origen: 'propio' | 'partner';
+    /** Quién la propuso, si vino de un partner. */
+    propuestaPor?: mongoose.Types.ObjectId | null;
     /** A qué partners se les muestra. Vacío = a todos. */
     partners: mongoose.Types.ObjectId[];
     manos: IMano[];
@@ -49,6 +53,10 @@ const ManoSchema = new Schema<IMano>({
 }, { _id: true });
 
 const MarcaBuscadaSchema = new Schema<IMarcaBuscada>({
+    // Una marca propuesta por un partner no es lo mismo que una que buscamos
+    // nosotros: se revisa distinto y define a quién le corresponde la comisión.
+    origen: { type: String, enum: ['propio', 'partner'], default: 'propio', index: true },
+    propuestaPor: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner', default: null },
     // Vacío (o ausente, en las marcas cargadas antes de este campo) significa
     // "se la mostramos a todos". Es lo que evita que olvidarse de asignar deje
     // una marca que no ve nadie.

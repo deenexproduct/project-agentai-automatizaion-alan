@@ -18,6 +18,9 @@ export interface MarcaBuscadaData {
     companyId?: string | null;
     /** A qué partners se les muestra. Vacío = a todos. */
     partners?: { _id: string; name: string }[];
+    /** `partner` = la propuso un partner, no la buscábamos nosotros. */
+    origen?: 'propio' | 'partner';
+    propuestaPor?: { _id: string; name: string } | null;
 }
 
 export const getMarcasBuscadas = async () =>

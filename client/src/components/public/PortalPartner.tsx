@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Hand, Check, X } from 'lucide-react';
-import { getTablero, levantarMano, TableroPublico, MarcaPublica } from '../../services/portal.service';
+import { Hand, Check, X, Plus } from 'lucide-react';
+import { getTablero, levantarMano, proponerMarca, TableroPublico, MarcaPublica } from '../../services/portal.service';
 
 export default function PortalPartner() {
     const { token } = useParams<{ token: string }>();
@@ -132,6 +132,8 @@ export default function PortalPartner() {
                     ))
                 )}
 
+                <Proponer token={token!} onListo={cargarInicial} />
+
                 <p className="text-center text-[11px] text-slate-400 pt-4 pb-8">Deenex</p>
             </div>
         </Fondo>
@@ -256,5 +258,95 @@ function TarjetaMarca({ marca, yo, onEnviar, enviando, error }: {
 
             {error && <p className="text-xs text-red-600 mt-2.5">{error}</p>}
         </article>
+    );
+}
+
+/**
+ * El partner suma una marca suya. Es la otra mitad del acuerdo: él conoce gente
+ * a la que nosotros no llegamos.
+ */
+function Proponer({ token, onListo }: { token: string; onListo: () => void }) {
+    const [abierto, setAbierto] = useState(false);
+    const [nombre, setNombre] = useState('');
+    const [porQue, setPorQue] = useState('');
+    const [enviando, setEnviando] = useState(false);
+    const [listo, setListo] = useState(false);
+    const [error, setError] = useState('');
+
+    const enviar = async () => {
+        if (!nombre.trim()) return;
+        setEnviando(true); setError('');
+        try {
+            await proponerMarca(token, nombre.trim(), porQue.trim());
+            setNombre(''); setPorQue(''); setAbierto(false); setListo(true);
+            setTimeout(() => setListo(false), 4000);
+            onListo();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'No se pudo proponer la marca');
+        } finally {
+            setEnviando(false);
+        }
+    };
+
+    if (listo) {
+        return (
+            <div className="mt-2 flex items-center gap-2.5 bg-emerald-50/70 border border-emerald-100 rounded-[1.75rem] px-5 py-4">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                    <Check size={12} className="text-white" strokeWidth={3} />
+                </span>
+                <p className="text-sm font-semibold text-emerald-800">Anotada. Te escribimos para charlarla.</p>
+            </div>
+        );
+    }
+
+    if (!abierto) {
+        return (
+            <button
+                onClick={() => setAbierto(true)}
+                className="mt-2 w-full min-h-[44px] px-5 rounded-[1.75rem] border border-dashed border-violet-300 text-violet-700 text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors hover:bg-violet-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+            >
+                <Plus size={16} /> Tengo llegada a otra marca
+            </button>
+        );
+    }
+
+    return (
+        <div className="mt-2 bg-white/80 backdrop-blur-xl rounded-[1.75rem] border border-slate-200/60 p-5 sm:p-6 flex flex-col gap-2.5">
+            <div>
+                <h2 className="text-base font-bold text-slate-800">¿A qué marca llegás?</h2>
+                <p className="text-xs text-slate-500 mt-1">Contanos cuál es y cómo llegás. Si ya la teníamos en la lista, queda anotado que vos podés.</p>
+            </div>
+            <input
+                autoFocus
+                value={nombre}
+                onChange={e => setNombre(e.target.value)}
+                placeholder="Nombre de la marca"
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 outline-none transition-all focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+            />
+            <input
+                value={porQue}
+                onChange={e => setPorQue(e.target.value)}
+                placeholder="¿Cómo llegás? (opcional)"
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 outline-none transition-all focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+            />
+            <div className="flex gap-2">
+                <button
+                    onClick={enviar}
+                    disabled={enviando || !nombre.trim()}
+                    className="flex-1 min-h-[44px] px-5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+                >
+                    {enviando ? 'Enviando…' : 'Proponerla'}
+                </button>
+                <button
+                    onClick={() => { setAbierto(false); setNombre(''); setPorQue(''); setError(''); }}
+                    disabled={enviando}
+                    aria-label="Cancelar"
+                    className="min-h-[44px] px-4 rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                >
+                    <X size={16} />
+                </button>
+            </div>
+            {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
     );
 }

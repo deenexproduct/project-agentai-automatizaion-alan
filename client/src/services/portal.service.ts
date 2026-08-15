@@ -70,3 +70,13 @@ export async function levantarMano(token: string, marcaId: string, comentario: s
     if (!res.ok) throw new Error(await mensajeDeError(res, 'No se pudo registrar'));
     return res.json();
 }
+
+/** El partner propone una marca suya. Si ya la teníamos, queda como mano levantada. */
+export async function proponerMarca(token: string, nombre: string, porQue: string): Promise<void> {
+    const res = await fetch(`${BASE}/portal/${token}/marcas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, porQue }),
+    });
+    if (!res.ok) throw new Error(await mensajeDeError(res, 'No se pudo proponer la marca'));
+}

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { MarcaBuscada } from '../models/marca-buscada.model';
+import { MarcaBuscada, normalizarNombre } from '../models/marca-buscada.model';
 import { Partner } from '../models/partner.model';
 import { Deal } from '../models/deal.model';
 import { PipelineConfig } from '../models/pipeline-config.model';
@@ -154,6 +154,68 @@ router.post('/:token/marcas/:id/mano', async (req: Request, res: Response) => {
     } catch (err: any) {
         console.error('portal mano error:', err.message);
         res.status(500).json({ error: 'No se pudo registrar' });
+    }
+});
+
+/**
+ * POST /:token/marcas — el partner propone una marca que él tiene.
+ *
+ * Si ya la teníamos cargada NO se duplica: la propuesta se convierte en una
+ * mano levantada sobre la que existe. El partner no puede saber qué tenemos en
+ * la lista, así que hacerlo fallar por repetida sería castigarlo por adivinar.
+ */
+router.post('/:token/marcas', async (req: Request, res: Response) => {
+    try {
+        const partner = await partnerDelToken(req.params.token);
+        if (!partner) return res.status(404).json({ error: 'No encontrado' });
+
+        const nombre = typeof req.body?.nombre === 'string' ? req.body.nombre.trim() : '';
+        if (!nombre) return res.status(400).json({ error: 'Falta el nombre de la marca' });
+
+        const comentario = typeof req.body?.porQue === 'string' ? req.body.porQue.trim() : '';
+        const manoDelPartner = {
+            partnerId: partner._id as any,
+            partnerNombre: partner.name,
+            comentario,
+            levantadaEn: new Date(),
+            estado: 'ofrecida' as const,
+        };
+
+        // El userId sale del PARTNER, nunca del request.
+        const yaExiste = await MarcaBuscada.findOne({
+            userId: partner.userId,
+            nombreNormalizado: normalizarNombre(nombre),
+        });
+
+        if (yaExiste) {
+            const yaLevantada = yaExiste.manos.find(
+                (m) => String(m.partnerId) === String(partner._id) && m.estado !== 'descartada'
+            );
+            if (yaLevantada) {
+                yaLevantada.comentario = comentario;
+            } else {
+                yaExiste.manos.push(manoDelPartner as any);
+                if (yaExiste.estado === 'buscando') yaExiste.estado = 'con_manos';
+            }
+            await yaExiste.save();
+            return res.json({ _id: yaExiste._id, yaExistia: true });
+        }
+
+        const marca = await MarcaBuscada.create({
+            nombre,
+            nombreNormalizado: normalizarNombre(nombre),
+            porQue: comentario || undefined,
+            estado: 'con_manos',
+            origen: 'partner',
+            propuestaPor: partner._id,
+            userId: partner.userId,
+            manos: [manoDelPartner],
+        });
+
+        res.status(201).json({ _id: marca._id, yaExistia: false });
+    } catch (err: any) {
+        console.error('portal proponer marca error:', err.message);
+        res.status(500).json({ error: 'No se pudo proponer la marca' });
     }
 });
 
