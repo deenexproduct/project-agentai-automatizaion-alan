@@ -3,11 +3,31 @@ import mongoose from 'mongoose';
 import { randomBytes } from 'crypto';
 import { Partner } from '../models/partner.model';
 
-const BASE_FRONT = (process.env.FRONTEND_URL || 'http://localhost:5250').replace(/\/+$/, '');
-
-/** De dónde cuelga el link que se le pasa al partner. */
+/**
+ * De dónde cuelga el link que se le pasa al partner.
+ *
+ * En producción NO hay default: un link a localhost es un link que no le abre a
+ * nadie, y el que lo copia no tiene forma de darse cuenta hasta que el partner
+ * avisa que no entra —o no avisa, y la feature muere en silencio. Preferimos
+ * romper acá, con el nombre de la variable que falta.
+ *
+ * En desarrollo el default se queda: ahí localhost ES la respuesta correcta y
+ * nadie debería tener que configurar nada para levantar el proyecto.
+ *
+ * Se lee en cada pedido y no al importar el módulo: como const, el valor
+ * quedaba clavado al arranque y no había manera de testearlo.
+ */
 function baseUrlDelFront(): string {
-    return (process.env.FRONTEND_URL || 'http://localhost:5250').replace(/\/+$/, '');
+    const configurada = process.env.FRONTEND_URL;
+    if (!configurada) {
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error(
+                'Falta la variable FRONTEND_URL: sin ella el link del partner apuntaría a localhost.',
+            );
+        }
+        return 'http://localhost:5260';
+    }
+    return configurada.replace(/\/+$/, '');
 }
 
 const router = Router();
@@ -65,7 +85,7 @@ router.get('/', async (req: Request, res: Response) => {
                                 { $ne: [{ $ifNull: ['$accessToken', null] }, null] },
                                 { $ne: ['$accessTokenActivo', false] },
                             ] },
-                            { $concat: [BASE_FRONT, '/partners/', '$accessToken'] },
+                            { $concat: [baseUrlDelFront(), '/partners/', '$accessToken'] },
                             null,
                         ]
                     }
@@ -144,6 +164,10 @@ router.post('/:id/access-link', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'El ID no tiene un formato válido' });
         }
 
+        // Antes de tocar la base: si no sabemos armar la URL, no dejamos al
+        // partner con un token activo que nadie vio ni puede revocar.
+        const base = baseUrlDelFront();
+
         // 24 bytes en base64url: suficiente entropía para una credencial que
         // viaja por WhatsApp y no caduca.
         const accessToken = randomBytes(24).toString('base64url');
@@ -157,10 +181,10 @@ router.post('/:id/access-link', async (req: Request, res: Response) => {
         );
         if (!partner) return res.status(404).json({ error: 'Partner no encontrado' });
 
-        res.json({ accessToken, url: `${baseUrlDelFront()}/partners/${accessToken}` });
+        res.json({ accessToken, url: `${base}/partners/${accessToken}` });
     } catch (err: any) {
         console.error('Partner access-link error:', err.message);
-        res.status(500).json({ error: 'Failed to generate access link' });
+        res.status(500).json({ error: err?.message || 'Failed to generate access link' });
     }
 });
 
