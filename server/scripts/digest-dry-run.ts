@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
-import { calcularDigest } from '../src/services/digest/pipeline-digest.service';
+import { calcularDigest, userIdsDelPipeline } from '../src/services/digest/pipeline-digest.service';
 import { formatearDigest } from '../src/services/digest/digest-message';
-import { UserModel } from '../src/models/user.model';
 
 (async () => {
     await mongoose.connect(process.env.MONGODB_URI!);
-    const us = await UserModel.find({}, { _id: 1 }).lean();
-    const digest = await calcularDigest(us.map(u => String(u._id)), new Date());
+    // Los dueños salen del pipeline, no de `users`: hay deals cuyo userId no
+    // existe en esa colección y arrancando de ahí se perdían enteros.
+    const digest = await calcularDigest(await userIdsDelPipeline(), new Date());
     const msg = formatearDigest(digest, { urlBase: 'https://comercial.deenex.tech' });
     console.log('─'.repeat(64));
     console.log(msg ?? '(sin novedades — no se manda nada)');

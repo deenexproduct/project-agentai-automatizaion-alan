@@ -43,6 +43,24 @@ const diasEntre = (desde: Date | string, hasta: Date) =>
     Math.round((hasta.getTime() - new Date(desde).getTime()) / 864e5);
 
 /**
+ * Los dueños de todo lo que hay en el pipeline, sacados del pipeline mismo.
+ *
+ * La lista NO sale de la colección `users`: 81 de los 180 deals de producción
+ * tienen un `userId` que ahí no existe (entraron por la importación con IA).
+ * Armando la lista desde `users`, el digest cubría poco más de la mitad del
+ * pipeline y lo informaba con el tono de ser el total — un resumen que subcuenta
+ * en silencio es peor que no mandar nada, porque se decide sobre él creyendo
+ * que está completo.
+ */
+export async function userIdsDelPipeline(): Promise<string[]> {
+    const [deDeals, deTareas] = await Promise.all([
+        Deal.distinct('userId'),
+        Task.distinct('userId'),
+    ]);
+    return [...new Set([...deDeals, ...deTareas].filter(Boolean).map(String))];
+}
+
+/**
  * @param userIds uno o varios dueños. La data del CRM está repartida entre
  * miembros del equipo (Thainá tiene 53 tareas que nadie más ve), así que un
  * digest de un solo usuario muestra media película.
