@@ -35,6 +35,10 @@ export interface MarcaPublica {
     situacion?: SituacionMarca;
     /** El partner ya dijo que no llega a esta. */
     noLlego?: boolean;
+    /** La mano de ESTE partner, si se ofreció. La resuelve el servidor por id:
+     *  deducirla acá comparando nombres se rompe con dos partners homónimos. */
+    miMano?: ManoPublica | null;
+    /** Las manos de los OTROS partners. La propia va en `miMano`. */
     manos: ManoPublica[];
 }
 export interface TableroPublico {

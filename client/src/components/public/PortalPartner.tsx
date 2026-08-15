@@ -62,17 +62,17 @@ export default function PortalPartner() {
         }
     };
 
-    const yo = tablero?.partner.nombre ?? '';
-
-    // Primero lo que falta responder. Al confirmar, la tarjeta se pone en verde
-    // y baja: se ve que quedó hecha y la lista de pendientes se acorta sola.
+    // El servidor ya las manda en orden: primero donde más falta una mano. Acá
+    // sólo se reafirma que lo respondido baja, para que al confirmar la tarjeta
+    // caiga sola sin esperar la recarga. El sort de JS es estable, así que
+    // dentro de cada grupo se respeta el orden que vino.
     const ordenadas = useMemo(() => {
         if (!tablero) return [];
-        const respondida = (m: MarcaPublica) => m.noLlego || m.manos.some(x => x.partnerNombre === yo);
+        const respondida = (m: MarcaPublica) => Boolean(m.noLlego || m.miMano);
         return [...tablero.marcas].sort((a, b) => Number(respondida(a)) - Number(respondida(b)));
-    }, [tablero, yo]);
+    }, [tablero]);
 
-    const pendientes = ordenadas.filter(m => !m.noLlego && !m.manos.some(x => x.partnerNombre === yo)).length;
+    const pendientes = ordenadas.filter(m => !m.noLlego && !m.miMano).length;
 
     if (error) {
         return (
@@ -119,11 +119,18 @@ export default function PortalPartner() {
                     </p>
 
                     {ordenadas.length > 0 && (
-                        <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-100 px-3 py-1.5 rounded-full">
-                            {pendientes === 0
-                                ? '¡Listo! Respondiste todas'
-                                : `${pendientes} sin responder de ${ordenadas.length}`}
-                        </p>
+                        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                            <p className="inline-flex items-center gap-2 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-100 px-3 py-1.5 rounded-full">
+                                {pendientes === 0
+                                    ? '¡Listo! Respondiste todas'
+                                    : `${pendientes} sin responder de ${ordenadas.length}`}
+                            </p>
+                            {/* Con tres o cuatro tarjetas el orden se ve solo. De ahí
+                                para arriba conviene decirlo: es una recomendación. */}
+                            {pendientes > 1 && ordenadas.length > 4 && (
+                                <p className="text-xs text-slate-400">Arriba están las más frenadas.</p>
+                            )}
+                        </div>
                     )}
                 </header>
 
@@ -137,7 +144,6 @@ export default function PortalPartner() {
                         <TarjetaMarca
                             key={m._id}
                             marca={m}
-                            yo={yo}
                             onEnviar={comentario => enviar(m._id, comentario)}
                             onNoLlego={() => noLlego(m._id)}
                             enviando={enviandoId === m._id}
@@ -171,14 +177,14 @@ function Fondo({ children }: { children: React.ReactNode }) {
 /** 128 → "hace 4 meses". El número exacto no le dice nada al partner; la magnitud sí. */
 function haceCuanto(dias?: number): string {
     if (dias == null || dias < 7) return '';
-    if (dias < 30) return `hace ${Math.round(dias / 7)} semanas`;
-    if (dias < 365) return `hace ${Math.round(dias / 30)} meses`;
+    const plural = (n: number, uno: string, varios: string) => `hace ${n} ${n === 1 ? uno : varios}`;
+    if (dias < 30) return plural(Math.round(dias / 7), 'semana', 'semanas');
+    if (dias < 365) return plural(Math.round(dias / 30), 'mes', 'meses');
     return 'hace más de un año';
 }
 
-function TarjetaMarca({ marca, yo, onEnviar, onNoLlego, enviando, error }: {
+function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
     marca: MarcaPublica;
-    yo: string;
     onEnviar: (comentario: string) => void;
     onNoLlego: () => void;
     enviando: boolean;
@@ -189,17 +195,23 @@ function TarjetaMarca({ marca, yo, onEnviar, onNoLlego, enviando, error }: {
     const [abierta, setAbierta] = useState(false);
     const [comentario, setComentario] = useState('');
 
-    const miMano = marca.manos.find(x => x.partnerNombre === yo);
-    const otros = marca.manos.filter(x => x.partnerNombre !== yo);
+    const miMano = marca.miMano;
+    const otros = marca.manos;
 
     return (
         <article className={`backdrop-blur-xl rounded-[1.75rem] border p-5 sm:p-6 transition-colors duration-300 ${miMano
             ? 'bg-emerald-50/40 border-emerald-200/70'
-            : 'bg-white/80 border-slate-200/60 shadow-sm shadow-slate-200/50'}`}>
+            : marca.noLlego
+                ? 'bg-slate-50/50 border-slate-200/40'
+                : 'bg-white/80 border-slate-200/60 shadow-sm shadow-slate-200/50'}`}>
 
-            {marca.situacion?.tipo === 'en_pipeline' && (
+            {marca.situacion && (
                 <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full mb-2.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${(marca.situacion.diasQuieto ?? 0) > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                    {/* Ámbar cuando lleva más de un mes sin moverse: es la señal
+                        de que hace falta un empujón. Hueco si todavía ni entramos. */}
+                    <span className={`w-1.5 h-1.5 rounded-full ${marca.situacion.tipo !== 'en_pipeline'
+                        ? 'border border-slate-400'
+                        : (marca.situacion.diasQuieto ?? 0) > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
                     {marca.situacion.etiqueta}
                     {haceCuanto(marca.situacion.diasQuieto) && (
                         <span className="font-normal text-slate-400">· sin moverse {haceCuanto(marca.situacion.diasQuieto)}</span>
@@ -278,13 +290,13 @@ function TarjetaMarca({ marca, yo, onEnviar, onNoLlego, enviando, error }: {
                     <p className="text-sm text-slate-400">Dijiste que no llegás a esta.</p>
                     <button
                         onClick={() => setAbierta(true)}
-                        className="text-xs font-semibold text-violet-600 underline underline-offset-2 min-h-[44px] px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+                        className="shrink-0 text-xs font-semibold text-violet-600 underline underline-offset-2 min-h-[44px] px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
                     >
                         Me acordé de alguien
                     </button>
                 </div>
             ) : (
-                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                <div className="mt-4 flex gap-2">
                     <button
                         onClick={() => setAbierta(true)}
                         className="flex-1 min-h-[44px] px-5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
@@ -295,7 +307,7 @@ function TarjetaMarca({ marca, yo, onEnviar, onNoLlego, enviando, error }: {
                         del que nunca entró. Por eso está, y por eso es discreto. */}
                     <button
                         onClick={onNoLlego}
-                        className="min-h-[44px] px-4 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+                        className="shrink-0 min-h-[44px] px-4 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
                     >
                         No llego
                     </button>

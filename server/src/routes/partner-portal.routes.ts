@@ -115,17 +115,52 @@ router.get('/:token', async (req: Request, res: Response) => {
             };
         };
 
-        res.json({
-            partner: { nombre: partner.name },
-            marcas: marcas.map((m: any) => ({
+        /**
+         * Hace cuánto que no pasa nada con esta marca. Un solo eje para las dos
+         * clases: el deal frenado usa los días sin cambiar de etapa, y la que
+         * todavía buscamos usa su antigüedad — nunca tuvimos una puerta.
+         */
+        const diasSinNovedad = (m: any, situacion: any): number => {
+            if (situacion.tipo === 'en_pipeline') return situacion.diasQuieto ?? 0;
+            const desde = m.createdAt;
+            return desde ? Math.round((Date.now() - new Date(desde).getTime()) / 864e5) : 0;
+        };
+
+        const salida = marcas.map((m: any) => {
+            const situacion = situacionDe(m);
+            const noLlego = (m.sinLlegada || []).some((x: any) => String(x) === String(partner._id));
+            const yaSeOfrecio = (m.manos || []).some((x: any) =>
+                String(x.partnerId) === String(partner._id) && x.estado !== 'descartada');
+            return {
                 _id: m._id,
                 nombre: m.nombre,
                 porQue: m.porQue,
                 categoria: m.categoria,
-                situacion: situacionDe(m),
-                noLlego: (m.sinLlegada || []).some((x: any) => String(x) === String(partner._id)),
-                manos: (m.manos || []).filter((x: any) => x.estado !== 'descartada').map(manoPublica),
-            })),
+                situacion,
+                noLlego,
+                // Separadas a propósito: el cliente no tiene que deducir cuál
+                // mano es la suya comparando nombres — dos partners homónimos
+                // se pisarían, y el nombre es dato editable.
+                miMano: (m.manos || [])
+                    .filter((x: any) => String(x.partnerId) === String(partner._id) && x.estado !== 'descartada')
+                    .map(manoPublica)[0] ?? null,
+                manos: (m.manos || [])
+                    .filter((x: any) => String(x.partnerId) !== String(partner._id) && x.estado !== 'descartada')
+                    .map(manoPublica),
+                _respondida: noLlego || yaSeOfrecio,
+                _quieto: diasSinNovedad(m, situacion),
+            };
+        });
+
+        // Primero lo que no respondió, y dentro de eso lo más frenado: es donde
+        // una presentación suya cambia el resultado. Lo que ya contestó baja al
+        // fondo — con diez marcas en pantalla, el orden ES la recomendación.
+        salida.sort((a, b) =>
+            Number(a._respondida) - Number(b._respondida) || b._quieto - a._quieto);
+
+        res.json({
+            partner: { nombre: partner.name },
+            marcas: salida.map(({ _respondida, _quieto, ...m }) => m),
         });
     } catch (err: any) {
         console.error('portal get error:', err.message);
