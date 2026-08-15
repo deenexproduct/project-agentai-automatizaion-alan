@@ -299,7 +299,7 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
                 <div className="mt-4 flex gap-2">
                     <button
                         onClick={() => setAbierta(true)}
-                        className="flex-1 min-h-[44px] px-5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+                        className="flex-1 sm:flex-none min-h-[44px] px-5 sm:px-7 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20 transition-all hover:shadow-violet-500/30 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
                     >
                         <Hand size={15} /> Llego a esta
                     </button>
