@@ -10,7 +10,7 @@ const router = Router();
 
 // Sólo estos campos se pueden escribir desde el cliente. Sin whitelist, un
 // PATCH podría pisar `manos`, `companyId` o `userId`.
-const CAMPOS_EDITABLES = ['nombre', 'porQue', 'categoria', 'estado', 'partners'] as const;
+const CAMPOS_EDITABLES = ['nombre', 'notaInterna', 'contextoParaPartner', 'categoria', 'estado', 'partners'] as const;
 
 router.get('/', async (req: Request, res: Response) => {
     try {

@@ -61,11 +61,11 @@ describe('API privada de marcas buscadas', () => {
     it('no deja editar la marca de otro dueño', async () => {
         const ajena = await MarcaBuscada.create({ nombre: 'Ajena', userId: OTRO_USER });
         const res = await request(app).patch(`/api/marcas-buscadas/${ajena._id}`)
-            .send({ porQue: 'me la afano' });
+            .send({ notaInterna: 'me la afano' });
 
         expect(res.status).toBe(404);
         const sinTocar = await MarcaBuscada.findById(ajena._id);
-        expect(sinTocar!.porQue).toBeUndefined();
+        expect(sinTocar!.notaInterna).toBeUndefined();
     });
 
     it('no deja borrar la marca de otro dueño', async () => {

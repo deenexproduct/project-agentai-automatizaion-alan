@@ -29,7 +29,7 @@ export async function ascenderMarca(
     }
 
     const { empresa, dealId, duplicada } = await crearEmpresaConDeal(
-        { name: marca.nombre, description: marca.porQue, partner: mano.partnerId },
+        { name: marca.nombre, description: marca.notaInterna, partner: mano.partnerId },
         userId
     );
 
