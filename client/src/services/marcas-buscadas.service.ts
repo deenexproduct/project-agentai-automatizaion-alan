@@ -11,7 +11,10 @@ export interface ManoData {
 export interface MarcaBuscadaData {
     _id: string;
     nombre: string;
-    porQue?: string;
+    /** Por qué la queremos nosotros. NO se le muestra al partner. */
+    notaInterna?: string;
+    /** Lo que sí ve el partner en su portal. */
+    contextoParaPartner?: string;
     categoria?: string;
     estado: 'buscando' | 'con_manos' | 'ascendida' | 'archivada';
     manos: ManoData[];
@@ -25,7 +28,7 @@ export interface MarcaBuscadaData {
 
 export const getMarcasBuscadas = async () =>
     (await api.get<{ marcas: MarcaBuscadaData[] }>('/marcas-buscadas')).data;
-export const crearMarcaBuscada = async (datos: { nombre: string; porQue?: string; categoria?: string; partners?: string[] }) =>
+export const crearMarcaBuscada = async (datos: { nombre: string; notaInterna?: string; contextoParaPartner?: string; categoria?: string; partners?: string[] }) =>
     (await api.post<MarcaBuscadaData>('/marcas-buscadas', datos)).data;
 export const archivarMarca = async (id: string) =>
     (await api.patch(`/marcas-buscadas/${id}`, { estado: 'archivada' })).data;

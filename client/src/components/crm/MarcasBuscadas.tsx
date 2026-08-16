@@ -11,7 +11,8 @@ export default function MarcasBuscadas() {
     const [marcas, setMarcas] = useState<MarcaBuscadaData[]>([]);
     const [cargando, setCargando] = useState(true);
     const [nombre, setNombre] = useState('');
-    const [porQue, setPorQue] = useState('');
+    const [contexto, setContexto] = useState('');
+    const [nota, setNota] = useState('');
     const [manoEnCurso, setManoEnCurso] = useState<string | null>(null);
     const [partners, setPartners] = useState<PartnerData[]>([]);
     // A quién se le va a mostrar la marca que estoy por agregar.
@@ -46,11 +47,12 @@ export default function MarcasBuscadas() {
         try {
             await crearMarcaBuscada({
                 nombre: nombre.trim(),
-                porQue: porQue.trim() || undefined,
+                contextoParaPartner: contexto.trim() || undefined,
+                notaInterna: nota.trim() || undefined,
                 partners: dirigidaA.length ? dirigidaA : undefined,
             });
             setDirigidaA([]);
-            setNombre(''); setPorQue('');
+            setNombre(''); setContexto(''); setNota('');
             await cargar();
         } catch (err) { alert(mensajeDeError(err, 'No se pudo agregar la marca')); }
     };
@@ -82,13 +84,22 @@ export default function MarcasBuscadas() {
                     <input value={nombre} onChange={e => setNombre(e.target.value)}
                         placeholder="Havanna"
                         className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm" />
-                    <input value={porQue} onChange={e => setPorQue(e.target.value)}
-                        placeholder="Por qué la querés: 180 locales, delivery tercerizado"
+                    <input value={contexto} onChange={e => setContexto(e.target.value)}
+                        placeholder="Contexto para el partner: 180 locales, delivery tercerizado"
                         className="flex-[2] px-4 py-2.5 rounded-xl border border-slate-200 text-sm" />
                     <button type="submit"
                         className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold flex items-center gap-2">
                         <Plus size={16} /> Agregar
                     </button>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                    <input value={nota} onChange={e => setNota(e.target.value)}
+                        placeholder="Nota interna: están peleados con el proveedor actual"
+                        className="w-full px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50/40 text-sm" />
+                    <span className="text-[11px] text-amber-700/80 px-1">
+                        🔒 Esto NO lo ve el partner. Lo de arriba sí.
+                    </span>
                 </div>
 
                 {partners.length > 0 && (
@@ -130,7 +141,10 @@ export default function MarcasBuscadas() {
                                         Te la propuso {m.propuestaPor?.name ?? 'un partner'}
                                     </p>
                                 )}
-                                {m.porQue && <p className="text-sm text-slate-500 mt-1">{m.porQue}</p>}
+                                {m.contextoParaPartner && <p className="text-sm text-slate-500 mt-1">{m.contextoParaPartner}</p>}
+                                {m.notaInterna && (
+                                    <p className="text-sm text-amber-800/80 mt-1">🔒 {m.notaInterna}</p>
+                                )}
                                 {partners.length > 0 && (
                                     <div className="flex flex-wrap items-center gap-1.5 mt-3">
                                         <span className="text-[11px] text-slate-400 mr-0.5">

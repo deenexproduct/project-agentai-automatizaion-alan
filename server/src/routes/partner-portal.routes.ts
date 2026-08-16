@@ -140,7 +140,10 @@ router.get('/:token', async (req: Request, res: Response) => {
             return {
                 _id: m._id,
                 nombre: m.nombre,
-                porQue: m.porQue,
+                // SOLO el contexto escrito para él. `notaInterna` es nuestra
+                // y no sale de acá: es el campo donde va "están peleados con
+                // el proveedor actual".
+                contexto: m.contextoParaPartner,
                 categoria: m.categoria,
                 situacion,
                 noLlego,
@@ -265,7 +268,10 @@ router.post('/:token/marcas', async (req: Request, res: Response) => {
         const nombre = typeof req.body?.nombre === 'string' ? req.body.nombre.trim() : '';
         if (!nombre) return res.status(400).json({ error: 'Falta el nombre de la marca' });
 
-        const comentario = typeof req.body?.porQue === 'string' ? req.body.porQue.trim() : '';
+        // Se acepta `porQue` además de `comentario` por si quedó alguna pestaña
+        // vieja abierta: es una pantalla pública, no controlamos cuándo recarga.
+        const crudo = req.body?.comentario ?? req.body?.porQue;
+        const comentario = typeof crudo === 'string' ? crudo.trim() : '';
         const manoDelPartner = {
             partnerId: partner._id as any,
             partnerNombre: partner.name,
@@ -297,7 +303,9 @@ router.post('/:token/marcas', async (req: Request, res: Response) => {
         const marca = await MarcaBuscada.create({
             nombre,
             nombreNormalizado: normalizarNombre(nombre),
-            porQue: comentario || undefined,
+            // Lo que escribió el partner vive en SU mano, no en nuestra nota
+            // interna: mezclar lo que dijo un tercero con lo que anotamos
+            // nosotros es cómo después uno se confunde de quién es la frase.
             estado: 'con_manos',
             origen: 'partner',
             propuestaPor: partner._id,

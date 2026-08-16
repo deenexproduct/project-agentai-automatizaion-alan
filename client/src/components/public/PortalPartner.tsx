@@ -338,7 +338,7 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
                         )}
                     </div>
 
-                    {marca.porQue && <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{marca.porQue}</p>}
+                    {marca.contexto && <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">{marca.contexto}</p>}
 
                     {otros > 0 && (
                         <p className="text-xs text-slate-500 mt-2.5">
@@ -395,7 +395,7 @@ function TarjetaMarca({ marca, onEnviar, onNoLlego, enviando, error }: {
 function Proponer({ token, onListo }: { token: string; onListo: () => void }) {
     const [abierto, setAbierto] = useState(false);
     const [nombre, setNombre] = useState('');
-    const [porQue, setPorQue] = useState('');
+    const [comentario, setComentario2] = useState('');
     const [enviando, setEnviando] = useState(false);
     const [listo, setListo] = useState(false);
     const [error, setError] = useState('');
@@ -404,8 +404,8 @@ function Proponer({ token, onListo }: { token: string; onListo: () => void }) {
         if (!nombre.trim()) return;
         setEnviando(true); setError('');
         try {
-            await proponerMarca(token, nombre.trim(), porQue.trim());
-            setNombre(''); setPorQue(''); setAbierto(false); setListo(true);
+            await proponerMarca(token, nombre.trim(), comentario.trim());
+            setNombre(''); setComentario2(''); setAbierto(false); setListo(true);
             setTimeout(() => setListo(false), 4000);
             onListo();
         } catch (e) {
@@ -451,8 +451,8 @@ function Proponer({ token, onListo }: { token: string; onListo: () => void }) {
                 className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 outline-none transition-all focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
             />
             <input
-                value={porQue}
-                onChange={e => setPorQue(e.target.value)}
+                value={comentario}
+                onChange={e => setComentario2(e.target.value)}
                 placeholder="¿Cómo llegás? (opcional)"
                 className="w-full min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 outline-none transition-all focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
             />
@@ -465,7 +465,7 @@ function Proponer({ token, onListo }: { token: string; onListo: () => void }) {
                     {enviando ? 'Enviando…' : 'Proponerla'}
                 </button>
                 <button
-                    onClick={() => { setAbierto(false); setNombre(''); setPorQue(''); setError(''); }}
+                    onClick={() => { setAbierto(false); setNombre(''); setComentario2(''); setError(''); }}
                     disabled={enviando}
                     aria-label="Cancelar"
                     className="min-h-[44px] px-4 rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"

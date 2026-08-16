@@ -27,7 +27,10 @@ export interface IMano {
 export interface IMarcaBuscada extends Document {
     nombre: string;
     nombreNormalizado: string;
-    porQue?: string;
+    /** Por qué la queremos NOSOTROS. Interna: no sale del CRM. */
+    notaInterna?: string;
+    /** Escrito a propósito para que lo lea el partner en su portal. */
+    contextoParaPartner?: string;
     categoria?: string;
     estado: typeof ESTADOS_MARCA[number];
     /** `propio` = la cargamos nosotros; `partner` = la propuso un partner. */
@@ -69,7 +72,8 @@ const MarcaBuscadaSchema = new Schema<IMarcaBuscada>({
     partners: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Partner', index: true }],
     nombre: { type: String, required: true, trim: true },
     nombreNormalizado: { type: String, required: true, index: true },
-    porQue: { type: String, trim: true },
+    notaInterna: { type: String, trim: true },
+    contextoParaPartner: { type: String, trim: true },
     categoria: { type: String, trim: true },
     estado: { type: String, enum: ESTADOS_MARCA, default: 'buscando', index: true },
     manos: { type: [ManoSchema], default: [] },
