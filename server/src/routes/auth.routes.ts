@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { UserModel } from '../models/user.model';
 import { emailService } from '../services/email.service';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { JWT_SECRET } from '../config/jwt-secret';
 import { Task } from '../models/task.model';
 import { Deal } from '../models/deal.model';
 import { Goal } from '../models/goal.model';
@@ -15,7 +16,6 @@ import { Activity } from '../models/activity.model';
 import { WeeklyReport } from '../models/weeklyReport.model';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_development_secret_voice_multi_tenant_123';
 
 /**
  * Generate a 6-digit cryptographic-safe-ish OTP
@@ -300,6 +300,11 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
  */
 router.put('/users/:userId/platforms', authMiddleware, async (req: Request, res: Response) => {
     try {
+        const adminUser = req.user as any;
+        if (adminUser.role !== 'admin') {
+            return res.status(403).json({ error: 'Solo administradores pueden cambiar plataformas.' });
+        }
+
         const { platforms } = req.body;
         const { userId } = req.params;
 

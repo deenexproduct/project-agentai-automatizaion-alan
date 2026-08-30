@@ -339,8 +339,8 @@ app.use('/api/whatsapp', authMiddleware, whatsappRoutes);
 // Mount Resumidor routes
 app.use('/api/resumidor', authMiddleware, resumidorRoutes);
 
-// Optimizer routes
-app.use('/api/optimizer', optimizerRoutes);
+// Optimizer routes — requieren auth como el resto (escriben archivos del server y usan el LLM del dueño)
+app.use('/api/optimizer', authMiddleware, optimizerRoutes);
 
 // LinkedIn routes
 app.use('/api/linkedin', authMiddleware, linkedinRoutes);
