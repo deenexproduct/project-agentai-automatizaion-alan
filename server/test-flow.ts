@@ -2,8 +2,8 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:3000/api/linkedin';
 const headers = {
-  // Use the exact JWT from the user's curl
-  'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTk4OTA2MTUyMWU5OWViZWNmZTM5ZDciLCJlbWFpbCI6ImFsYW5uYWltdGFwaWFAZ21haWwuY29tIiwiaWF0IjoxNzcxNjA2MTMzLCJleHAiOjE3NzQxOTgxMzN9.83OZ1BhLhbdHj9KEnPTA3q5NeqTbj3EQ8qx_5yD1qU0',
+  // Token de auth vía entorno — nunca hardcodear un JWT en el repo.
+  'Authorization': `Bearer ${process.env.API_TOKEN ?? ''}`,
   'Content-Type': 'application/json'
 };
 

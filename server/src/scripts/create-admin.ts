@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
 import { UserModel } from '../models/user.model';
 
-const MONGODB_URI = 'mongodb+srv://plataformacomercial_db_user:IibBxQoLLn5u30FR@deenex-comercial.p9pcnz3.mongodb.net/comercial';
+const MONGODB_URI = process.env.MONGODB_URI ?? '';
+if (!MONGODB_URI) {
+    console.error('Falta la variable de entorno MONGODB_URI. Definila en un .env (no commitear credenciales).');
+    process.exit(1);
+}
 
 async function run() {
     try {

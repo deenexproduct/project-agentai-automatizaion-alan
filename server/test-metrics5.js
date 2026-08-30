@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 async function test() {
-    await mongoose.connect('mongodb+srv://plataformacomercial_db_user:IibBxQoLLn5u30FR@deenex-comercial.p9pcnz3.mongodb.net/comercial');
+    await mongoose.connect(process.env.MONGODB_URI);
     const db = mongoose.connection.db;
 
     const PipelineConfig = db.collection('pipeline_configs');
