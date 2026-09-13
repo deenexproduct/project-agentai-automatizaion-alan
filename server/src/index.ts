@@ -111,16 +111,8 @@ app.get('/api/history', authMiddleware, async (req: any, res) => {
 
 // ── Transcription: Groq API (cloud) or Whisper CLI (local) ──────────
 // Priority: Groq API if GROQ_API_KEY is set → Local Whisper (dynamic path)
-import Groq from 'groq-sdk';
+import { transcribeWithGroq, isGroqConfigured, describeGroqError } from './services/groq-audio.service';
 import { logger } from './utils/logger';
-
-let _groqInstance: Groq | null = null;
-function getGroqForTranscription(): Groq {
-  if (!_groqInstance) {
-    _groqInstance = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  }
-  return _groqInstance;
-}
 
 let _cachedWhisperPath: string | null = null;
 async function findWhisperPath(): Promise<string | null> {
@@ -149,35 +141,11 @@ async function convertToWav(audioPath: string): Promise<string> {
   return fs.existsSync(wavPath) ? wavPath : audioPath;
 }
 
-async function transcribeWithGroqAPI(audioPath: string): Promise<string> {
-  const t0 = Date.now();
-  logger.info(`🎤 [TRANSCRIBE] Using Groq API (whisper-large-v3-turbo)...`);
-  const fileToSend = await convertToWav(audioPath);
-  const groq = getGroqForTranscription();
-  const audioFile = fs.createReadStream(fileToSend);
-
-  const transcription = await groq.audio.transcriptions.create({
-    file: audioFile,
-    model: 'whisper-large-v3-turbo',
-    language: 'es',
-    response_format: 'text',
-  });
-
-  // Cleanup wav if created
-  if (fileToSend !== audioPath) {
-    try { fs.unlinkSync(fileToSend); } catch { }
-  }
-
-  const text = typeof transcription === 'string' ? transcription : (transcription as any).text || '';
-  logger.info(`🎤 [TRANSCRIBE] Groq API OK (${Date.now() - t0}ms) → "${text.substring(0, 60)}..."`);
-  return text.trim() || 'No se detectó texto';
-}
-
 async function transcribeWithWhisperLocal(audioPath: string): Promise<string> {
   const t0 = Date.now();
   const whisperPath = await findWhisperPath();
   if (!whisperPath) {
-    throw new Error('Whisper CLI not available and no GROQ_API_KEY configured');
+    throw new Error('no hay Whisper instalado en el servidor para transcribir localmente');
   }
 
   logger.info(`🎤 [TRANSCRIBE] Using Whisper CLI at ${whisperPath}...`);
@@ -206,17 +174,26 @@ async function transcribeWithWhisperLocal(audioPath: string): Promise<string> {
 async function transcribeWithWhisper(audioPath: string): Promise<string> {
   try {
     // Strategy: Groq cloud first → Whisper CLI fallback
-    if (process.env.GROQ_API_KEY) {
+    if (!isGroqConfigured()) {
       try {
-        return await transcribeWithGroqAPI(audioPath);
-      } catch (groqErr: any) {
-        logger.error(`🎤 [TRANSCRIBE] ❌ Groq API failed: ${groqErr.message}`);
-        logger.info('🎤 [TRANSCRIBE] Falling back to local Whisper CLI...');
         return await transcribeWithWhisperLocal(audioPath);
+      } catch (localErr: any) {
+        throw new Error(`falta configurar GROQ_API_KEY y ${localErr.message}`);
       }
     }
-    // No Groq key → try local Whisper
-    return await transcribeWithWhisperLocal(audioPath);
+    try {
+      return await transcribeWithGroq(audioPath);
+    } catch (groqErr: any) {
+      logger.error(`🎤 [TRANSCRIBE] ❌ Groq API failed: ${groqErr.message}`);
+      logger.info('🎤 [TRANSCRIBE] Falling back to local Whisper CLI...');
+      try {
+        return await transcribeWithWhisperLocal(audioPath);
+      } catch (localErr: any) {
+        // El error que llega a la UI tiene que decir por qué falló Groq, no
+        // culpar a la key: es el motivo real y el fallback es solo el síntoma.
+        throw new Error(`${describeGroqError(groqErr)} y ${localErr.message}`);
+      }
+    }
   } catch (error: any) {
     logger.error(`🎤 [TRANSCRIBE] ❌ All transcription methods failed: ${error.message}`);
     return `Error de transcripción: ${error.message}`;

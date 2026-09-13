@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import ChatPicker, { ChatItem } from '../shared/ChatPicker'
 import SearchableSelect from '../common/SearchableSelect'
 import { API_BASE } from '../../config';
+import api from '../../lib/axios';
 
 const API_URL = `${API_BASE}/api/resumidor`;
 
@@ -91,8 +92,9 @@ export default function ResumidorTab() {
     const checkHealth = useCallback(async () => {
         setCheckingHealth(true)
         try {
-            const res = await fetch(`${API_URL}/health`)
-            const data = await res.json()
+            // Con axios, que es el que inyecta el Bearer token: /api/resumidor
+            // está detrás de authMiddleware y con fetch pelado siempre daba 401
+            const { data } = await api.get('/resumidor/health')
             setWaConnected(data.whatsapp)
             setLlmOk(data.llm)
             setLlmError(data.llmError || '')
@@ -115,8 +117,8 @@ export default function ResumidorTab() {
 
     useEffect(() => {
         if (llmOk) {
-            fetch(`${API_URL}/models`)
-                .then(r => r.json())
+            api.get<string[]>('/resumidor/models')
+                .then(r => r.data)
                 .then((m: string[]) => {
                     setModels(m)
                     if (m.length > 0 && !m.includes(selectedModel)) {
@@ -163,9 +165,15 @@ export default function ResumidorTab() {
 
             addLog({ step: 'start', detail: '🚀 Iniciando proceso de resumen...', time: new Date().toLocaleTimeString() })
 
+            // Sigue con fetch porque la respuesta es un stream SSE que se lee
+            // con un reader, pero el token va igual: la ruta pide auth
+            const token = localStorage.getItem('token')
             const res = await fetch(`${API_URL}/summarize`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify(body),
             })
 
@@ -253,8 +261,7 @@ export default function ResumidorTab() {
 
     const loadHistory = async () => {
         try {
-            const res = await fetch(`${API_URL}/history`)
-            const data = await res.json()
+            const { data } = await api.get('/resumidor/history')
             setHistory(data)
         } catch {
             setHistory([])
