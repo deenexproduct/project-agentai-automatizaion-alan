@@ -5,6 +5,7 @@ import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import Groq from 'groq-sdk';
+import { transcribeWithGroq as groqTranscribe, describeGroqError } from './groq-audio.service';
 
 const execAsync = promisify(exec);
 
@@ -401,31 +402,11 @@ class ResumidorService {
 
     private async transcribeWithGroq(audioPath: string): Promise<string> {
         try {
-            const groq = getGroqClient();
-
-            // Convert to wav for best compatibility
-            const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
-            try {
-                await execAsync(`ffmpeg -y -i "${audioPath}" -ar 16000 -ac 1 "${wavPath}" 2>/dev/null`);
-            } catch { }
-
-            const fileToSend = fs.existsSync(wavPath) ? wavPath : audioPath;
-            const audioFile = fs.createReadStream(fileToSend);
-
-            const transcription = await groq.audio.transcriptions.create({
-                file: audioFile,
-                model: 'whisper-large-v3-turbo',
-                language: 'es',
-                response_format: 'text',
-            });
-
-            try { fs.unlinkSync(wavPath); } catch { }
-
-            const text = typeof transcription === 'string' ? transcription : (transcription as any).text || '';
-            return text.trim() || 'No se detectó texto';
+            // Comprime a FLAC y parte en tramos si el audio se pasa del límite de Groq
+            return await groqTranscribe(audioPath);
         } catch (error: any) {
-            console.error('Groq Whisper error:', error.message);
-            return `Error de transcripción: ${error.message}`;
+            console.error('🎤 [RESUMIDOR] ❌ Groq Whisper error:', error.message);
+            return `Error de transcripción: ${describeGroqError(error)}`;
         }
     }
 
@@ -450,7 +431,7 @@ class ResumidorService {
         try {
             const whisperPath = await this.findWhisperPath();
             if (!whisperPath) {
-                throw new Error('Whisper CLI not available. Install whisper or configure GROQ_API_KEY.');
+                throw new Error('no hay Whisper instalado en el servidor para transcribir localmente');
             }
 
             const wavPath = audioPath.replace(/\.\w+$/, '_converted.wav');
